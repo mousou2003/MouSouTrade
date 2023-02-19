@@ -1,0 +1,802 @@
+[
+    {
+      "Ticker": "AAPL",
+      "Description": "APPLE INC"
+    },
+    {
+      "Ticker": "ABNB",
+      "Description": "AIRBNB INC COM CL A"
+    },
+    {
+      "Ticker": "ACN",
+      "Description": "ACCENTURE PLC"
+    },
+    {
+      "Ticker": "ADBE",
+      "Description": "ADOBE SYSTEMS INCORPORATED COM"
+    },
+    {
+      "Ticker": "ADP",
+      "Description": "AUTOMATIC DATA PROCESSING INC COM USD0.10"
+    },
+    {
+      "Ticker": "ADSK",
+      "Description": "AUTODESK INC"
+    },
+    {
+      "Ticker": "AES",
+      "Description": "AES CORP COM USD0.01"
+    },
+    {
+      "Ticker": "AJG",
+      "Description": "ARTHUR J. GALLAGHER & CO. ISIN #US3635761097 SEDOL #BD1QWJ0"
+    },
+    {
+      "Ticker": "ALNY",
+      "Description": "ALNYLAM PHARMACEUTICALS INC"
+    },
+    {
+      "Ticker": "AMD",
+      "Description": "ADVANCED MICRO DEVICES INC"
+    },
+    {
+      "Ticker": "AMG",
+      "Description": "AFFILIATED MANAGERS GROUP INC COM"
+    },
+    {
+      "Ticker": "AMT",
+      "Description": "AMERICAN TOWER CORP NEW COM"
+    },
+    {
+      "Ticker": "AMZN",
+      "Description": "AMAZON.COM INC"
+    },
+    {
+      "Ticker": "APH",
+      "Description": "AMPHENOL CORP CLASS A COM USD0.001"
+    },
+    {
+      "Ticker": "ATVI",
+      "Description": "ACTIVISION BLIZZARD INC COM"
+    },
+    {
+      "Ticker": "AWK",
+      "Description": "AMERICAN WATER WORKS COMPANY INC COM USD0.01"
+    },
+    {
+      "Ticker": "AYI",
+      "Description": "ACUITY BRANDS INC"
+    },
+    {
+      "Ticker": "AZN",
+      "Description": "ASTRAZENECA ADR REP 0.5 ORD"
+    },
+    {
+      "Ticker": "AZPN",
+      "Description": "ASPEN TECHNOLOGY INC COM"
+    },
+    {
+      "Ticker": "BA",
+      "Description": "BOEING CO COM USD5.00"
+    },
+    {
+      "Ticker": "BABA",
+      "Description": "ALIBABA GROUP HOLDING LTD SPON ADS EACH REP 8 ORD SHS"
+    },
+    {
+      "Ticker": "BAC",
+      "Description": "BANK AMERICA CORP COM"
+    },
+    {
+      "Ticker": "BKNG",
+      "Description": "BOOKING HOLDINGS INC COM"
+    },
+    {
+      "Ticker": "BLK",
+      "Description": "BLACKROCK INC COM USD0.01"
+    },
+    {
+      "Ticker": "BMY",
+      "Description": "BRISTOL-MYERS SQUIBB CO COM"
+    },
+    {
+      "Ticker": "BRKB",
+      "Description": "BERKSHIRE HATHAWAY INC COM USD0.0033 CLASS B"
+    },
+    {
+      "Ticker": "BSX",
+      "Description": "BOSTON SCIENTIFIC CORP"
+    },
+    {
+      "Ticker": "BWA",
+      "Description": "BORG WARNER INC COM USD0.01"
+    },
+    {
+      "Ticker": "CAH",
+      "Description": "CARDINAL HEALTH INC COM NPV"
+    },
+    {
+      "Ticker": "CBRE",
+      "Description": "CBRE GROUP INC COM USD0.01 CLASS A"
+    },
+    {
+      "Ticker": "CCEP",
+      "Description": "COCA-COLA EUROPACIFIC PARTNERS COM EUR0.01"
+    },
+    {
+      "Ticker": "CDNS",
+      "Description": "CADENCE DESIGN SYSTEMS INC COM USD0.01"
+    },
+    {
+      "Ticker": "CDW",
+      "Description": "CDW CORP COM USD0.01"
+    },
+    {
+      "Ticker": "CEG",
+      "Description": "CONSTELLATION ENERGY CORP COM"
+    },
+    {
+      "Ticker": "CELH",
+      "Description": "CELSIUS HLDGS INC COM NEW"
+    },
+    {
+      "Ticker": "CFR",
+      "Description": "CULLEN/FROST BANKERS INC"
+    },
+    {
+      "Ticker": "CI",
+      "Description": "CIGNA CORP NEW COM"
+    },
+    {
+      "Ticker": "CLX",
+      "Description": "CLOROX CO COM USD1.00"
+    },
+    {
+      "Ticker": "CMCSA",
+      "Description": "COMCAST CORP"
+    },
+    {
+      "Ticker": "CNC",
+      "Description": "CENTENE CORP"
+    },
+    {
+      "Ticker": "COP",
+      "Description": "CONOCOPHILLIPS COM"
+    },
+    {
+      "Ticker": "COST",
+      "Description": "COSTCO WHOLESALE CORP COM USD0.01"
+    },
+    {
+      "Ticker": "CPRI",
+      "Description": "CAPRI HOLDINGS LTD COM NPV"
+    },
+    {
+      "Ticker": "CPRT",
+      "Description": "COPART INC COM USD0.0001"
+    },
+    {
+      "Ticker": "CRM",
+      "Description": "SALESFORCE INC COM"
+    },
+    {
+      "Ticker": "CROX",
+      "Description": "CROCS INC"
+    },
+    {
+      "Ticker": "CSCO",
+      "Description": "CISCO SYSTEMS INC"
+    },
+    {
+      "Ticker": "CTAS",
+      "Description": "CINTAS CORP"
+    },
+    {
+      "Ticker": "CTSH",
+      "Description": "COGNIZANT TECHNOLOGY SOLUTIONS CORP COM CL A USD0.01"
+    },
+    {
+      "Ticker": "CVE",
+      "Description": "CENOVUS ENERGY INC COM NPV ISIN #CA15135U1093 SEDOL #B57FG04"
+    },
+    {
+      "Ticker": "CVS",
+      "Description": "CVS HEALTH CORPORATION COM USD0.01"
+    },
+    {
+      "Ticker": "CZR",
+      "Description": "CAESARS ENTERTAINMENT INC NEW COM"
+    },
+    {
+      "Ticker": "D",
+      "Description": "DOMINION ENERGY INC COM"
+    },
+    {
+      "Ticker": "DD",
+      "Description": "DUPONT DE NEMOURS INC COM"
+    },
+    {
+      "Ticker": "DG",
+      "Description": "DOLLAR GEN CORP NEW COM"
+    },
+    {
+      "Ticker": "DHR",
+      "Description": "DANAHER CORPORATION COM"
+    },
+    {
+      "Ticker": "DIS",
+      "Description": "DISNEY WALT CO COM"
+    },
+    {
+      "Ticker": "DLTR",
+      "Description": "DOLLAR TREE INC"
+    },
+    {
+      "Ticker": "DOX",
+      "Description": "AMDOCS LTD ORD GBP0.01"
+    },
+    {
+      "Ticker": "DXCM",
+      "Description": "DEXCOM INC"
+    },
+    {
+      "Ticker": "EADSY",
+      "Description": "AIRBUS SE UNSPON ADR EA REPR 0.25 ORD EUR1"
+    },
+    {
+      "Ticker": "EBAY",
+      "Description": "EBAY INC. COM"
+    },
+    {
+      "Ticker": "EFX",
+      "Description": "EQUIFAX INC COM USD1.25"
+    },
+    {
+      "Ticker": "ELV",
+      "Description": "ELEVANCE HEALTH INC COM"
+    },
+    {
+      "Ticker": "EOG",
+      "Description": "EOG RESOURCES INC"
+    },
+    {
+      "Ticker": "EQNR",
+      "Description": "EQUINOR ASA SPON ADR EACH REP 1 ORD SHS"
+    },
+    {
+      "Ticker": "EVRG",
+      "Description": "EVERGY INC COM"
+    },
+    {
+      "Ticker": "EXC",
+      "Description": "EXELON CORP COM NPV"
+    },
+    {
+      "Ticker": "FANG",
+      "Description": "DIAMONDBACK ENERGY INC COM USD0.01"
+    },
+    {
+      "Ticker": "FCX",
+      "Description": "FREEPORT-MCMORAN INC COM USD0.10"
+    },
+    {
+      "Ticker": "FIVE",
+      "Description": "FIVE BELOW INC"
+    },
+    {
+      "Ticker": "FQVLF",
+      "Description": "FIRST QUANTUM MINERALS LTD COM ISIN #CA3359341052 SEDOL #2347608"
+    },
+    {
+      "Ticker": "FTNT",
+      "Description": "FORTINET INC COM USD0.001"
+    },
+    {
+      "Ticker": "GE",
+      "Description": "GENERAL ELECTRIC CO COM NEW"
+    },
+    {
+      "Ticker": "GEHC",
+      "Description": "GE HEALTHCARE TECHNOLOGIES INC COMMON STOCK"
+    },
+    {
+      "Ticker": "GEN",
+      "Description": "GEN DIGITAL INC COM"
+    },
+    {
+      "Ticker": "GFS",
+      "Description": "GLOBALFOUNDRIES INC COM USD0.02"
+    },
+    {
+      "Ticker": "GH",
+      "Description": "GUARDANT HEALTH INC COM"
+    },
+    {
+      "Ticker": "GOOG",
+      "Description": "ALPHABET INC CAP STK CL C"
+    },
+    {
+      "Ticker": "GOOGL",
+      "Description": "ALPHABET INC CAP STK CL A"
+    },
+    {
+      "Ticker": "GSK",
+      "Description": "GSK PLC SPON ADS EACH REP 2 ORD SHS"
+    },
+    {
+      "Ticker": "HEIA",
+      "Description": "HEICO CORP NEW CL A"
+    },
+    {
+      "Ticker": "HES",
+      "Description": "HESS CORPORATION COM USD1.00"
+    },
+    {
+      "Ticker": "HLT",
+      "Description": "HILTON WORLDWIDE HLDGS INC"
+    },
+    {
+      "Ticker": "HRB",
+      "Description": "H & R BLOCK INC"
+    },
+    {
+      "Ticker": "HUBS",
+      "Description": "HUBSPOT INC"
+    },
+    {
+      "Ticker": "HUM",
+      "Description": "HUMANA INC"
+    },
+    {
+      "Ticker": "ICE",
+      "Description": "INTERCONTINENTAL EXCHANGE INC COM USD0.01"
+    },
+    {
+      "Ticker": "IDXX",
+      "Description": "IDEXX LABORATORIES INC COM USD0.10"
+    },
+    {
+      "Ticker": "IFF",
+      "Description": "INTERNATIONAL FLAVORS &FRAGRANCES COM USD0.125"
+    },
+    {
+      "Ticker": "INTU",
+      "Description": "INTUIT INC"
+    },
+    {
+      "Ticker": "IPG",
+      "Description": "INTERPUBLIC GROUP COS INC COM USD0.10"
+    },
+    {
+      "Ticker": "IT",
+      "Description": "GARTNER INC COM USD0.0005"
+    },
+    {
+      "Ticker": "ITT",
+      "Description": "ITT INC COM"
+    },
+    {
+      "Ticker": "IVZ",
+      "Description": "INVESCO LTD"
+    },
+    {
+      "Ticker": "JD",
+      "Description": "JD.COM INC SPON ADS EACH REPR 2 ORD SHS CLASS A"
+    },
+    {
+      "Ticker": "JNJ",
+      "Description": "JOHNSON &JOHNSON COM USD1.00"
+    },
+    {
+      "Ticker": "JPM",
+      "Description": "JPMORGAN CHASE & CO"
+    },
+    {
+      "Ticker": "KKR",
+      "Description": "KKR &CO INC COM"
+    },
+    {
+      "Ticker": "KLAC",
+      "Description": "KLA CORP COM NEW"
+    },
+    {
+      "Ticker": "KNX",
+      "Description": "KNIGHT-SWIFT TRANSN HLDGS INC CL A"
+    },
+    {
+      "Ticker": "KOS",
+      "Description": "KOSMOS ENERGY LTD COM"
+    },
+    {
+      "Ticker": "LHX",
+      "Description": "L3HARRIS TECHNOLOGIES INC COM"
+    },
+    {
+      "Ticker": "LIN",
+      "Description": "LINDE PLC COM EUR0.001"
+    },
+    {
+      "Ticker": "LLY",
+      "Description": "ELI LILLY AND CO"
+    },
+    {
+      "Ticker": "LMT",
+      "Description": "LOCKHEED MARTIN CORP COM USD1.00"
+    },
+    {
+      "Ticker": "LOW",
+      "Description": "LOWES COMPANIES INC COM USD0.50"
+    },
+    {
+      "Ticker": "LRCX",
+      "Description": "LAM RESEARCH CORP COM USD0.001"
+    },
+    {
+      "Ticker": "LVMUY",
+      "Description": "LVMH MOET HENNESSY LOUIS VUITTON ADR"
+    },
+    {
+      "Ticker": "LYFT",
+      "Description": "LYFT INC CL A COM"
+    },
+    {
+      "Ticker": "MA",
+      "Description": "MASTERCARD INCORPORATED CL A"
+    },
+    {
+      "Ticker": "MAR",
+      "Description": "MARRIOTT INTERNATIONAL INC COM USD0.01 CLASS A"
+    },
+    {
+      "Ticker": "MCK",
+      "Description": "MCKESSON CORP"
+    },
+    {
+      "Ticker": "MCO",
+      "Description": "MOODYS CORP COM USD0.01"
+    },
+    {
+      "Ticker": "MDLZ",
+      "Description": "MONDELEZ INTL INC COM NPV"
+    },
+    {
+      "Ticker": "META",
+      "Description": "META PLATFORMS INC CLASS A COMMON STOCK"
+    },
+    {
+      "Ticker": "MMC",
+      "Description": "MARSH &MCLENNAN COMPANIES INC COM USD1.00"
+    },
+    {
+      "Ticker": "MMS",
+      "Description": "MAXIMUS INC"
+    },
+    {
+      "Ticker": "MO",
+      "Description": "ALTRIA GROUP INC"
+    },
+    {
+      "Ticker": "MRVL",
+      "Description": "MARVELL TECHNOLOGY INC COM"
+    },
+    {
+      "Ticker": "MS",
+      "Description": "MORGAN STANLEY COM USD0.01"
+    },
+    {
+      "Ticker": "MSFT",
+      "Description": "MICROSOFT CORP"
+    },
+    {
+      "Ticker": "MTB",
+      "Description": "M &T BANK CORP COM USD0.50"
+    },
+    {
+      "Ticker": "MTD",
+      "Description": "METTLER-TOLEDO INTERNATIONAL INC COM USD0.01"
+    },
+    {
+      "Ticker": "MU",
+      "Description": "MICRON TECHNOLOGY INC"
+    },
+    {
+      "Ticker": "NEE",
+      "Description": "NEXTERA ENERGY INC COM USD0.01"
+    },
+    {
+      "Ticker": "NEM",
+      "Description": "NEWMONT CORP COM ISIN #US6516391066 SEDOL #BJYKTV2"
+    },
+    {
+      "Ticker": "NFLX",
+      "Description": "NETFLIX INC"
+    },
+    {
+      "Ticker": "NKE",
+      "Description": "NIKE INC CLASS B COM NPV"
+    },
+    {
+      "Ticker": "NOC",
+      "Description": "NORTHROP GRUMMAN CORP COM USD1"
+    },
+    {
+      "Ticker": "NTRS",
+      "Description": "NORTHERN TRUST CORP COM USD1.666"
+    },
+    {
+      "Ticker": "NVDA",
+      "Description": "NVIDIA CORPORATION COM"
+    },
+    {
+      "Ticker": "NXPI",
+      "Description": "NXP SEMICONDUCTORS NV"
+    },
+    {
+      "Ticker": "ON",
+      "Description": "ON SEMICONDUCTOR CORP COM USD0.01"
+    },
+    {
+      "Ticker": "OSK",
+      "Description": "OSHKOSH CORP"
+    },
+    {
+      "Ticker": "OTEX",
+      "Description": "OPEN TEXT CORP COM ISIN #CA6837151068 SEDOL #2260824"
+    },
+    {
+      "Ticker": "OVV",
+      "Description": "OVINTIV INC COM ISIN #US69047Q1022 SEDOL #BL3GRC2"
+    },
+    {
+      "Ticker": "OXY",
+      "Description": "OCCIDENTAL PETE CORP COM"
+    },
+    {
+      "Ticker": "PANW",
+      "Description": "PALO ALTO NETWORKS INC COM USD0.0001"
+    },
+    {
+      "Ticker": "PAYX",
+      "Description": "PAYCHEX INC COM USD0.01"
+    },
+    {
+      "Ticker": "PCG",
+      "Description": "PG&E CORP COM NPV"
+    },
+    {
+      "Ticker": "PDD",
+      "Description": "PINDUODUO INC SPON ADS EACH REP 4 ORD SHS"
+    },
+    {
+      "Ticker": "PENN",
+      "Description": "PENN ENTERTAINMENT INC COM"
+    },
+    {
+      "Ticker": "PG",
+      "Description": "PROCTER AND GAMBLE CO COM"
+    },
+    {
+      "Ticker": "PLD",
+      "Description": "PROLOGIS INC. COM"
+    },
+    {
+      "Ticker": "PM",
+      "Description": "PHILIP MORRIS INTERNATIONAL INC COM NPV"
+    },
+    {
+      "Ticker": "PNC",
+      "Description": "PNC FINANCIAL SERVICES GROUP COM USD5"
+    },
+    {
+      "Ticker": "PNR",
+      "Description": "PENTAIR PLC SHS"
+    },
+    {
+      "Ticker": "POR",
+      "Description": "PORTLAND GENERAL ELECTRIC CO"
+    },
+    {
+      "Ticker": "PYPL",
+      "Description": "PAYPAL HLDGS INC COM"
+    },
+    {
+      "Ticker": "QCOM",
+      "Description": "QUALCOMM INC"
+    },
+    {
+      "Ticker": "RBGLY",
+      "Description": "RECKITT BENCKISER GROUP PLC SPON ADR EACH REP 0.20 ORD SHS"
+    },
+    {
+      "Ticker": "REGN",
+      "Description": "REGENERON PHARMACEUTICALS INC"
+    },
+    {
+      "Ticker": "RH",
+      "Description": "RH COM"
+    },
+    {
+      "Ticker": "RHHBY",
+      "Description": "ROCHE HOLDINGS ADR"
+    },
+    {
+      "Ticker": "RJF",
+      "Description": "RAYMOND JAMES FINL INC COM"
+    },
+    {
+      "Ticker": "ROST",
+      "Description": "ROSS STORES INC"
+    },
+    {
+      "Ticker": "RRX",
+      "Description": "REGAL REXNORD CORP COM STK USD0.01"
+    },
+    {
+      "Ticker": "SAP",
+      "Description": "SAP ADR REP 1 ORD"
+    },
+    {
+      "Ticker": "SBAC",
+      "Description": "SBA COMMUNICATIONS CORP NEW CL A"
+    },
+    {
+      "Ticker": "SE",
+      "Description": "SEA LIMITED ADS EACH REP ONE CLASS A ORD SHS"
+    },
+    {
+      "Ticker": "SHW",
+      "Description": "SHERWIN-WILLIAMS CO"
+    },
+    {
+      "Ticker": "SIEGY",
+      "Description": "SIEMENS AG SPON ADR EACH REP 0.5 ORD SHS"
+    },
+    {
+      "Ticker": "SNAP",
+      "Description": "SNAP INC CL A"
+    },
+    {
+      "Ticker": "SNPS",
+      "Description": "SYNOPSYS INC"
+    },
+    {
+      "Ticker": "SNY",
+      "Description": "SANOFI ADR REP 1 1/2 ORD"
+    },
+    {
+      "Ticker": "SO",
+      "Description": "SOUTHERN CO"
+    },
+    {
+      "Ticker": "SPB",
+      "Description": "SPECTRUM BRANDS HLDGS INC NEW COM"
+    },
+    {
+      "Ticker": "SPG",
+      "Description": "SIMON PROPERTY GROUP INC"
+    },
+    {
+      "Ticker": "SPGI",
+      "Description": "S&P GLOBAL INC COM"
+    },
+    {
+      "Ticker": "SWAV",
+      "Description": "SHOCKWAVE MED INC COM"
+    },
+    {
+      "Ticker": "SWK",
+      "Description": "STANLEY BLACK & DECKER INC"
+    },
+    {
+      "Ticker": "SYY",
+      "Description": "SYSCO CORP"
+    },
+    {
+      "Ticker": "TEL",
+      "Description": "TE CONNECTIVITY LTD COM CHF0.57"
+    },
+    {
+      "Ticker": "TFC",
+      "Description": "TRUIST FINL CORP COM"
+    },
+    {
+      "Ticker": "TJX",
+      "Description": "TJX COMPANIES INC"
+    },
+    {
+      "Ticker": "TMO",
+      "Description": "THERMO FISHER SCIENTIFIC INC"
+    },
+    {
+      "Ticker": "TRMLF",
+      "Description": "TOURMALINE OIL CORP COM ISIN #CA89156V1067 SEDOL #B3QJ0H8"
+    },
+    {
+      "Ticker": "TRV",
+      "Description": "TRAVELERS COMPANIES INC COM STK NPV"
+    },
+    {
+      "Ticker": "TSLA",
+      "Description": "TESLA INC COM"
+    },
+    {
+      "Ticker": "TSM",
+      "Description": "TAIWAN SEMICONDUCTOR MANUFACTURING SPON ADS EACH REP 5 ORD TWD10"
+    },
+    {
+      "Ticker": "TSN",
+      "Description": "TYSON FOODS INC"
+    },
+    {
+      "Ticker": "TWLO",
+      "Description": "TWILIO INC CL A"
+    },
+    {
+      "Ticker": "UBER",
+      "Description": "UBER TECHNOLOGIES INC COM"
+    },
+    {
+      "Ticker": "UL",
+      "Description": "UNILEVER PLC SPON ADR NEW"
+    },
+    {
+      "Ticker": "UNH",
+      "Description": "UNITEDHEALTH GROUP INC"
+    },
+    {
+      "Ticker": "UPS",
+      "Description": "UNITED PARCEL SERVICE INC CL B"
+    },
+    {
+      "Ticker": "USB",
+      "Description": "US BANCORP"
+    },
+    {
+      "Ticker": "USFD",
+      "Description": "US FOODS HLDG CORP COM"
+    },
+    {
+      "Ticker": "V",
+      "Description": "VISA INC"
+    },
+    {
+      "Ticker": "VEEV",
+      "Description": "VEEVA SYSTEMS INC"
+    },
+    {
+      "Ticker": "VRSK",
+      "Description": "VERISK ANALYTICS INC COM"
+    },
+    {
+      "Ticker": "VRT",
+      "Description": "VERTIV HOLDINGS CO COM CL A"
+    },
+    {
+      "Ticker": "VRTX",
+      "Description": "VERTEX PHARMACEUTICALS INC"
+    },
+    {
+      "Ticker": "VSCO",
+      "Description": "VICTORIAS SECRET AND CO COMMON STOCK"
+    },
+    {
+      "Ticker": "WFC",
+      "Description": "WELLS FARGO CO NEW COM"
+    },
+    {
+      "Ticker": "WMG",
+      "Description": "WARNER MUSIC GROUP CORP COM CL A"
+    },
+    {
+      "Ticker": "WTW",
+      "Description": "WILLIS TOWERS WATSON PLC COM USD0.000304635"
+    },
+    {
+      "Ticker": "XOM",
+      "Description": "EXXON MOBIL CORP"
+    },
+    {
+      "Ticker": "ZTS",
+      "Description": "ZOETIS INC"
+    }
+   ]

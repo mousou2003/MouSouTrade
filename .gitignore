@@ -1,0 +1,5 @@
+archive/
+__target__/
+__pycache__/
+*.backup
+config/SecurityKeys.json

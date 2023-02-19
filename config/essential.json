@@ -1,0 +1,100 @@
+{
+    "UPRO": {
+        "Ticker": "UPRO",
+        "Last": "38.68",
+        "News": "",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "UDOW": {
+        "Ticker": "UDOW",
+        "Last": "58.85",
+        "News": "",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "SPY": {
+        "Ticker": "SPY",
+        "Last": "407.09",
+        "News": "8:28 AM ET",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "SOXL": {
+        "Ticker": "SOXL",
+        "Last": "16.58",
+        "News": "",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "GLD": {
+        "Ticker": "GLD",
+        "Last": "173.03",
+        "News": "9:12 AM ET",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "NUGT": {
+        "Ticker": "NUGT",
+        "Last": "36.44",
+        "News": "",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "XLY": {
+        "Ticker": "XLY",
+        "Last": "149.91",
+        "News": "9:17 AM ET",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "XLC": {
+        "Ticker": "XLC",
+        "Last": "55.49",
+        "News": "",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "NDX": {
+        "Ticker": "NDX",
+        "Last": "12381.17",
+        "News": "",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "SLV": {
+        "Ticker": "SLV",
+        "Last": "20.18",
+        "News": "",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "UNG": {
+        "Ticker": "UNG",
+        "Last": "8.35",
+        "News": "9:26 AM ET",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "XLE": {
+        "Ticker": "XLE",
+        "Last": "86.81",
+        "News": "9:26 AM ET",
+        "Earnings Date": "--",
+        "Equity Summary Score": "--"
+    },
+    "TOTALS": {
+        "Ticker": "TOTALS",
+        "Last": "",
+        "News": "",
+        "Earnings Date": "",
+        "Equity Summary Score": ""
+    },
+    "": {
+        "Ticker": "",
+        "Last": "",
+        "News": "",
+        "Earnings Date": "",
+        "Equity Summary Score": ""
+    }
+}
