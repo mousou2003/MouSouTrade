@@ -7,8 +7,8 @@ import logging
 import json
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.WARNING)
-    with open("config/Fidelity.json") as file:
+    logging.basicConfig(level=logging.DEBUG)
+    with open("config/stocks.json") as file:
         stocks = json.load(file)
         for stock in stocks:
             try:
@@ -36,6 +36,6 @@ if __name__ == '__main__':
             except ReadTimeout as e:
                 logging.warning("Readtimeout for %s"% stock['Ticker'])
                 logging.warning(e)
-                PolygoneClient().release()
+                PolygoneClient.release()
     print("done")
             
