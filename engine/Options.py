@@ -138,7 +138,7 @@ class VerticalSpread:
             except MarketDataStrikeNotFoundException as err:
                 logging.info(err)
             except ZeroDivisionError as err:
-                logging.warning('Division by zero when calculating delta, for %s with %s'%(contract,self.short_contract),err)
+                logging.warning('Division by zero when calculating delta, for %s \n with %s'%(contract,self.short_contract),err)
 
             previous_contract = contract
         return self.short_contract !=None and self.long_contract !=None
@@ -203,7 +203,7 @@ class CreditSpread(VerticalSpread):
         return abs(self.distance_between_Strikes - self.get_max_reward())
 
     def get_plain_English_Result(self):
-        return format("%s %s Spread: Sell %s, Buy %s; max risk %.2f, max reward %.2f, breakeven %.2f, enter at %.2f, target exit at %.2f, stop loss at %.2f and before %s"%
+        return format("%s %s spread: Sell %s, Buy %s; max risk %.2f, max reward %.2f, breakeven %.2f, enter at %.2f, target exit at %.2f, stop loss at %.2f and before %s"%
                     (self.direction, self.strategy, self.get_short()['ticker'], self.get_Long()['ticker'], self.get_max_risk(),
                     self.get_max_reward(), self.get_breakeven_price(), self.get_close_price(),
                     self.get_target_price(), self.get_stop_price(), datetime.datetime.strftime(self.get_exit_date(),'%Y-%m-%d')))
