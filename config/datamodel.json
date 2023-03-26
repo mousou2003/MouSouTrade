@@ -1,0 +1,30 @@
+{
+    "datetime":"",
+    "strategy": "credit",
+    "underlying_ticker": "AMZN",
+    "previous_close": 100.61,
+    "contract_type": "put",
+    "direction": "bullish",
+    "distance_between_Strikes": 5.0,
+    "contracts": [
+        {
+            "cfi": "OPASPS",
+            "contract_type": "put",
+            "exercise_style": "american",
+            "expiration_date": "2023-04-21",
+            "primary_exchange": "BATO",
+            "shares_per_contract": 100,
+            "strike_price": 215,
+            "ticker": "O:AMZN230421P00215000",
+            "underlying_ticker": "AMZN"
+        }
+    ],
+    "long_contract": {
+        "premium": 2.05,
+        "ticker": "O:AMZN230421P00095000"
+    },
+    "short_contract": {
+        "premium": 3.77,
+        "ticker": "O:AMZN230421P00100000"
+    }
+}

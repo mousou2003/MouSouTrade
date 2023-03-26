@@ -25,6 +25,9 @@ class PolygoneClient(MarketDataClient):
             super().__init__()
             logging.info("Clients successfully created")
 
+    def __str__(self):
+        return self.__class__.__name__
+    
     def create_polygone_clients():
         PolygoneClient.load_key_secret(
             jsonfile="./config/SecurityKeys.json", stage="Sandbox", client_name=PolygoneClient.CLIENT_NAME)
