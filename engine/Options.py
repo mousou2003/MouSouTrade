@@ -35,7 +35,7 @@ class Option:
 # Credit spread are profitable if the underlying stock price make movement in the direction
 # predicted. Its a forgiving strategy because even if the stock make a slight movement 
 # in the oposite direction it can still be profitable.
-class VerticalSpread():
+class VerticalSpread(SpreadDataModel):
     REQUEST_ORDER={datamodel.CREDIT:{datamodel.BULLISH:datamodel.DESC, datamodel.BEARISH:datamodel.ASC},datamodel.DEBIT:{datamodel.BULLISH:datamodel.ASC, datamodel.BEARISH:datamodel.DESC}}
     SEARCH_OPS={datamodel.CREDIT:{datamodel.BULLISH:operator.ge, datamodel.BEARISH:operator.le},datamodel.DEBIT:{datamodel.BULLISH:operator.le, datamodel.BEARISH:operator.ge}}
     WRONG_DIRECTION_ADJ_OPS={datamodel.CREDIT:{datamodel.BULLISH:operator.sub, datamodel.BEARISH:operator.add},datamodel.DEBIT:{datamodel.BULLISH:operator.add, datamodel.BEARISH:operator.sub}}

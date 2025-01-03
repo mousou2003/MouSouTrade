@@ -10,7 +10,7 @@ import sys
 
 import logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 if __name__ == '__main__':
     n = len(sys.argv)
@@ -31,7 +31,7 @@ if __name__ == '__main__':
                     print(Fore.GREEN + creditVerticalSpreadTest.get_plain_English_Result()+Fore.RESET)
                 else:
                     logger.info("No match for %s"% stock['Ticker'])
-                logger.info(creditVerticalSpreadTest.toJSON())
+                logger.debug(creditVerticalSpreadTest.toJSON())
             except MarketDataException as e:
                 logger.warning("Fail to get options %s"% stock['Ticker'])
                 logger.warning(e)
@@ -44,12 +44,11 @@ if __name__ == '__main__':
                 direction=dm.BEARISH
                 strategy=dm.CREDIT
                 creditVerticalSpreadTest = CreditSpread(underlying_ticker=stock['Ticker'],direction=direction,strategy=strategy, client= PolygoneClient())
-                logger.info(creditVerticalSpreadTest.toJSON())
                 if creditVerticalSpreadTest.matchOption(date=Option.get_followingThirdFriday()):
                     print(Fore.RED + creditVerticalSpreadTest.get_plain_English_Result()+ Fore.RESET)
                 else:
                     logger.info("No match for %s"% stock['Ticker'])
-                logger.info(creditVerticalSpreadTest.toJSON())
+                logger.debug(creditVerticalSpreadTest.toJSON())
             except MarketDataException as e:
                 logger.warning("Fail to get options %s"% stock['Ticker'])
                 logger.warning(e)
