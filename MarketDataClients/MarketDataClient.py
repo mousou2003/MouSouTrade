@@ -51,3 +51,8 @@ class MarketDataStrikeNotFoundException(Exception):
     __innerException = None
     def __init__(self, message, source):
         super().__init__(message,source)
+
+class MarketDataStorageFailedException(Exception):
+    __innerException = None
+    def __init__(self, message, source):
+        super().__init__(message,source)
