@@ -7,10 +7,13 @@ from requests import ReadTimeout
 import json
 from colorama import Fore
 import sys
+import datetime
 
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+from datetime import datetime, timedelta
+
 
 if __name__ == '__main__':
     n = len(sys.argv)
@@ -19,6 +22,13 @@ if __name__ == '__main__':
     logger.info("\nName of Python script: %s", sys.argv[0])
     logger.info("\nArguments passed: %s", sys.argv)
     logger.info("Target date: %s"%Option.get_followingThirdFriday())
+    #PolygoneClient().option_daily_bars
+    
+    # Get today's date
+    today = datetime.now()
+
+    # Calculate previous day's date
+    previous_day = today - timedelta(days=1)
 
     with open(sys.argv[1]) as file:
         stocks = json.load(file)
@@ -26,6 +36,7 @@ if __name__ == '__main__':
             try:
                 direction=dm.BULLISH
                 strategy=dm.CREDIT
+                results = PolygoneClient().get_daily_open_close(ticker=stock['Ticker'], date=previous_day)
                 creditVerticalSpreadTest = CreditSpread(underlying_ticker=stock['Ticker'],direction=direction,strategy=strategy, client= PolygoneClient())
                 if creditVerticalSpreadTest.matchOption(date=Option.get_followingThirdFriday()):
                     print(Fore.GREEN + creditVerticalSpreadTest.get_plain_English_Result()+Fore.RESET)

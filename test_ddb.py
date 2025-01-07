@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 # test with command lines  aws dynamodb list-tables --profile 851655311094_AdministratorAccess --endpoint-url 'localhost:8000'
-table_name = 'test800'
+table_name = 'test1100'
 try:
     # Get the service resource.
     dynamodb = boto3.Session().resource(
@@ -76,15 +76,6 @@ try:
         stocks = json.load(file)
         for stock in stocks:
             try:
-                direction = dm.BULLISH
-                strategy = dm.CREDIT
-                creditVerticalSpreadTest = CreditSpread(
-                    underlying_ticker=stock['Ticker'], direction=direction, strategy=strategy, client=PolygoneClient())
-                if creditVerticalSpreadTest.matchOption(date=Option.get_followingThirdFriday()):
-                    print(
-                        Fore.GREEN + creditVerticalSpreadTest.get_plain_English_Result()+Fore.RESET)
-                else:
-                    logger.info("No match for %s" % stock['Ticker'])
                 #logger.info(creditVerticalSpreadTest.toJSON())
                 Key={
                     "date": datetime.date.today().isoformat(),
@@ -95,36 +86,43 @@ try:
                 if 'Item' in table.get_item(Key=Key):
                    logger.info("info already stored for %s" % Key)
                 else:
+                    direction = dm.BULLISH
+                    strategy = dm.CREDIT
+                    creditVerticalSpreadTest = CreditSpread(
+                        underlying_ticker=stock['Ticker'], direction=direction, strategy=strategy, client=PolygoneClient())
                     merged_json = {**Key,**{"info":creditVerticalSpreadTest.toJSON()}}
-                    table.put_item( Item= merged_json)
-                    response = table.get_item(Key=Key)
+                    if creditVerticalSpreadTest.matchOption(date=Option.get_followingThirdFriday()):
+                        merged_json = {**merged_json,**{"description": creditVerticalSpreadTest.get_plain_English_Result()}}
+                        print(Fore.GREEN)
+                        logger.info(merged_json)
+                        print(Fore.RESET)
+                    else:
+
+                        merged_json = {**merged_json,**{"description": "No match for %s" % stock['Ticker']}}
+                        logger.info(merged_json)
+
+                    table.put_item( Item = merged_json)
+                    response = table.get_item( Key = Key)
                     if 'Item' in response:
                         logger.info("info  stored for %s" % Key)
-                        logger.debug("saved in table: %s" % response)
+                        logger.info("saved in table: %s" % response)
                     else:
                         raise MarketDataStorageFailedException()
                         
             except MarketDataStorageFailedException as e:
-                logger.warning("Fail to get item from storage %s" % Key)
-                logger.warning(e)
+                logger.warning("Fail to get item from storage %s\n%s" % (Key,e))
             except MarketDataException as e:
-                logger.warning("Fail to get options %s" % Key)
-                logger.warning(e)
+                logger.warning("Fail to get options %s\n%s" % (Key,e))
             except ReadTimeout as e:
-                logger.warning("Readtimeout for %s" % Key)
-                logger.warning(e)
-                PolygoneClient().release()
-
+                logger.warning("Readtimeout for %s\n%s" % (Key,e))
 
 except botocore.exceptions.EndpointConnectionError as err:
     logger.error(
         "Couldn't access endpoint %s. Here's why: %s",
         table_name,
         err)
-    PolygoneClient().release()
 except Exception as err:
     logger.error(
         "Unknow issue with %s. Here's why: %s",
         table_name,
         err)
-    PolygoneClient().release()

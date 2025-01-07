@@ -1,5 +1,7 @@
 {
     "python.analysis.extraPaths": [
-        "./engine"
+        "./engine",
+        "./PolygoneClients",
+        "./MarketDataClients"
     ]
 }

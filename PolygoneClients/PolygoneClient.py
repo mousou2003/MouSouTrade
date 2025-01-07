@@ -4,6 +4,7 @@ import time
 import logging
 import asyncio
 from MarketDataClients.MarketDataClient import MarketDataStrikeNotFoundException, MarketDataException, MarketDataClient
+logger = logging.getLogger(__name__)
 
 class PolygoneClient(MarketDataClient):
     THROTTLE_LIMIT = 60/5  # we are currently limited to 5 requests per minutes
@@ -13,17 +14,17 @@ class PolygoneClient(MarketDataClient):
 
     def __new__(cls):
         if PolygoneClient.instance == None:
-            logging.info("Creating PolygoneClient Singleton")
+            logger.info("Creating PolygoneClient Singleton")
             PolygoneClient.instance = super(PolygoneClient, cls).__new__(cls)
             PolygoneClient.create_polygone_clients()
-            logging.info("PolygoneClient Singleton created")
+            logger.info("PolygoneClient Singleton created")
         return PolygoneClient.instance
 
     def __init__(self) -> None:
         if PolygoneClient.instance == None:
-            logging.info("Init PolygoneClient")
+            logger.info("Init PolygoneClient")
             super().__init__()
-            logging.info("Clients successfully created")
+            logger.info("Clients successfully created")
 
     def __str__(self):
         return self.__class__.__name__
@@ -41,12 +42,28 @@ class PolygoneClient(MarketDataClient):
         except Exception as err:
             raise MarketDataException(
                 "Failed to get previous close price for stock %s may not be accessible." % ticker, err)
+        
+    def get_daily_open_close(self, ticker, date):
+        self.wait_for_no_Throttle()
+        try:
+            return self.stocks_client.get_daily_open_close(symbol=ticker, date=date)
+        except Exception as err:
+            raise MarketDataException(
+                "Failed to get stocks previous close price for date %s may not be accessible." % date, err)
+        
+    def get_grouped_option_daily_bars(self, date):
+        self.wait_for_no_Throttle()
+        try:
+            return self.options_client.get_grouped_daily_bars(date)
+        except KeyError as err:
+            raise MarketDataStrikeNotFoundException(
+                "Failed to get options previous close price for date %s may not be accessible." % date, err)
 
     def get_option_previous_close(self, ticker):
         self.wait_for_no_Throttle()
         try:
             response = self.options_client.get_previous_close(ticker)
-            logging.debug(response)
+            logger.debug(response)
             return response['results'][0]['c']
         except KeyError as err:
             raise MarketDataStrikeNotFoundException(

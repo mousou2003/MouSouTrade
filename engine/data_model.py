@@ -24,6 +24,7 @@ class SpreadDataModel:
     short_contract = None
     long_contract = None
     contracts = None
+    daily_bars = None
 
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__,

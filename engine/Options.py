@@ -83,10 +83,9 @@ class VerticalSpread(SpreadDataModel):
                     logger.debug("procesing %s"%contract['ticker'])
                     if  self.short_contract == None:
                         premium= self.client.get_option_previous_close(contract['ticker'])
-                        self.short_contract = contract
                         self.short_premium = premium
                         contract['premium'] = premium
-                        self.sell_symbol = contract
+                        self.short_contract = contract
                         logger.info("Found a SHORT with :%s for a premium of %.2f"% (self.short_contract['ticker'],premium ))
                         logger.debug(contract)
                     else:
@@ -103,9 +102,8 @@ class VerticalSpread(SpreadDataModel):
                             logger.debug('spread_premium %s',spread_premium)
                             if spread_premium >= self.distance_between_Strikes/3:
                                 contract['premium'] = premium
-                                self.long_contract = contract
                                 self.long_premium = premium
-                                self.buy_symbol = contract
+                                self.long_contract = contract
                                 logger.info("Found a LONG with :%s for a premium of %.2f with short delta of %.2f"% (contract['ticker'],premium, delta))
                                 logger.debug(contract)
                             # We stop searching for match when we reach the MIN_DELTA
@@ -121,10 +119,10 @@ class VerticalSpread(SpreadDataModel):
         return self.short_contract !=None and self.long_contract !=None
 
     def get_Long(self):
-        return self.buy_symbol
+        return self.long_contract
     
     def get_short(self):
-        return self.sell_symbol
+        return self.short_contract
 
     def get_max_risk(self):
         pass
@@ -181,7 +179,7 @@ class CreditSpread(VerticalSpread):
 
     def get_plain_English_Result(self):
         return format(\
-            "%s %s spread: Sell %s, Buy %s; max risk %.2f, max reward %.2f, breakeven %.2f, enter at %.2f, target exit at %.2f, stop loss at %.2f and before %s"%
-            (self.direction, self.strategy, self.get_short()['ticker'], self.get_Long()['ticker'], self.get_max_risk(),
+            "Sell %s, Buy %s; max risk %.2f, max reward %.2f, breakeven %.2f, enter at %.2f, target exit at %.2f, stop loss at %.2f and before %s"%
+            (self.get_short()['ticker'], self.get_Long()['ticker'], self.get_max_risk(),
             self.get_max_reward(), self.get_breakeven_price(), self.get_close_price(),
             self.get_target_price(), self.get_stop_price(), datetime.datetime.strftime(self.get_exit_date(),'%Y-%m-%d')))
