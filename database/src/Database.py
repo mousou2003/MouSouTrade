@@ -1,7 +1,78 @@
 import logging
-import json
-logger = logging.getLogger(__name__)
 
-class Database(object):
-    def __init__(self) -> None:
-        logger.info("Init Database")    
+import boto3
+import botocore
+import boto3.dynamodb
+from botocore.exceptions import ClientError
+
+import json
+# test with command lines  aws dynamodb list-tables --profile 851655311094_AdministratorAccess --endpoint-url 'localhost:8000'
+logger = logging.getLogger(__name__)
+class Database():
+    def __init__(self,table_name):
+        logger.info("Init Database")
+        dynamodb = boto3.Session().resource(
+        'dynamodb', endpoint_url='http://localhost:8000')
+        logger.info("dynamo client created")
+
+        try:
+            self.table = dynamodb.Table(table_name)
+            self.table.load()
+            logger.info("table exist %s" % table_name)
+        except ClientError as err:
+            if err.response['Error']['Code'] == 'ResourceNotFoundException':
+                logger.info("Create the DynamoDB table.")
+                self.table = dynamodb.create_table(
+                    TableName=table_name,
+                    KeySchema=[
+                        {
+                            'AttributeName': 'ticker',
+                            'KeyType': 'HASH'
+                        },
+                        {
+                            'AttributeName': 'option',
+                            'KeyType': 'RANGE'
+                        },
+                    ],
+                    AttributeDefinitions=[
+                        {
+                            'AttributeName': 'ticker',
+                            'AttributeType': 'S'
+                        },
+                        {
+                            'AttributeName': 'option',
+                            'AttributeType': 'S'
+                        },
+                    ],
+                    ProvisionedThroughput={
+                        'ReadCapacityUnits': 5,
+                        'WriteCapacityUnits': 5
+                    }
+                )
+
+                logger.info("Wait until the table exists.")
+                self.table.wait_until_exists()
+            else:
+                logger.warning(
+                    "Couldn't check for existence of %s. Here's why: %s: %s",
+                    table_name,
+                    err.response['Error']['Code'], err.response['Error']['Message'])
+                raise err
+
+    def get_item(self, Key):
+        try:
+            return self.table.get_item(Key=Key)
+        except botocore.exceptions.EndpointConnectionError as err:
+            logger.error(
+                "Couldn't access endpoint %s. Here's why: %s",
+                self.table,
+                err)
+
+    def put_item(self, Item):
+        try:
+            return self.table.put_item( Item = Item)
+        except botocore.exceptions.EndpointConnectionError as err:
+            logger.error(
+                "Couldn't access endpoint %s. Here's why: %s",
+                self.table,
+                err)
