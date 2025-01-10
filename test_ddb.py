@@ -68,8 +68,6 @@ def main():
                             else:
                                 raise MarketDataStrikeNotFoundException()
                                     
-                except MarketDataStorageFailedException as e:
-                    logger.warning("Fail to get item from storage %s\n%s" % (Key,e))
                 except MarketDataException as e:
                     logger.warning("Fail to get options %s\n%s" % (Key,e))
                 except ReadTimeout as e:

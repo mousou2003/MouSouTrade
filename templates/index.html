@@ -4,16 +4,57 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Database Records</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+    function refreshData() {
+            $.ajax({
+                url: '/data',
+                type: 'GET',
+                dataType: 'json',
+                success: function(data) {
+                    $('#data-table tbody').empty();
+                    if (data.length > 0) {
+                        $.each(data, function(index, item) {
+                            let row = $('<tr>');
+                            // Use bracket notation to access properties safely
+                            row.append(`<td>${item['ticker'] || 'N/A'}</td>`); 
+                            row.append(`<td>${item['option'] || 'N/A'}</td>`);
+                            row.append(`<td>${item['description'] || 'N/A'}</td>`);
+                            $('#data-table tbody').append(row);
+                        });
+                    } else {
+                        $('#data-table tbody').append('<tr><td colspan="3">No records found.</td></tr>');
+                    }
+                },
+                error: function(error) {
+                    console.error("Error refreshing data:", error);
+                    $('#data-table tbody').append('<tr><td colspan="3">Error loading data.</td></tr>');
+                }
+            });
+        }
+
+        refreshData();
+        setInterval(refreshData, 5000);
+
+        });
+    </script>
     <style>
         body { font-family: Arial, sans-serif; }
-        table { border-collapse: collapse; width: 100%; }
+        table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            overflow-y: auto; /* Enable vertical scrolling */
+            max-height: 400px; /* Set a maximum height for the table */
+        }
         th, td { border: 1px solid #ddd; padding: 8px; }
         th { background-color: #f2f2f2; }
+        td { text-align: left; }
     </style>
 </head>
 <body>
     <h1>Records from DynamoDB</h1>
-    <table>
+    <table id="data-table" border="1">
         <thead>
             <tr>
                 <th>Ticker</th>
@@ -21,15 +62,7 @@
                 <th>Description</th>
             </tr>
         </thead>
-        <tbody>
-            {% for record in records %}
-            <tr>
-                <td>{{ record['ticker'] }}</td>
-                <td>{{ record['option'] }}</td>
-                <td>{{ record['description'] }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
+        <tbody></tbody>
     </table>
 </body>
 </html>

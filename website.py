@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify
 import boto3
 from botocore.exceptions import ClientError
 
@@ -10,21 +10,23 @@ table_name = 'Beta'  # Replace this with your DynamoDB table name
 table = dynamodb.Table(table_name)
 
 def get_all_items():
-    print("Fetch all items from the DynamoDB table.")
+    print("Fetching all items from the DynamoDB table.")
     try:
-        response = table.scan()  # Scan the entire table (can be costly for large tables)
+        response = table.scan()
         return response['Items']
     except ClientError as e:
-        print("Unable to scan the DynamoDB table:")
-        print(e.response['Error']['Message'])
+        print(f"Unable to scan the DynamoDB table: {e.response['Error']['Message']}")
         return []
 
 @app.route('/')
 def index():
-    """Home page to display database content."""
-    records = get_all_items()  # Fetch records
+    return render_template('index.html')
+
+@app.route('/data')
+def get_data():
+    records = get_all_items()
     print(records)
-    return render_template('index.html', records=records)
+    return jsonify(records)
 
 if __name__ == '__main__':
     app.run(debug=True)
