@@ -18,6 +18,11 @@ from database.src import Database
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+# Set the logging level to WARNING to suppress DEBUG messages
+logging.getLogger('botocore').setLevel(logging.WARNING)
+logging.getLogger('boto3').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('asyncio').setLevel(logging.WARNING)
 
 def main():
     try:
@@ -29,22 +34,17 @@ def main():
                     for direction in [BULLISH, BEARISH]:  # Iterate through both bullish and bearish directions
                         for strategy in [CREDIT, DEBIT]:  # Iterate through both credit and debit strategies
 
-                            Key = {
-                                "ticker": stock['Ticker'],
-                                "option": json.dumps({"date": datetime.date.today(), "direction": direction,
-                                                      "strategy": strategy}, default=str)
-                            }
-
-                            if 'Item' in db.get_item(Key=Key):
-                                logger.info("info already stored for %s" % Key)
-                                continue  # Skip if data already exists
-
                             spread_class = DebitSpread if strategy == DEBIT else CreditSpread
                             spread = spread_class(underlying_ticker=stock['Ticker'], direction=direction,
                                                    strategy=strategy, client=PolygoneClient())
 
                             if spread.matchOption(date=Option.get_followingThirdFriday()):
-                                merged_json = {**Key, **{"description": spread.get_plain_English_Result(),
+                                Key = {
+                                    "ticker": stock['Ticker'],
+                                    "option": json.dumps({"date": spread.get_expiration_date(), "direction": direction,
+                                                      "strategy": strategy}, default=str)
+                                }
+                                merged_json = {**Key,**{"description": spread.get_plain_English_Result(),
                                                          **spread.to_dict()}}
                                 print(Fore.GREEN)
                                 logger.info(merged_json)
@@ -56,6 +56,11 @@ def main():
                                 else:
                                     raise MarketDataStorageFailedException("Failed to store item in database")
                             else:
+                                Key = {
+                                    "ticker": stock['Ticker'],
+                                    "option": json.dumps({"date": spread.get_expiration_date(), "direction": direction,
+                                                      "strategy": strategy}, default=str)
+                                }
                                 merged_json = {**Key, **{"description": f"No match for {stock['Ticker']}"},
                                                **spread.to_dict()}
                                 logger.info(merged_json)

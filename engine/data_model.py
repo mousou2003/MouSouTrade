@@ -34,10 +34,23 @@ class SpreadDataModel():
     contracts = None
     daily_bars = None
     client = None
+    long_premium = None
+    short_premium = None
+    buy_sell = None
+    max_risk = None
+    max_reward = None
+    breakeven = None
+    entry_price = None
+    target_price = None
+    stop_price = None
+    exit_date_str = None
+    distance_between_Strikes = None
+    expiration_date = None
+    exit_date_str = None
 
     def to_dict(self, exclude=None):
         if exclude is None:
-            exclude = ['client']
+            exclude = ['client','contracts']
         
         # Collect initial attributes
         attributes = {
@@ -45,24 +58,21 @@ class SpreadDataModel():
             for key, value in self.__dict__.items()
             if key not in exclude and not key.startswith('_')  # Exclude private and specified attributes
         }
-        
-        # Process contracts to convert any nested dict floats to Decimal
-        attributes['contracts'] = self.convert_all_floats_to_decimal_in_list(attributes['contracts'])
 
+        attributes['long_contract'] = {
+            key: self.round_decimal(value) if isinstance(value, (Decimal,int)) else value
+            for key, value in  self.long_contract.items()
+        }
+        attributes['short_contract'] = {
+            key: self.round_decimal(value) if isinstance(value, (Decimal,int)) else value
+            for key, value in  self.short_contract.items()
+        }
         return attributes
 
-    def convert_all_floats_to_decimal_in_list(self, attr_list):
-        """Convert all float values in a list of dictionaries to Decimal."""
-        for item in attr_list:
-            if isinstance(item, dict):
-                for key, value in item.items():
-                    if isinstance(value, (float, int)):
-                        item[key] = self.round_decimal(value=value)
-        return attr_list
     
     def round_decimal(self, value):
         """Converts float to Decimal and rounds it to 5 decimal places, then converts to string."""
-        return str(Decimal(value).quantize(Decimal('0.00000'), rounding=ROUND_HALF_UP))
+        return str(Decimal(value).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP))
     
     def to_json(self, exclude=None):
         return json.dumps(self.to_dict(), default=str)  # Convert dictionary to JSON

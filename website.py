@@ -1,6 +1,7 @@
 from flask import Flask, render_template, jsonify
 import boto3
 from botocore.exceptions import ClientError
+import json
 
 app = Flask(__name__)
 
@@ -25,8 +26,8 @@ def index():
 @app.route('/data')
 def get_data():
     records = get_all_items()
-    print(records)
-    return jsonify(records)
+    # Convert to JSON here
+    return jsonify(json.dumps([record for record in records]))
 
 if __name__ == '__main__':
     app.run(debug=True)

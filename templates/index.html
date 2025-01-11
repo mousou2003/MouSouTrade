@@ -5,64 +5,85 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Database Records</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script>
-        $(document).ready(function() {
-    function refreshData() {
-            $.ajax({
-                url: '/data',
-                type: 'GET',
-                dataType: 'json',
-                success: function(data) {
-                    $('#data-table tbody').empty();
-                    if (data.length > 0) {
-                        $.each(data, function(index, item) {
-                            let row = $('<tr>');
-                            // Use bracket notation to access properties safely
-                            row.append(`<td>${item['ticker'] || 'N/A'}</td>`); 
-                            row.append(`<td>${item['option'] || 'N/A'}</td>`);
-                            row.append(`<td>${item['description'] || 'N/A'}</td>`);
-                            $('#data-table tbody').append(row);
-                        });
-                    } else {
-                        $('#data-table tbody').append('<tr><td colspan="3">No records found.</td></tr>');
-                    }
-                },
-                error: function(error) {
-                    console.error("Error refreshing data:", error);
-                    $('#data-table tbody').append('<tr><td colspan="3">Error loading data.</td></tr>');
-                }
-            });
-        }
-
-        refreshData();
-        setInterval(refreshData, 5000);
-
-        });
-    </script>
     <style>
-        body { font-family: Arial, sans-serif; }
-        table { 
-            border-collapse: collapse; 
-            width: 100%; 
-            overflow-y: auto; /* Enable vertical scrolling */
-            max-height: 400px; /* Set a maximum height for the table */
-        }
-        th, td { border: 1px solid #ddd; padding: 8px; }
-        th { background-color: #f2f2f2; }
-        td { text-align: left; }
+        /* ... (Your CSS styles remain unchanged) ... */
     </style>
 </head>
 <body>
     <h1>Records from DynamoDB</h1>
+    <div class="loading-indicator">Loading data...</div>
+    <div class="error-message" style="display:none;"></div>
     <table id="data-table" border="1">
         <thead>
             <tr>
                 <th>Ticker</th>
                 <th>Option</th>
                 <th>Description</th>
+                <th>Short Contract</th>
+                <th>Short Premium</th>
+                <th>Long Contract</th>
+                <th>Long Premium</th>
+                <th>Max Risk</th>
+                <th>Max Reward</th>
+                <th>Breakeven</th>
+                <th>Entry Price</th>
+                <th>Target Price</th>
+                <th>Stop Price</th>
+                <th>Exit Date</th>
             </tr>
         </thead>
         <tbody></tbody>
     </table>
+    <script>
+        $(document).ready(function() {
+            function refreshData() {
+                $('.loading-indicator').addClass('active');
+                $('.error-message').hide();
+                $.ajax({
+                    url: '/data',
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        $('#data-table tbody').empty();
+                        const jsonData = JSON.parse(data);
+
+                        if (jsonData.length > 0) {
+                            $.each(jsonData, function(index, item) {
+                                let row = $('<tr>');
+                                // Access data using JSON key notation
+                                row.append(`<td>${item.underlying_ticker || 'N/A'}</td>`);
+                                row.append(`<td>${item.option || 'N/A'}</td>`);
+                                row.append(`<td>${item.description || 'N/A'}</td>`);
+                                row.append(`<td>${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}</td>`);
+                                row.append(`<td>${item.short_premium || 'N/A'}</td>`);
+                                row.append(`<td>${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}</td>`);
+                                row.append(`<td>${item.long_premium || 'N/A'}</td>`);
+                                row.append(`<td>${item.max_risk || 'N/A'}</td>`);
+                                row.append(`<td>${item.max_reward || 'N/A'}</td>`);
+                                row.append(`<td>${item.breakeven || 'N/A'}</td>`);
+                                row.append(`<td>${item.entry_price || 'N/A'}</td>`);
+                                row.append(`<td>${item.target_price || 'N/A'}</td>`);
+                                row.append(`<td>${item.stop_price || 'N/A'}</td>`);
+                                row.append(`<td>${item.exit_date_str || 'N/A'}</td>`);
+                                $('#data-table tbody').append(row);
+                            });
+                        } else {
+                            $('#data-table tbody').append('<tr><td colspan="13">No records found.</td></tr>');
+                        }
+                    },
+                    error: function(error) {
+                        console.error("Error refreshing data:", error);
+                        $('.error-message').text('Error loading data.').show();
+                    },
+                    complete: function() {
+                        $('.loading-indicator').removeClass('active');
+                    }
+                });
+            }
+
+            refreshData();
+            setInterval(refreshData, 5000);
+        });
+    </script>
 </body>
 </html>
