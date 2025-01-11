@@ -68,45 +68,72 @@ class VerticalSpread(SpreadDataModel):
             logger.warning(f"Division by zero calculating delta for {self.underlying_ticker}.")
             return 0
 
-    def matchOption(self, expiration_date_gte, expiration_date_lte):
+    def matchOption(self, date, expiration_date_gte, expiration_date_lte):
         """Finds suitable short and long options for a vertical spread."""
+        n_strikes = 0
+        first_leg_contract = None  # First leg (e.g., short contract)
+        first_leg_premium = None
         previous_premium = None
         previous_contract = None
-        n_strikes = 0
+        self.expiration_date = date
+
         try:
-            self.contracts = self.client.get_option_contracts(underlying_ticker=self.underlying_ticker,
-                                                              expiration_date_gte=expiration_date_gte,
-                                                              expiration_date_lte=expiration_date_lte,
-                                                              contract_type=self.contract_type,
-                                                              order=self.order)
+            self.contracts = self.client.get_option_contracts(
+                underlying_ticker=self.underlying_ticker,
+                expiration_date_gte=expiration_date_gte,
+                expiration_date_lte=expiration_date_lte,
+                contract_type=self.contract_type,
+                order=self.order
+            )
+            
             for contract in self.contracts:
                 if self.get_search_op(self.strategy, self.direction)(self.previous_close,
-                                                                    round(float(contract['strike_price']), 1)) and \
-                   n_strikes < self.MAX_STRIKES:
+                                                                    round(float(contract['strike_price']), 2)) and \
+                n_strikes < self.MAX_STRIKES:
                     n_strikes += 1
                     premium = self.client.get_option_previous_close(contract['ticker'])
-                    if self.short_contract is None:
-                        self.short_premium = premium
-                        self.short_contract = contract
-                        logger.info("Found a SHORT with :%s for a premium of %.2f", self.short_contract['ticker'], premium)
+
+                    # Stage the first leg (put or call) based on the contract
+                    if first_leg_contract is None:
+                        first_leg_contract = contract
+                        first_leg_premium = premium
+                        logger.info("Staging FIRST LEG contract: %s for a premium of %.2f", first_leg_contract['ticker'], first_leg_premium)
+                    
+                    # Stage the second leg (put or call) based on the contract
                     else:
-                        if self.get_expiration_date() != contract['expiration_date']:
+                        if first_leg_contract['expiration_date'] != contract['expiration_date']:
                             logger.warning("Exit as we are going vertical")
                             break
                         self.distance_between_Strikes = abs(
-                            float(contract['strike_price']) - float(self.short_contract['strike_price']))
+                            float(contract['strike_price']) - float(first_leg_contract['strike_price']))
                         delta = self.calculateAbsDelta(previous_premium=float(previous_premium), premium=float(premium),
                                                        previous_price=float(previous_contract['strike_price']),
                                                        price=float(contract['strike_price']))
                         logger.debug('delta %s, self.distance_between_Strikes %s', delta, self.distance_between_Strikes)
                         if delta <= self.MIN_DELTA:
-                            spread_premium = abs(float(self.short_premium) - float(premium))
+                            spread_premium = abs(float(first_leg_premium) - float(premium))
                             logger.debug('spread_premium %s', spread_premium)
+
                             if spread_premium >= self.distance_between_Strikes / 3:
-                                self.long_premium = premium
-                                self.long_contract = contract
-                                logger.info("Found a LONG with :%s for a premium of %.2f with short delta of %.2f",
-                                            contract['ticker'], premium, delta)
+                                # Assign based on direction and strategy
+                                if self.strategy == CREDIT:
+                                    self.long_premium = premium
+                                    self.long_contract = contract
+                                    self.short_contract = first_leg_contract
+                                    self.short_premium = first_leg_premium
+                                elif self.strategy == DEBIT:
+                                    self.long_premium = first_leg_premium
+                                    self.long_contract = first_leg_contract
+                                    self.short_contract = contract
+                                    self.short_premium = premium
+                                else:
+                                    # Handle other combinations as needed
+                                    logger.warning("Unsupported strategy and direction combination.")
+
+                                logger.info("Assigned LONG contract: %s for a premium of %.2f",
+                                            self.long_contract['ticker'], self.long_premium)
+
+                                # Calculate and assign other parameters
                                 self.buy_sell = ("Buy", "Sell") if self.strategy == DEBIT else ("Sell", "Buy")
                                 self.max_risk = self.get_max_risk()
                                 self.max_reward = self.get_max_reward()
@@ -115,7 +142,8 @@ class VerticalSpread(SpreadDataModel):
                                 self.target_price = self.get_target_price()
                                 self.stop_price = self.get_stop_price()
                                 self.exit_date_str = self.get_exit_date().strftime('%Y-%m-%d')
-                            break
+                                break
+
                     previous_premium = premium
                     previous_contract = contract
             return self.short_contract is not None and self.long_contract is not None
@@ -125,7 +153,6 @@ class VerticalSpread(SpreadDataModel):
         except Exception as e:
             logger.exception(f"An unexpected error occurred in matchOption: {e}")
             return False
-
     def get_search_op(self, strategy, direction):
         """Returns the search operator (operator.ge or operator.le) based on strategy and direction."""
         return {CREDIT: {BULLISH: operator.ge, BEARISH: operator.le}, DEBIT: {BULLISH: operator.le, BEARISH: operator.ge}}[strategy][direction]
@@ -137,10 +164,10 @@ class VerticalSpread(SpreadDataModel):
         return self.previous_close
     
     def get_expiration_date(self):
-        return  self.short_contract['expiration_date']
+        return  self.expiration_date
 
     def get_exit_date(self):
-        return datetime.datetime.strptime(self.get_expiration_date(), '%Y-%m-%d') - datetime.timedelta(days=21)
+        return self.get_expiration_date() - datetime.timedelta(days=21)
 
     def get_short(self):
         return self.short_contract
@@ -185,14 +212,15 @@ class CreditSpread(VerticalSpread):
 
     def matchOption(self, date=None):
         if date:
-            result = super().matchOption(expiration_date_gte=date, expiration_date_lte=date)
+            result = super().matchOption(date, expiration_date_gte=date, expiration_date_lte=date)
             if result:
                 self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
                 self.description = self.get_plain_English_Result()
             return result
         else:
-            result = super().matchOption(expiration_date_gte=datetime.date.today() + datetime.timedelta(days=self.idealExpiration - 4),
-                                       expiration_date_lte=datetime.date.today() + datetime.timedelta(days=self.idealExpiration + 2))
+            expiration_date = datetime.date.today() 
+            result = super().matchOption(expiration_date, expiration_date, expiration_date_gte=expiration_date + datetime.timedelta(days=self.idealExpiration - 4),
+                                       expiration_date_lte=expiration_date + datetime.timedelta(days=self.idealExpiration + 2))
             if result:
                 date = datetime.date.today() + datetime.timedelta(days=self.idealExpiration)
                 self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
@@ -226,14 +254,15 @@ class DebitSpread(VerticalSpread):
 
     def matchOption(self, date=None):
         if date:
-            result = super().matchOption(expiration_date_gte=date, expiration_date_lte=date)
+            result = super().matchOption(date, expiration_date_gte=date, expiration_date_lte=date)
             if result:
                 self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
                 self.description = self.get_plain_English_Result()
             return result
         else:
-            result = super().matchOption(expiration_date_gte=datetime.date.today() + datetime.timedelta(days=self.idealExpiration - 4),
-                                       expiration_date_lte=datetime.date.today() + datetime.timedelta(days=self.idealExpiration + 2))
+            expiration_date = datetime.date.today() 
+            result = super().matchOption(expiration_date, expiration_date_gte=expiration_date + datetime.timedelta(days=self.idealExpiration - 4),
+                                       expiration_date_lte=expiration_date + datetime.timedelta(days=self.idealExpiration + 2))
             if result:
                 date = datetime.date.today() + datetime.timedelta(days=self.idealExpiration)
                 self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'

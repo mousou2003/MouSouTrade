@@ -17,7 +17,7 @@ from database.src import Database
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 # Set the logging level to WARNING to suppress DEBUG messages
 logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
@@ -41,7 +41,7 @@ def main():
                             if spread.matchOption(date=Option.get_followingThirdFriday()):
                                 Key = {
                                     "ticker": stock['Ticker'],
-                                    "option": json.dumps({"date": spread.get_expiration_date(), "direction": direction,
+                                    "option": json.dumps({"date": spread.get_expiration_date().strftime('%Y-%m-%d'), "direction": direction,
                                                       "strategy": strategy}, default=str)
                                 }
                                 merged_json = {**Key,**{"description": spread.get_plain_English_Result(),
@@ -58,7 +58,7 @@ def main():
                             else:
                                 Key = {
                                     "ticker": stock['Ticker'],
-                                    "option": json.dumps({"date": spread.get_expiration_date(), "direction": direction,
+                                    "option": json.dumps({"date": spread.get_expiration_date().strftime('%Y-%m-%d'), "direction": direction,
                                                       "strategy": strategy}, default=str)
                                 }
                                 merged_json = {**Key, **{"description": f"No match for {stock['Ticker']}"},

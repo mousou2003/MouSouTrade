@@ -8,6 +8,7 @@
    
 import json
 from decimal import Decimal, ROUND_HALF_UP
+import datetime
 
 BEARISH = 'bearish'
 BULLISH = 'bullish'
@@ -53,20 +54,28 @@ class SpreadDataModel():
             exclude = ['client','contracts']
         
         # Collect initial attributes
+        # Inside your class
         attributes = {
-            key: self.round_decimal(value) if isinstance(value, float) else value
+            key: (
+                value.strftime('%Y-%m-%d') if isinstance(value, datetime.date) else
+                self.round_decimal(value) if isinstance(value, float) else 
+                value
+            )
             for key, value in self.__dict__.items()
-            if key not in exclude and not key.startswith('_')  # Exclude private and specified attributes
+            if key not in exclude and not key.startswith('_') and value is not None  # Exclude private and specified attributes
         }
 
-        attributes['long_contract'] = {
-            key: self.round_decimal(value) if isinstance(value, (Decimal,int)) else value
-            for key, value in  self.long_contract.items()
-        }
-        attributes['short_contract'] = {
-            key: self.round_decimal(value) if isinstance(value, (Decimal,int)) else value
-            for key, value in  self.short_contract.items()
-        }
+        if self.long_contract is not None:
+            attributes['long_contract'] = {
+                key: self.round_decimal(value) if isinstance(value, (Decimal,int)) else value
+                for key, value in  self.long_contract.items()
+            }
+
+        if self.short_contract is not None:
+            attributes['short_contract'] = {
+                key: self.round_decimal(value) if isinstance(value, (Decimal,int)) else value
+                for key, value in  self.short_contract.items()
+            }
         return attributes
 
     
