@@ -134,7 +134,6 @@ class VerticalSpread(SpreadDataModel):
                                             self.long_contract['ticker'], self.long_premium)
 
                                 # Calculate and assign other parameters
-                                self.buy_sell = ("Buy", "Sell") if self.strategy == DEBIT else ("Sell", "Buy")
                                 self.max_risk = self.get_max_risk()
                                 self.max_reward = self.get_max_reward()
                                 self.breakeven = self.get_breakeven_price()
@@ -158,7 +157,7 @@ class VerticalSpread(SpreadDataModel):
         return {CREDIT: {BULLISH: operator.ge, BEARISH: operator.le}, DEBIT: {BULLISH: operator.le, BEARISH: operator.ge}}[strategy][direction]
 
     def get_net_premium(self):
-            return self.short_premium - self.long_premium
+            return abs(self.short_premium - self.long_premium)
 
     def get_close_price(self):
         return self.previous_close
@@ -179,8 +178,7 @@ class VerticalSpread(SpreadDataModel):
         return super().to_dict()
 
     def get_plain_English_Result(self):
-        buy_sell = ("Buy", "Sell") if self.strategy == DEBIT else ("Sell", "Buy")
-        return f"{buy_sell[1]} {self.get_short()['ticker']}, {buy_sell[0]} {self.get_Long()['ticker']}; " \
+        return f"Sell {self.get_short()['ticker']}, buy {self.get_Long()['ticker']}; " \
             f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
             f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
             f"stop loss at {self.stop_price:.2f} and before {self.exit_date_str}"
@@ -234,14 +232,16 @@ class CreditSpread(VerticalSpread):
         return self.distance_between_Strikes - self.get_net_premium()
 
     def get_breakeven_price(self):
-        return float(self.short_contract['strike_price']) + self.get_net_premium()
+        net_premium = self.get_net_premium()
+        return float(self.short_contract['strike_price']) + (-net_premium if self.direction == BULLISH else net_premium)
 
     def get_target_price(self):
-        max_reward = self.get_max_reward()
-        return self.previous_close + (max_reward if self.direction == BULLISH else -max_reward)
+        target_reward = (self.get_max_reward()*0.8)
+        return self.previous_close + (target_reward if self.direction == BULLISH else -target_reward)
 
     def get_stop_price(self):
-        return self.previous_close - (2 * self.get_max_reward())
+        target_stop = (self.get_max_risk()/2)
+        return self.previous_close - (target_stop if self.direction == BULLISH else -target_stop)
 
 
 class DebitSpread(VerticalSpread):
@@ -270,18 +270,19 @@ class DebitSpread(VerticalSpread):
             return result
 
     def get_max_reward(self):
-        net_premium = self.get_net_premium()
-        return self.distance_between_Strikes - abs(net_premium)
+        return self.distance_between_Strikes + self.get_net_premium()
 
     def get_max_risk(self):
-        return abs(self.get_net_premium())
+        return self.get_net_premium()
 
     def get_breakeven_price(self):
-        return float(self.long_contract['strike_price']) - self.get_net_premium()
+        net_premium = self.get_net_premium()
+        return float(self.long_contract['strike_price']) + (-net_premium if self.direction == BULLISH else net_premium)
 
     def get_target_price(self):
-        max_reward = self.get_max_reward()
-        return self.previous_close + (max_reward if self.direction == BULLISH else -max_reward)
+        target_reward = (self.get_max_reward()*0.8)
+        return self.previous_close + (target_reward if self.direction == BULLISH else -target_reward)
 
     def get_stop_price(self):
-        return self.previous_close - self.get_max_risk()
+        target_stop = (self.get_max_risk()/2)
+        return self.previous_close - (target_stop if self.direction == BULLISH else -target_stop)

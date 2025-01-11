@@ -37,7 +37,6 @@ class SpreadDataModel():
     client = None
     long_premium = None
     short_premium = None
-    buy_sell = None
     max_risk = None
     max_reward = None
     breakeven = None
@@ -45,7 +44,6 @@ class SpreadDataModel():
     target_price = None
     stop_price = None
     exit_date_str = None
-    distance_between_Strikes = None
     expiration_date = None
     exit_date_str = None
 
