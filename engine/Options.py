@@ -103,7 +103,8 @@ class VerticalSpread(SpreadDataModel):
                     else:
                         if first_leg_contract['expiration_date'] != contract['expiration_date']:
                             logger.warning("Exit as we are going vertical")
-                            break
+                            break 
+                         
                         self.distance_between_Strikes = abs(
                             float(contract['strike_price']) - float(first_leg_contract['strike_price']))
                         delta = self.calculateAbsDelta(previous_premium=float(previous_premium), premium=float(premium),
