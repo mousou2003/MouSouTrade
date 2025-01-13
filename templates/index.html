@@ -49,9 +49,7 @@
     <div id="filter-section">
         <input type="text" class="filter-input" placeholder="Filter Ticker" />
         <input type="text" class="filter-input" placeholder="Filter Option" />
-        <input type="text" class="filter-input" placeholder="Filter Short Contract" />
         <input type="text" class="filter-input" placeholder="Filter Credit" />
-        <input type="text" class="filter-input" placeholder="Filter Long Contract" />
         <input type="text" class="filter-input" placeholder="Filter Debit" />
         <input type="text" class="filter-input" placeholder="Filter Max Risk" />
         <input type="text" class="filter-input" placeholder="Filter Max Reward" />
@@ -61,14 +59,13 @@
         <input type="text" class="filter-input" placeholder="Filter Stop Price" />
         <input type="text" class="filter-input" placeholder="Filter Exit Date" />
     </div>
+    
     <table id="data-table" border="1">
         <thead>
             <tr>
                 <th>Ticker</th>
                 <th>Option</th>
-                <th>Short Contract</th>
                 <th>Credit</th>
-                <th>Long Contract</th>
                 <th>Debit</th>
                 <th>Max Risk</th>
                 <th>Max Reward</th>
@@ -77,7 +74,7 @@
                 <th>Target Price</th>
                 <th>Stop Price</th>
                 <th>Exit Date</th>
-                <th>View Description</th>
+                <th>Details</th>
             </tr>
         </thead>
         <tbody></tbody>
@@ -85,7 +82,9 @@
 
     <div id="overlay"></div>
     <div id="dialog">
-        <h2>Description</h2>
+        <h2>Details</h2>
+        <p id="short-contract-content"></p>
+        <p id="long-contract-content"></p>
         <p id="description-content"></p>
         <button id="close-dialog">Close</button>
     </div>
@@ -110,24 +109,27 @@
             }
 
             function renderTable(data) {
-                $('#data-table tbody').empty(); // Clear the previous data
-                const filteredData = data.filter(item => item.exit_date_str); // Filter out items where exit_date_str is 'N/A'
+                $('#data-table tbody').empty(); // Clear previous data
 
+                const filteredData = data.filter(item => item.exit_date_str);
                 $.each(filteredData, function(index, item) {
                     let row = $('<tr>');
                     row.append(`<td>${item.underlying_ticker || 'N/A'}</td>`);
-                    
-                    // Parse and display the option object instead of as a string
+                    const optionData =item.option; // Get the option string from data attribute
                     let optionContent = {};
+                    let optionHtml = ``;
                     try {
                         optionContent = JSON.parse(item.option || '{}');
+                        for (const key in optionContent) {
+                            optionHtml += `<strong>${key.charAt(0).toUpperCase() + key.slice(1)}:</strong> ${optionContent[key]}<br>`;
+                        }
+
                     } catch (e) {
                         console.error("Error parsing option JSON:", e);
+                        optionHtml = 'N/A'; // Handle parsing errors gracefully
                     }
-                    row.append(`<td>${JSON.stringify(optionContent) || 'N/A'}</td>`); // Display parsed option data
-                    row.append(`<td>${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}</td>`);
+                    row.append(`<td>${optionHtml}</td>`);
                     row.append(`<td>${item.short_premium || 'N/A'}</td>`);
-                    row.append(`<td>${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}</td>`);
                     row.append(`<td>${item.long_premium || 'N/A'}</td>`);
                     row.append(`<td>${item.max_risk || 'N/A'}</td>`);
                     row.append(`<td>${item.max_reward || 'N/A'}</td>`);
@@ -137,56 +139,64 @@
                     row.append(`<td>${item.stop_price || 'N/A'}</td>`);
                     row.append(`<td>${item.exit_date_str || 'N/A'}</td>`);
                     
-                    // Add a button to view the description
-                    row.append(`<td><button class="view-description" data-description="${item.description || 'N/A'}">View</button></td>`);
-                    
+                    // Add a button to view the details
+                    // Add a button to view the details, including short and long contract data
+                    row.append(`<td>
+                            <button 
+                                class="view-description" 
+                                data-description="${item.description || 'N/A'}" 
+                                data-short-contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
+                                data-long-contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}">
+                                Details
+                            </button>
+                        </td>`);
                     $('#data-table tbody').append(row);
                 });
             }
 
-            // Show description dialog
+            // Show details dialog
             $(document).on('click', '.view-description', function() {
                 const description = $(this).data('description');
+                const shortContract = $(this).data('short-contract');
+                const longContract = $(this).data('long-contract');
+
+                // Set the content in the dialog
                 $('#description-content').text(description); // Set the description text
+                $('#short-contract-content').text(shortContract); // Set the short contract text
+                $('#long-contract-content').text(longContract); // Set the long contract text
+
                 $('#overlay').show(); // Show the overlay
                 $('#dialog').show(); // Show the dialog
             });
-
             // Close dialog
             $('#close-dialog').on('click', function() {
                 $('#overlay').hide(); // Hide the overlay
                 $('#dialog').hide(); // Hide the dialog
             });
 
-            // Attach filter input event handlers
             $('.filter-input').on('keyup', function() {
-                const filters = [];
-                $('.filter-input').each(function() {
-                    filters.push($(this).val().toLowerCase()); // Collect filter values
-                });
+                const filters = $('.filter-input').map(function() {
+                    return $(this).val().toLowerCase();
+                }).get();
 
                 const filteredData = previousData.filter(item => {
-                    return (
-                        (item.underlying_ticker || '').toLowerCase().includes(filters[0]) &&
-                        //(JSON.stringify(item.option).toLowerCase()).includes(filters[1]) &&
-                        (item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A').toLowerCase().includes(filters[2]) &&
-                        (item.short_premium || '').toString().toLowerCase().includes(filters[3]) &&
-                        (item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A').toLowerCase().includes(filters[4]) &&
-                        (item.long_premium || '').toString().toLowerCase().includes(filters[5]) &&
-                        (item.max_risk || '').toString().toLowerCase().includes(filters[6]) &&
-                        (item.max_reward || '').toString().toLowerCase().includes(filters[7]) &&
-                        (item.breakeven || '').toString().toLowerCase().includes(filters[8]) &&
-                        (item.entry_price || '').toString().toLowerCase().includes(filters[9]) &&
-                        (item.target_price || '').toString().toLowerCase().includes(filters[10]) &&
-                        (item.stop_price || '').toString().toLowerCase().includes(filters[11]) &&
-                        (item.exit_date_str || '').toLowerCase().includes(filters[12])
-                    );
+                        return (
+                            (item.underlying_ticker || '').toLowerCase().includes(filters[0]) &&
+                            (JSON.stringify(item.option).toLowerCase()).includes(filters[1]) &&
+                            (item.short_premium || '').toString().toLowerCase().includes(filters[2]) &&
+                            (item.long_premium || '').toString().toLowerCase().includes(filters[3]) &&
+                            (item.max_risk || '').toString().toLowerCase().includes(filters[4]) &&
+                            (item.max_reward || '').toString().toLowerCase().includes(filters[5]) &&
+                            (item.breakeven || '').toString().toLowerCase().includes(filters[6]) &&
+                            (item.entry_price || '').toString().toLowerCase().includes(filters[6]) &&
+                            (item.target_price || '').toString().toLowerCase().includes(filters[8]) &&
+                            (item.stop_price || '').toString().toLowerCase().includes(filters[9]) &&
+                            (item.exit_date_str || '').toLowerCase().includes(filters[10])
+                        );
                 });
-
-                renderTable(filteredData); // Render the filtered data
+                renderTable(filteredData);
             });
-
-            refreshData(); // Initial data loading
+        refreshData();
         });
     </script>
 </body>
