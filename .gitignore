@@ -4,4 +4,4 @@ __pycache__/
 *.backup
 config/SecurityKeys.json
 polygon_engine/main.py
-                              
+data

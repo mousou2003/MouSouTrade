@@ -1,0 +1,4 @@
+# filepath: /c:/Users/mouso/Documents/GitHub/MouSouTrade/requirements.txt
+Flask==2.0.1
+Werkzeug==2.0.1
+boto3==1.26.0

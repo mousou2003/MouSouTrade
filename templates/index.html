@@ -49,15 +49,6 @@
     <div id="filter-section">
         <input type="text" class="filter-input" placeholder="Filter Ticker" />
         <input type="text" class="filter-input" placeholder="Filter Option" />
-        <input type="text" class="filter-input" placeholder="Filter Credit" />
-        <input type="text" class="filter-input" placeholder="Filter Debit" />
-        <input type="text" class="filter-input" placeholder="Filter Max Risk" />
-        <input type="text" class="filter-input" placeholder="Filter Max Reward" />
-        <input type="text" class="filter-input" placeholder="Filter Breakeven" />
-        <input type="text" class="filter-input" placeholder="Filter Entry Price" />
-        <input type="text" class="filter-input" placeholder="Filter Target Price" />
-        <input type="text" class="filter-input" placeholder="Filter Stop Price" />
-        <input type="text" class="filter-input" placeholder="Filter Exit Date" />
     </div>
     
     <table id="data-table" border="1">
@@ -65,15 +56,6 @@
             <tr>
                 <th>Ticker</th>
                 <th>Option</th>
-                <th>Credit</th>
-                <th>Debit</th>
-                <th>Max Risk</th>
-                <th>Max Reward</th>
-                <th>Breakeven</th>
-                <th>Entry Price</th>
-                <th>Target Price</th>
-                <th>Stop Price</th>
-                <th>Exit Date</th>
                 <th>Details</th>
             </tr>
         </thead>
@@ -83,9 +65,20 @@
     <div id="overlay"></div>
     <div id="dialog">
         <h2>Details</h2>
-        <p id="short-contract-content"></p>
-        <p id="long-contract-content"></p>
-        <p id="description-content"></p>
+        <dl>
+            <dt>Credit:</dt> <dd id="credit-content"></dd>
+            <dt>Debit:</dt> <dd id="debit-content"></dd>
+            <dt>Max Risk:</dt> <dd id="max-risk-content"></dd>
+            <dt>Max Reward:</dt> <dd id="max-reward-content"></dd>
+            <dt>Breakeven:</dt> <dd id="breakeven-content"></dd>
+            <dt>Entry Price:</dt> <dd id="entry-price-content"></dd>
+            <dt>Target Price:</dt> <dd id="target-price-content"></dd>
+            <dt>Stop Price:</dt> <dd id="stop-price-content"></dd>
+            <dt>Exit Date:</dt> <dd id="exit-date-content"></dd>
+            <dt>Short Contract:</dt> <dd id="short-contract-content"></dd>
+            <dt>Long Contract:</dt> <dd id="long-contract-content"></dd>
+            <dt>Description:</dt> <dd id="description-content"></dd>
+        </dl>
         <button id="close-dialog">Close</button>
     </div>
 
@@ -129,42 +122,46 @@
                         optionHtml = 'N/A'; // Handle parsing errors gracefully
                     }
                     row.append(`<td>${optionHtml}</td>`);
-                    row.append(`<td>${item.short_premium || 'N/A'}</td>`);
-                    row.append(`<td>${item.long_premium || 'N/A'}</td>`);
-                    row.append(`<td>${item.max_risk || 'N/A'}</td>`);
-                    row.append(`<td>${item.max_reward || 'N/A'}</td>`);
-                    row.append(`<td>${item.breakeven || 'N/A'}</td>`);
-                    row.append(`<td>${item.entry_price || 'N/A'}</td>`);
-                    row.append(`<td>${item.target_price || 'N/A'}</td>`);
-                    row.append(`<td>${item.stop_price || 'N/A'}</td>`);
-                    row.append(`<td>${item.exit_date_str || 'N/A'}</td>`);
                     
                     // Add a button to view the details
-                    // Add a button to view the details, including short and long contract data
-                    row.append(`<td>
-                            <button 
-                                class="view-description" 
-                                data-description="${item.description || 'N/A'}" 
-                                data-short-contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
-                                data-long-contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}">
-                                Details
-                            </button>
-                        </td>`);
+                // Correctly set data attributes using individual fields from the item object.
+                    const detailsButton = $(`<td >
+                                        <button class="view-description" 
+                                                data-short_premium="${item.short_premium || 'N/A'}" 
+                                                data-long_premium="${item.long_premium || 'N/A'}" 
+                                                data-max_risk="${item.max_risk || 'N/A'}" 
+                                                data-max_reward="${item.max_reward || 'N/A'}" 
+                                                data-breakeven="${item.breakeven || 'N/A'}" 
+                                                data-entry_price="${item.entry_price || 'N/A'}" 
+                                                data-target_price="${item.target_price || 'N/A'}" 
+                                                data-stop_price="${item.stop_price || 'N/A'}" 
+                                                data-exit_date_str="${item.exit_date_str || 'N/A'}" 
+                                                data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
+                                                data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
+                                                data-description="${item.description || 'N/A'}">Details</button>
+                                    </td>`);
+                    row.append(detailsButton);
                     $('#data-table tbody').append(row);
                 });
             }
 
             // Show details dialog
             $(document).on('click', '.view-description', function() {
-                const description = $(this).data('description');
-                const shortContract = $(this).data('short-contract');
-                const longContract = $(this).data('long-contract');
+                const item = $(this).data('item');
 
                 // Set the content in the dialog
-                $('#description-content').text(description); // Set the description text
-                $('#short-contract-content').text(shortContract); // Set the short contract text
-                $('#long-contract-content').text(longContract); // Set the long contract text
-
+                $('#description-content').text( $(this).data('description')); // Set the description text
+                $('#short-contract-content').text( $(this).data('short_contract')); // Set the short contract text
+                $('#long-contract-content').text($(this).data('long_contract')); // Set the long contract text
+                $('#credit-content').text($(this).data('short_premium') || 'N/A');
+                $('#debit-content').text($(this).data('long_premium') || 'N/A');
+                $('#max-risk-content').text($(this).data('max_risk') || 'N/A');
+                $('#max-reward-content').text($(this).data('max_reward') || 'N/A');
+                $('#breakeven-content').text($(this).data('breakeven') || 'N/A');
+                $('#entry-price-content').text($(this).data('entry_price') || 'N/A');
+                $('#target-price-content').text($(this).data('target_price') || 'N/A');
+                $('#stop-price-content').text($(this).data('stop_price') || 'N/A');
+                $('#exit-date-content').text($(this).data('exit_date_str') || 'N/A');
                 $('#overlay').show(); // Show the overlay
                 $('#dialog').show(); // Show the dialog
             });
@@ -182,16 +179,7 @@
                 const filteredData = previousData.filter(item => {
                         return (
                             (item.underlying_ticker || '').toLowerCase().includes(filters[0]) &&
-                            (JSON.stringify(item.option).toLowerCase()).includes(filters[1]) &&
-                            (item.short_premium || '').toString().toLowerCase().includes(filters[2]) &&
-                            (item.long_premium || '').toString().toLowerCase().includes(filters[3]) &&
-                            (item.max_risk || '').toString().toLowerCase().includes(filters[4]) &&
-                            (item.max_reward || '').toString().toLowerCase().includes(filters[5]) &&
-                            (item.breakeven || '').toString().toLowerCase().includes(filters[6]) &&
-                            (item.entry_price || '').toString().toLowerCase().includes(filters[6]) &&
-                            (item.target_price || '').toString().toLowerCase().includes(filters[8]) &&
-                            (item.stop_price || '').toString().toLowerCase().includes(filters[9]) &&
-                            (item.exit_date_str || '').toLowerCase().includes(filters[10])
+                            (JSON.stringify(item.option).toLowerCase()).includes(filters[1])
                         );
                 });
                 renderTable(filteredData);

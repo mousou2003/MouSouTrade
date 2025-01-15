@@ -63,11 +63,10 @@ class PolygoneClient(MarketDataClient):
         self.wait_for_no_Throttle()
         try:
             response = self.options_client.get_previous_close(ticker)
-            logger.debug(response)
             return response['results'][0]['c']
         except KeyError as err:
             raise MarketDataStrikeNotFoundException(
-                "Failed to get previous close price for Option %s, this strike may not be accessible." % ticker, err)
+                "Failed to get previous close price for Option %s, this strike may not be accessible.\nResponse length frmo client was %d" % (ticker, response['resultsCount']))
 
     async def async_get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte,  contract_type, order):
         self.wait_for_no_Throttle()

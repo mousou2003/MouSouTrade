@@ -5,6 +5,7 @@ import logging
 import calendar
 import datetime
 import operator
+from requests import ReadTimeout
 from colorama import Fore
 
 from requests import ReadTimeout
