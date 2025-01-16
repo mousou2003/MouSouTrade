@@ -1,0 +1,30 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      docker: 19
+    commands:
+      - echo Installing Docker Compose...
+      - curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+      - chmod +x /usr/local/bin/docker-compose
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - $(aws ecr get-login --no-include-email --region $AWS_DEFAULT_REGION)
+  build:
+    commands:
+      - echo Building the Docker images...
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker build -t $WEB_REPOSITORY_URI:latest -f Dockerfile.web .
+      - echo Pushing the Docker images to ECR...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $WEB_REPOSITORY_URI:latest
+      - echo Running Docker Compose...
+      - docker-compose up -d
+  post_build:
+    commands:
+      - echo Docker Compose build completed.
+artifacts:
+  files:
+    - '**/*'

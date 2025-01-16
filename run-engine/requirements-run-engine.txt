@@ -1,0 +1,6 @@
+# filepath: /c:/Users/mouso/Documents/GitHub/MouSouTrade/requirements.txt
+requests
+colorama
+boto3
+botocore
+polygon

@@ -10,7 +10,7 @@ import sys
 app = Flask(__name__)
 
 # Configure DynamoDB connection
-dynamodb_endpoint = os.getenv('DYNAMODB_ENDPOINT', 'http://localhost:8000')
+dynamodb_endpoint = os.getenv('DYNAMODB_ENDPOINT_URL', 'http://localhost:8000')
 dynamodb = boto3.resource(
     'dynamodb',
     endpoint_url=dynamodb_endpoint,

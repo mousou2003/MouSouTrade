@@ -1,10 +1,18 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Resources:
+  # ECR repository to store Docker images for run-engine
   RunEngineRepository:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: run-engine
 
+  # ECR repository to store Docker images for mousoutrade-web
+  WebRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: mousoutrade-web
+
+  # IAM role for CodeBuild with necessary permissions
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -35,8 +43,9 @@ Resources:
                   - s3:GetObject
                   - s3:GetObjectVersion
                   - s3:PutObject
-                Resource: "*"
+                Resource: '*'
 
+  # IAM role for CodePipeline with necessary permissions
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -79,8 +88,9 @@ Resources:
                   - cloudformation:GetTemplate
                   - cloudformation:ValidateTemplate
                   - lambda:InvokeFunction
-                Resource: "*"
+                Resource: '*'
 
+  # IAM role for Lambda execution with necessary permissions
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -102,8 +112,9 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                   - dynamodb:Scan
-                Resource: "*"
+                Resource: '*'
 
+  # CodeBuild project to build the run-engine Docker image
   RunEngineBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -121,8 +132,32 @@ Resources:
         PrivilegedMode: true
         EnvironmentVariables:
           - Name: REPOSITORY_URI
-            Value: !Sub "${RunEngineRepository.RepositoryUri}"
+            Value: !Sub ${RunEngineRepository.RepositoryUri}
+          - Name: WEB_REPOSITORY_URI
+            Value: !Sub ${WebRepository.RepositoryUri}
 
+  # CodeBuild project to run Docker Compose
+  DockerComposeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: DockerComposeBuildProject
+      Source:
+        Type: CODEPIPELINE
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: REPOSITORY_URI
+            Value: !Sub ${RunEngineRepository.RepositoryUri}
+          - Name: WEB_REPOSITORY_URI
+            Value: !Sub ${WebRepository.RepositoryUri}
+
+  # CodePipeline to automate the build and deployment process
   RunEnginePipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
@@ -173,7 +208,20 @@ Resources:
                 StackName: RunEngineStack
                 Capabilities: CAPABILITY_IAM
                 TemplatePath: BuildOutput::packaged-template.yml
+        - Name: DockerCompose
+          Actions:
+            - Name: DockerCompose
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              InputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ProjectName: !Ref DockerComposeBuildProject
 
+  # Lambda function to run the engine
   RunEngineFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -181,7 +229,7 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       PackageType: Image
       Code:
-        ImageUri: !Sub "${RunEngineRepository.RepositoryUri}:latest"
+        ImageUri: !Sub ${RunEngineRepository.RepositoryUri}:latest
       MemorySize: 128
       Timeout: 60
       Environment:
@@ -191,6 +239,27 @@ Resources:
           AWS_DEFAULT_REGION: us-west-2
           DYNAMODB_ENDPOINT: http://dynamodb-local:8000
 
+  # Lambda function to trigger run_engine.py after deployment
+  RunEngineTriggerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: RunEngineTriggerFunction
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Handler: run_engine.lambda_handler
+      Runtime: python3.9
+      Code:
+        S3Bucket: !Ref CodePipelineArtifactBucket
+        S3Key: !Sub ${CodePipelineArtifactKey}/run_engine.zip
+      MemorySize: 128
+      Timeout: 60
+      Environment:
+        Variables:
+          AWS_ACCESS_KEY_ID: DUMMYIDEXAMPLE
+          AWS_SECRET_ACCESS_KEY: DUMMYEXAMPLEKEY
+          AWS_DEFAULT_REGION: us-west-2
+          DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+
+  # CloudWatch Events rule to trigger the Lambda function on a schedule
   RunEngineSchedule:
     Type: AWS::Events::Rule
     Properties:
@@ -201,6 +270,18 @@ Resources:
           Id: RunEngineFunctionTarget
     DependsOn: RunEngineFunction
 
+  # CloudWatch Events rule to trigger the Lambda function after deployment
+  RunEngineTriggerSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: cron(0 3 * * ? *)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt RunEngineTriggerFunction.Arn
+          Id: RunEngineTriggerFunctionTarget
+    DependsOn: RunEngineTriggerFunction
+
+  # Permission for CloudWatch Events to invoke the Lambda function
   PermissionForEventsToInvokeLambda:
     Type: AWS::Lambda::Permission
     Properties:
@@ -210,7 +291,18 @@ Resources:
       SourceArn: !GetAtt RunEngineSchedule.Arn
     DependsOn: RunEngineSchedule
 
+  # Permission for CloudWatch Events to invoke the Lambda function
+  PermissionForEventsToInvokeLambdaTrigger:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RunEngineTriggerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt RunEngineTriggerSchedule.Arn
+    DependsOn: RunEngineTriggerSchedule
+
 Outputs:
+  # Output the URL to the CodePipeline
   PipelineUrl:
-    Value: !Sub "https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${RunEnginePipeline}/view"
-    Description: "URL to the CodePipeline"
+    Value: !Sub https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${RunEnginePipeline}/view
+    Description: URL to the CodePipeline

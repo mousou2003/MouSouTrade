@@ -1,0 +1,318 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  RunEngineRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: run-engine
+  WebRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: mousoutrade-web
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: CodeBuildPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - ecr:GetDownloadUrlForLayer
+            - ecr:BatchGetImage
+            - ecr:BatchCheckLayerAvailability
+            - ecr:PutImage
+            - ecr:InitiateLayerUpload
+            - ecr:UploadLayerPart
+            - ecr:CompleteLayerUpload
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:PutObject
+            Resource: '*'
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: codepipeline.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: CodePipelinePolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - codebuild:BatchGetBuilds
+            - codebuild:StartBuild
+            - codebuild:BatchGetProjects
+            - codebuild:BatchGetBuildBatches
+            - codebuild:StartBuildBatch
+            - codebuild:StopBuildBatch
+            - codebuild:StopBuild
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:PutObject
+            - s3:ListBucket
+            - s3:ListBucketVersions
+            - s3:ListAllMyBuckets
+            - s3:GetBucketLocation
+            - iam:PassRole
+            - cloudformation:DescribeStacks
+            - cloudformation:CreateChangeSet
+            - cloudformation:DescribeChangeSet
+            - cloudformation:ExecuteChangeSet
+            - cloudformation:DeleteChangeSet
+            - cloudformation:DescribeStackResources
+            - cloudformation:DescribeStackResource
+            - cloudformation:GetTemplate
+            - cloudformation:ValidateTemplate
+            - lambda:InvokeFunction
+            Resource: '*'
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: LambdaExecutionPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - dynamodb:Scan
+            Resource: '*'
+  RunEngineBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: RunEngineBuildProject
+      Source:
+        Type: GITHUB
+        Location: https://github.com/mousou2003/mousoutrade.git
+      ServiceRole:
+        Fn::GetAtt:
+        - CodeBuildServiceRole
+        - Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+        EnvironmentVariables:
+        - Name: REPOSITORY_URI
+          Value:
+            Fn::Sub: ${RunEngineRepository.RepositoryUri}
+        - Name: WEB_REPOSITORY_URI
+          Value:
+            Fn::Sub: ${WebRepository.RepositoryUri}
+  DockerComposeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: DockerComposeBuildProject
+      Source:
+        Type: CODEPIPELINE
+      ServiceRole:
+        Fn::GetAtt:
+        - CodeBuildServiceRole
+        - Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+        EnvironmentVariables:
+        - Name: REPOSITORY_URI
+          Value:
+            Fn::Sub: ${RunEngineRepository.RepositoryUri}
+        - Name: WEB_REPOSITORY_URI
+          Value:
+            Fn::Sub: ${WebRepository.RepositoryUri}
+  RunEnginePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: RunEnginePipeline
+      RoleArn:
+        Fn::GetAtt:
+        - CodePipelineServiceRole
+        - Arn
+      Stages:
+      - Name: Source
+        Actions:
+        - Name: Source
+          ActionTypeId:
+            Category: Source
+            Owner: ThirdParty
+            Provider: GitHub
+            Version: 1
+          OutputArtifacts:
+          - Name: SourceOutput
+          Configuration:
+            Owner: mousou2003
+            Repo: mousoutrade
+            Branch: main
+            OAuthToken: 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
+      - Name: Build
+        Actions:
+        - Name: Build
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Provider: CodeBuild
+            Version: 1
+          InputArtifacts:
+          - Name: SourceOutput
+          OutputArtifacts:
+          - Name: BuildOutput
+          Configuration:
+            ProjectName:
+              Ref: RunEngineBuildProject
+      - Name: Deploy
+        Actions:
+        - Name: Deploy
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: 1
+          InputArtifacts:
+          - Name: BuildOutput
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            StackName: RunEngineStack
+            Capabilities: CAPABILITY_IAM
+            TemplatePath: BuildOutput::packaged-template.yml
+      - Name: DockerCompose
+        Actions:
+        - Name: DockerCompose
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Provider: CodeBuild
+            Version: 1
+          InputArtifacts:
+          - Name: BuildOutput
+          Configuration:
+            ProjectName:
+              Ref: DockerComposeBuildProject
+  RunEngineFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: RunEngineFunction
+      Role:
+        Fn::GetAtt:
+        - LambdaExecutionRole
+        - Arn
+      PackageType: Image
+      Code:
+        ImageUri:
+          Fn::Sub: ${RunEngineRepository.RepositoryUri}:latest
+      MemorySize: 128
+      Timeout: 60
+      Environment:
+        Variables:
+          AWS_ACCESS_KEY_ID: DUMMYIDEXAMPLE
+          AWS_SECRET_ACCESS_KEY: DUMMYEXAMPLEKEY
+          AWS_DEFAULT_REGION: us-west-2
+          DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+  RunEngineTriggerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: RunEngineTriggerFunction
+      Role:
+        Fn::GetAtt:
+        - LambdaExecutionRole
+        - Arn
+      Handler: run_engine.lambda_handler
+      Runtime: python3.9
+      Code:
+        S3Bucket:
+          Ref: CodePipelineArtifactBucket
+        S3Key:
+          Fn::Sub: ${CodePipelineArtifactKey}/run_engine.zip
+      MemorySize: 128
+      Timeout: 60
+      Environment:
+        Variables:
+          AWS_ACCESS_KEY_ID: DUMMYIDEXAMPLE
+          AWS_SECRET_ACCESS_KEY: DUMMYEXAMPLEKEY
+          AWS_DEFAULT_REGION: us-west-2
+          DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+  RunEngineSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: cron(0 2 * * ? *)
+      State: ENABLED
+      Targets:
+      - Arn:
+          Fn::GetAtt:
+          - RunEngineFunction
+          - Arn
+        Id: RunEngineFunctionTarget
+    DependsOn: RunEngineFunction
+  RunEngineTriggerSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: cron(0 3 * * ? *)
+      State: ENABLED
+      Targets:
+      - Arn:
+          Fn::GetAtt:
+          - RunEngineTriggerFunction
+          - Arn
+        Id: RunEngineTriggerFunctionTarget
+    DependsOn: RunEngineTriggerFunction
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: RunEngineFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+        - RunEngineSchedule
+        - Arn
+    DependsOn: RunEngineSchedule
+  PermissionForEventsToInvokeLambdaTrigger:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: RunEngineTriggerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+        - RunEngineTriggerSchedule
+        - Arn
+    DependsOn: RunEngineTriggerSchedule
+Outputs:
+  PipelineUrl:
+    Value:
+      Fn::Sub: https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${RunEnginePipeline}/view
+    Description: URL to the CodePipeline

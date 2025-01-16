@@ -8,14 +8,11 @@ import operator
 from requests import ReadTimeout
 from colorama import Fore
 
-from requests import ReadTimeout
-
 from PolygoneClients.PolygoneClient import PolygoneClient
 from MarketDataClients.MarketDataClient import *
 from engine.Options import *
 from engine.data_model import *
 from database.src import Database
-
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -27,7 +24,7 @@ logging.getLogger('asyncio').setLevel(logging.WARNING)
 
 def main():
     try:
-        db =  Database.Database("Beta")
+        db = Database.Database("Beta")
         with open(sys.argv[1]) as file:
             stocks = json.load(file)
             for stock in stocks:
@@ -45,7 +42,7 @@ def main():
                                     "option": json.dumps({"date": spread.get_expiration_date().strftime('%Y-%m-%d'), "direction": direction,
                                                       "strategy": strategy}, default=str)
                                 }
-                                merged_json = {**Key,**{"description": spread.get_plain_English_Result(),
+                                merged_json = {**Key, **{"description": spread.get_plain_English_Result(),
                                                          **spread.to_dict()}}
                                 print(Fore.GREEN)
                                 logger.info(merged_json)
@@ -66,18 +63,18 @@ def main():
                                                **spread.to_dict()}
                                 logger.info(merged_json)
                             
-                            db.put_item( Item = merged_json)
-                            response = db.get_item( Key = Key)
+                            db.put_item(Item=merged_json)
+                            response = db.get_item(Key=Key)
                             if 'Item' in response:
-                                logger.info("info  stored for %s" % Key)
+                                logger.info("info stored for %s" % Key)
                                 logger.debug("saved in table: %s" % response)
                             else:
                                 raise MarketDataStrikeNotFoundException()
                                     
                 except MarketDataException as e:
-                    logger.warning("Fail to get options %s\n%s" % (Key,e))
+                    logger.warning("Fail to get options %s\n%s" % (Key, e))
                 except ReadTimeout as e:
-                    logger.warning("Readtimeout for %s\n%s" % (Key,e))
+                    logger.warning("Readtimeout for %s\n%s" % (Key, e))
                 except Exception as e:
                     logger.warning(f"Error processing stock {stock.get('Ticker', 'N/A')}: {e}")
                     traceback.print_exc()
@@ -90,6 +87,12 @@ def main():
         logger.error(f"An unexpected error occurred: {e}")
         traceback.print_exc()
 
+def lambda_handler(event, context):
+    input_file = '/tmp/input.json'
+    with open(input_file, 'w') as file:
+        json.dump(event, file)
+    sys.argv = [sys.argv[0], input_file]
+    main()
 
 if __name__ == "__main__":
     main()

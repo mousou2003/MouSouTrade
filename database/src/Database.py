@@ -6,14 +6,15 @@ import boto3.dynamodb
 from botocore.exceptions import ClientError
 
 import json
+import os
 # test with command lines  aws dynamodb list-tables --profile 851655311094_AdministratorAccess --endpoint-url 'localhost:8000'
 logger = logging.getLogger(__name__)
 class Database():
     def __init__(self,table_name):
         logger.info("Init Database")
-        dynamodb = boto3.Session().resource(
-        'dynamodb', endpoint_url='http://localhost:8000')
-        logger.info("dynamo client created")
+        endpoint_url = os.getenv('DYNAMODB_ENDPOINT_URL', 'http://localhost:8000')
+        dynamodb = boto3.Session().resource('dynamodb', endpoint_url=endpoint_url)
+        logger.info("dynamo client created at endpoint %s" % endpoint_url)
 
         try:
             self.table = dynamodb.Table(table_name)
