@@ -53,6 +53,7 @@ class VerticalSpread(SpreadDataModel):
         self.order = self.get_order(strategy, direction)
         self.direction = direction
         self.strategy = strategy
+        self.secondLegDepth = 0
 
     def get_order(self, strategy, direction):
         """Returns the order (ASC/DESC) based on strategy and direction."""
@@ -70,7 +71,7 @@ class VerticalSpread(SpreadDataModel):
 
     def matchOption(self, date, expiration_date_gte, expiration_date_lte):
         """Finds suitable short and long options for a vertical spread."""
-        n_strikes = 0
+        self.secondLegDepth = 0
         first_leg_contract = None  # First leg (e.g., short contract)
         first_leg_premium = None
         previous_premium = None
@@ -89,8 +90,8 @@ class VerticalSpread(SpreadDataModel):
             for contract in self.contracts:
                 if self.get_search_op(self.strategy, self.direction)(self.previous_close,
                                                                     round(float(contract['strike_price']), 2)) and \
-                n_strikes < self.MAX_STRIKES:
-                    n_strikes += 1
+                self.secondLegDepth < self.MAX_STRIKES:
+                    self.secondLegDepth += 1
                     premium = self.client.get_option_previous_close(contract['ticker'])
 
                     # Stage the first leg (put or call) based on the contract

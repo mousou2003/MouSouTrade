@@ -1,4 +1,3 @@
-
 #Conclusion on this class:
 #Next time I will use Libraries like Pydantic and Marshmallow provide powerful mechanisms for serialization and validation, 
 #making it easier to handle complex data types, such as fixed-point decimals, while ensuring data integrity. 
@@ -46,6 +45,7 @@ class SpreadDataModel():
     exit_date_str = None
     expiration_date = None
     exit_date_str = None
+    secondLegDepth = None
 
     def to_dict(self, exclude=None):
         if exclude is None:
