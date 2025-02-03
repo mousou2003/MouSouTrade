@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  website:
+    image: mousou2011/mousoutrade-website:latest
+    container_name: web
+    ports:
+      - '5000:5000'
+    environment:
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+    depends_on:
+      - dynamodb-local
+
+  dynamodb-local:
+    image: mousou2011/amazon/dynamodb-local:latest
+    container_name: dynamodb-local
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./docker/dynamodb:/home/dynamodblocal/data
+    working_dir: /home/dynamodblocal
+    command: '-jar DynamoDBLocal.jar -sharedDb -dbPath ./data'

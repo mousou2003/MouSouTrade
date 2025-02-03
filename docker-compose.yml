@@ -36,6 +36,7 @@ services:
       - ./data:/data
 
   run-engine:
+    user: 1000:1000
     build:
       context: ./
       dockerfile: ./run-engine/run-engine.Dockerfile
@@ -50,6 +51,7 @@ services:
 
 
   website:
+    user: mousou2011
     build:
       context: ./
       dockerfile: ./website/website.Dockerfile
