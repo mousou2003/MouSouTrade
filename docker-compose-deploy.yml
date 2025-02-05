@@ -1,4 +1,10 @@
-version: '3.8'
+x-common-env: &common-env
+  AWS_PROFILE: local-dev
+  AWS_ACCESS_KEY_ID: DUMMYIDEXAMPLE
+  AWS_SECRET_ACCESS_KEY: DUMMYEXAMPLEKEY
+  AWS_DEFAULT_REGION: us-west-2
+  DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+  MOUSOUTRADE_CONFIG_FILE: /app/config/Fidelity.json
 
 services:
   website:
@@ -7,12 +13,22 @@ services:
     ports:
       - '5000:5000'
     environment:
-      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      <<: *common-env
+
+    depends_on:
+      - dynamodb-local
+
+  engine:
+    image: mousou2011/mousoutrade-engine:latest
+    container_name: engine
+    environment:
+      <<: *common-env
+
     depends_on:
       - dynamodb-local
 
   dynamodb-local:
-    image: mousou2011/amazon/dynamodb-local:latest
+    image: amazon/dynamodb-local:latest
     container_name: dynamodb-local
     ports:
       - '8000:8000'
@@ -20,3 +36,5 @@ services:
       - ./docker/dynamodb:/home/dynamodblocal/data
     working_dir: /home/dynamodblocal
     command: '-jar DynamoDBLocal.jar -sharedDb -dbPath ./data'
+    environment:
+      <<: *common-env

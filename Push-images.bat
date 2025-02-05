@@ -10,14 +10,10 @@ docker tag "%IMAGE_NAME%:%IMAGE_TAG%" "%DOCKERHUB_USERNAME%/%IMAGE_NAME%:%IMAGE_
 echo Pushing image...
 docker push "%DOCKERHUB_USERNAME%/%IMAGE_NAME%:%IMAGE_TAG%"
 
-REM Add the dynamodb-local image
-set "DYNAMODB_IMAGE_NAME=amazon/dynamodb-local"
-set "DYNAMODB_IMAGE_TAG=latest"
+set "IMAGE_NAME=mousoutrade-engine"
 
-echo Tagging DynamoDB Local image for Docker Hub...
-docker tag "%DYNAMODB_IMAGE_NAME%:%DYNAMODB_IMAGE_TAG%" "%DOCKERHUB_USERNAME%/%DYNAMODB_IMAGE_NAME%:%DYNAMODB_IMAGE_TAG%"
+echo Tagging image for Docker Hub...
+docker tag "%IMAGE_NAME%:%IMAGE_TAG%" "%DOCKERHUB_USERNAME%/%IMAGE_NAME%:%IMAGE_TAG%"
 
-echo Pushing DynamoDB Local image...
-docker push "%DOCKERHUB_USERNAME%/%DYNAMODB_IMAGE_NAME%:%DYNAMODB_IMAGE_TAG%"
-
-echo Done.
+echo Pushing image...
+docker push "%DOCKERHUB_USERNAME%/%IMAGE_NAME%:%IMAGE_TAG%"

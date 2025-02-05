@@ -12,6 +12,14 @@ logger = logging.getLogger(__name__)
 class Database():
     def __init__(self,table_name):
         logger.info("Init Database")
+        
+        # Check for required environment variables
+        required_env_vars = ['DYNAMODB_ENDPOINT_URL']
+        missing_env_vars = [var for var in required_env_vars if not os.getenv(var)]
+
+        if missing_env_vars:
+            raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_env_vars)}")
+
         endpoint_url = os.getenv('DYNAMODB_ENDPOINT_URL', 'http://localhost:8000')
         dynamodb = boto3.Session().resource('dynamodb', endpoint_url=endpoint_url)
         logger.info("dynamo client created at endpoint %s" % endpoint_url)

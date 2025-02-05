@@ -2,12 +2,23 @@ from flask import Flask, render_template, jsonify
 import boto3
 from botocore.exceptions import ClientError
 from decimal import Decimal
-import json
 import os
 import signal
 import sys
 
 app = Flask(__name__)
+
+# Check for required environment variables
+required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 'DYNAMODB_ENDPOINT_URL']
+missing_env_vars = [var for var in required_env_vars if not os.getenv(var)]
+
+if missing_env_vars:
+    print(f"Error: Missing required environment variables: {', '.join(missing_env_vars)}")
+    sys.exit(1)
+
+# Print the values of the environment variables
+for var in required_env_vars:
+    print(f"{var}: {os.getenv(var)}")
 
 # Configure DynamoDB connection
 dynamodb_endpoint = os.getenv('DYNAMODB_ENDPOINT_URL', 'http://localhost:8000')
@@ -38,6 +49,9 @@ def get_all_items():
         return response['Items']
     except ClientError as e:
         print(f"Unable to scan the DynamoDB table: {e.response['Error']['Message']}")
+        return []
+    except ConnectionRefusedError as e:
+        print(f"Connection refused: {e}")
         return []
 
 @app.route('/')

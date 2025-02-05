@@ -1,17 +1,39 @@
-version: '3.8'
-
 x-common-env: &common-env
   AWS_PROFILE: local-dev
   AWS_ACCESS_KEY_ID: DUMMYIDEXAMPLE
   AWS_SECRET_ACCESS_KEY: DUMMYEXAMPLEKEY
   AWS_DEFAULT_REGION: us-west-2
-  DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+  DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+  MOUSOUTRADE_CONFIG_FILE: /app/config/Fidelity.json
 
 x-common-dependencies: &common-dependencies
   - dynamodb-local
   - s3-local
 
 services:
+  engine:
+    build:
+      context: ./
+      dockerfile: ./run-engine/run-engine.Dockerfile
+    container_name: engine
+    environment:
+      <<: *common-env
+    depends_on:
+      - dynamodb-local
+    stdin_open: true  # Keep the container open for interactive mode
+    tty: true  # Allocate a pseudo-TTY
+  website:
+    build:
+      context: ./
+      dockerfile: ./website/website.Dockerfile
+    container_name: web
+    ports:
+      - '5000:5000'
+    environment:
+      <<: *common-env
+    depends_on:
+      - dynamodb-local
+
   dynamodb-local:
     image: amazon/dynamodb-local:latest
     container_name: dynamodb-local
@@ -21,6 +43,8 @@ services:
       - ./docker/dynamodb:/home/dynamodblocal/data
     working_dir: /home/dynamodblocal
     command: '-jar DynamoDBLocal.jar -sharedDb -dbPath ./data'
+    environment:
+      <<: *common-env
 
   s3-local:
     image: minio/minio
@@ -31,38 +55,9 @@ services:
     environment:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
+      <<: *common-env
     command: server /data --console-address ":9001"
     volumes:
       - ./data:/data
 
-  run-engine:
-    user: 1000:1000
-    build:
-      context: ./
-      dockerfile: ./run-engine/run-engine.Dockerfile
-    container_name: run-engine
-    environment:
-      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
-    depends_on:
-      - dynamodb-local
-      - s3-local
-    volumes:
-      - ~/.aws:/root/.aws:ro  # Mount the AWS credentials and config files
-
-
-  website:
-    user: mousou2011
-    build:
-      context: ./
-      dockerfile: ./website/website.Dockerfile
-    container_name: web
-    ports:
-      - '5000:5000'
-    environment:
-      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
-    depends_on:
-      - dynamodb-local
-      - s3-local
-    volumes:
-      - ~/.aws:/root/.aws:ro  # Mount the AWS credentials and config files
 
