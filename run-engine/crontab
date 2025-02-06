@@ -1,2 +1,0 @@
-# Run the script every 24 hours
-0 0 * * * python /app/run_engine.py $MOUSOUTRADE_CONFIG_FILE >> /var/log/cron.log 2>&1

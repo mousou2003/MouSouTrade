@@ -5,7 +5,8 @@ x-common-env: &common-env
   AWS_DEFAULT_REGION: us-west-2
   DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
   MOUSOUTRADE_CONFIG_FILE: /app/config/Fidelity.json
-
+  MOUSOUTRADE_STAGE: Beta
+  
 services:
   website:
     image: mousou2011/mousoutrade-website:latest

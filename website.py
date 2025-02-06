@@ -9,7 +9,8 @@ import sys
 app = Flask(__name__)
 
 # Check for required environment variables
-required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 'DYNAMODB_ENDPOINT_URL']
+required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 
+                     'DYNAMODB_ENDPOINT_URL', 'MOUSOUTRADE_STAGE']
 missing_env_vars = [var for var in required_env_vars if not os.getenv(var)]
 
 if missing_env_vars:
@@ -29,7 +30,7 @@ dynamodb = boto3.resource(
     aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
     region_name=os.getenv('AWS_DEFAULT_REGION')
 )
-table_name = 'Beta'
+table_name = os.getenv('MOUSOUTRADE_STAGE', 'mousoutrade-dev')
 table = dynamodb.Table(table_name)
 
 def convert_decimals(obj):

@@ -2,9 +2,6 @@ import json
 import sys
 import traceback
 import logging
-import calendar
-import datetime
-import operator
 import os  # Add import for os module
 from requests import ReadTimeout
 from colorama import Fore
@@ -47,8 +44,10 @@ def main():
         config_file = sys.argv[1] if len(sys.argv) > 1 else os.getenv('MOUSOUTRADE_CONFIG_FILE')
         if not config_file:
             raise ConfigurationFileException("No configuration file provided and MOUSOUTRADE_CONFIG_FILE environment variable is not set.")
-
-        db = Database.Database("Beta")
+        
+        table_name = os.getenv('MOUSOUTRADE_STAGE', 'mousoutrade-dev')
+        
+        db = Database.Database(table_name)
         with open(config_file) as file:
             stocks = json.load(file)
             for stock in stocks:

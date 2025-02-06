@@ -5,6 +5,7 @@ x-common-env: &common-env
   AWS_DEFAULT_REGION: us-west-2
   DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
   MOUSOUTRADE_CONFIG_FILE: /app/config/Fidelity.json
+  MOUSOUTRADE_STAGE: Beta
 
 x-common-dependencies: &common-dependencies
   - dynamodb-local
@@ -14,7 +15,7 @@ services:
   engine:
     build:
       context: ./
-      dockerfile: ./run-engine/run-engine.Dockerfile
+      dockerfile: ./run_engine/run_engine.Dockerfile
     container_name: engine
     environment:
       <<: *common-env
