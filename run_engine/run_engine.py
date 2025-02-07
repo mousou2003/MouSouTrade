@@ -38,7 +38,7 @@ def main():
 
         # Print the values of the environment variables
         for var in required_env_vars:
-            print(f"{var}: {os.getenv(var)}")
+            logger.debug(f"{var}: {os.getenv(var)}")
 
         # Determine the configuration file to use
         config_file = sys.argv[1] if len(sys.argv) > 1 else os.getenv('MOUSOUTRADE_CONFIG_FILE')
@@ -50,8 +50,11 @@ def main():
         db = Database.Database(table_name)
         with open(config_file) as file:
             stocks = json.load(file)
+            numberofstocks = len(stocks)
             for stock in stocks:
                 try:
+                    stocknumber = stocks.index(stock) + 1
+                    logger.info(f"Processing stock {stocknumber}/{stocknumber} :{stock.get('Ticker', 'N/A')}")
                     for direction in [BULLISH, BEARISH]:  # Iterate through both bullish and bearish directions
                         for strategy in [CREDIT, DEBIT]:  # Iterate through both credit and debit strategies
 
@@ -103,7 +106,8 @@ def main():
                 except Exception as e:
                     logger.warning(f"Error processing stock {stock.get('Ticker', 'N/A')}: {e}")
                     traceback.print_exc()
-
+            logger.info(f"Processed {numberofstocks} stocks")
+            return 0
     except FileNotFoundError:
         logger.error("Input file not found.")
         return 1
@@ -123,13 +127,6 @@ def main():
         logger.error(f"An unexpected error occurred: {e}")
         traceback.print_exc()
         return 1
-
-def lambda_handler(event, context):
-    input_file = '/tmp/input.json'
-    with open(input_file, 'w') as file:
-        json.dump(event, file)
-    sys.argv = [sys.argv[0], input_file]
-    main()
 
 if __name__ == "__main__":
     sys.exit(main())
