@@ -54,7 +54,7 @@ def main():
             for stock in stocks:
                 try:
                     stocknumber = stocks.index(stock) + 1
-                    logger.info(f"Processing stock {stocknumber}/{stocknumber} :{stock.get('Ticker', 'N/A')}")
+                    logger.info(f"Processing stock {stocknumber}/{numberofstocks} :{stock.get('Ticker', 'N/A')}")
                     for direction in [BULLISH, BEARISH]:  # Iterate through both bullish and bearish directions
                         for strategy in [CREDIT, DEBIT]:  # Iterate through both credit and debit strategies
 
