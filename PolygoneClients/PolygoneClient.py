@@ -43,7 +43,7 @@ class PolygoneClient(MarketDataClient):
                 raise KeyError('results')
             return response['results'][0]['c']
         except KeyError as err:
-            raise MarketDataException(f"No results found for ticker {ticker}",err)
+            raise MarketDataException(f"No results found for ticker {ticker}", err)
         
     def get_daily_open_close(self, ticker, date):
         self.wait_for_no_Throttle()
