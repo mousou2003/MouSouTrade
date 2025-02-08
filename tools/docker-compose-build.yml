@@ -4,7 +4,8 @@ x-common-env: &common-env
   AWS_SECRET_ACCESS_KEY: DUMMYEXAMPLEKEY
   AWS_DEFAULT_REGION: us-west-2
   DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
-  MOUSOUTRADE_CONFIG_FILE: /app/config/Fidelity.json
+  MOUSOUTRADE_CONFIG_FILE: /app/config/Portfolio_US_Positions_Jan-21-2025.json
+  MOUSOUTRADE_STAGE: Alpha
 
 x-common-dependencies: &common-dependencies
   - dynamodb-local
@@ -13,8 +14,9 @@ x-common-dependencies: &common-dependencies
 services:
   engine:
     build:
-      context: ./
-      dockerfile: ./run-engine/run-engine.Dockerfile
+      context: ../
+      dockerfile: ./run_engine/run_engine.Dockerfile
+    image: mousoutrade-engine
     container_name: engine
     environment:
       <<: *common-env
@@ -24,8 +26,9 @@ services:
     tty: true  # Allocate a pseudo-TTY
   website:
     build:
-      context: ./
+      context: ../
       dockerfile: ./website/website.Dockerfile
+    image: mousoutrade-website
     container_name: web
     ports:
       - '5000:5000'

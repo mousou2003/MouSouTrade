@@ -3,6 +3,7 @@
         "./engine",
         "./PolygoneClients",
         "./MarketDataClients",
-        "./database"
-    ]
+        "./database/src"  // Update this path to match the import in run_engine.py
+    ],
+    "python.envFile": "${workspaceFolder}/.env",
 }

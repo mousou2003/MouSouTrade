@@ -54,16 +54,16 @@ class MarketDataClient(object):
             MarketDataClient._my_secret = clients["Clients"][MarketDataClient.client_name][stage]["Secret"]
 
 class MarketDataException(Exception):
-    __innerException = None
-    def __init__(self, message):
+    def __init__(self, message, inner_exception=None):
         super().__init__(message)
+        self.inner_exception = inner_exception
 
-class MarketDataStrikeNotFoundException(Exception):
-    __innerException = None
-    def __init__(self, message):
-        super().__init__(message)
+class MarketDataStrikeNotFoundException(MarketDataException):
+    def __init__(self, message, inner_exception=None):
+        super().__init__(message, inner_exception)
+        self.inner_exception = inner_exception
 
-class MarketDataStorageFailedException(Exception):
-    __innerException = None
-    def __init__(self, message,):
-        super().__init__(message)
+class MarketDataStorageFailedException(MarketDataException):
+    def __init__(self, message, inner_exception=None):
+        super().__init__(message, inner_exception)
+        self.inner_exception = inner_exception
