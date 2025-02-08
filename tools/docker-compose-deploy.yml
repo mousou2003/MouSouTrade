@@ -4,7 +4,7 @@ x-common-env: &common-env
   AWS_SECRET_ACCESS_KEY: DUMMYEXAMPLEKEY
   AWS_DEFAULT_REGION: us-west-2
   DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
-  MOUSOUTRADE_CONFIG_FILE: /app/config/Fidelity.json
+  MOUSOUTRADE_CONFIG_FILE: /app/config/Portfolio_US_Positions_Jan-21-2025.json
   MOUSOUTRADE_STAGE: Beta
   
 services:
