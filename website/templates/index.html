@@ -49,6 +49,9 @@
     <div id="filter-section">
         <input type="text" class="filter-input" placeholder="Filter Ticker" />
         <input type="text" class="filter-input" placeholder="Filter Option" />
+        <label>
+            <input type="checkbox" id="filter-exit-date" checked /> Show only records with a spread strategy
+        </label>
     </div>
     
     <table id="data-table" border="1">
@@ -104,9 +107,11 @@
             function renderTable(data) {
                 $('#data-table tbody').empty(); // Clear previous data
 
-                const filteredData = data.filter(item => item.exit_date_str);
+                const filterExitDate = $('#filter-exit-date').is(':checked');
+                const filteredData = filterExitDate ? data.filter(item => item.exit_date_str) : data;
+
                 $.each(filteredData, function(index, item) {
-                    let row = $('<tr>');
+                    let row = $('<tr>'); // Variable 'row' is used here
                     row.append(`<td>${item.underlying_ticker || 'N/A'}</td>`);
                     const optionData =item.option; // Get the option string from data attribute
                     let optionContent = {};
@@ -124,7 +129,7 @@
                     row.append(`<td>${optionHtml}</td>`);
                     
                     // Add a button to view the details
-                // Correctly set data attributes using individual fields from the item object.
+                    // Correctly set data attributes using individual fields from the item object.
                     const detailsButton = $(`<td >
                                         <button class="view-description" 
                                                 data-short_premium="${item.short_premium || 'N/A'}" 
@@ -141,7 +146,7 @@
                                                 data-description="${item.description || 'N/A'}">Details</button>
                                     </td>`);
                     row.append(detailsButton);
-                    $('#data-table tbody').append(row);
+                    $('#data-table tbody').append(row); // 'row' is appended to the table here
                 });
             }
 
@@ -184,6 +189,11 @@
                 });
                 renderTable(filteredData);
             });
+
+            $('#filter-exit-date').on('change', function() {
+                renderTable(previousData); // Re-render the table when the checkbox state changes
+            });
+
         refreshData();
         });
     </script>

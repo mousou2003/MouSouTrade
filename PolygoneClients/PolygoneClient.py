@@ -38,10 +38,12 @@ class PolygoneClient(MarketDataClient):
     def get_previous_stock_close(self, ticker):
         self.wait_for_no_Throttle()
         try:
-            return self.stocks_client.get_previous_close(ticker)['results'][0]['c']
-        except Exception as err:
-            raise MarketDataException(
-                "Failed to get previous close price for stock %s may not be accessible." % ticker, err)
+            response = self.stocks_client.get_previous_close(ticker)
+            if 'results' not in response or not response['results']:
+                raise KeyError('results')
+            return response['results'][0]['c']
+        except KeyError as err:
+            raise MarketDataException(f"No results found for ticker {ticker}",err)
         
     def get_daily_open_close(self, ticker, date):
         self.wait_for_no_Throttle()

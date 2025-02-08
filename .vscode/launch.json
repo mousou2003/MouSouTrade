@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["config\\Fidelity.json"]
+            "args": ["config\\Portfolio_US_Positions_Jan-21-2025.json"]
         }
     ]
 }
