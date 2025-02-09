@@ -1,7 +1,7 @@
 from marketdata_clients.PolygonStocksClient import PolygonStocksClient
-from marketdata_clients.PolygonOptionsClient import PolygonOptionsClient
 from marketdata_clients.MarketDataClient import MarketDataStrikeNotFoundException, MarketDataException
 from engine.data_model import *
+from engine.Options import Options
 import logging
 import datetime
 import operator
@@ -49,7 +49,7 @@ class VerticalSpread(SpreadDataModel):
         self.expiration_date = date
 
         try:
-            self.contracts = PolygonOptionsClient().get_option_contracts(
+            self.contracts = Options().get_option_contracts(
                 underlying_ticker=self.underlying_ticker,
                 expiration_date_gte=expiration_date_gte,
                 expiration_date_lte=expiration_date_lte,
@@ -62,7 +62,7 @@ class VerticalSpread(SpreadDataModel):
                                                                     round(float(contract['strike_price']), 2)) and \
                 self.second_leg_depth < self.MAX_STRIKES:
                     self.second_leg_depth += 1
-                    premium = PolygonOptionsClient().get_option_previous_close(contract['ticker'])
+                    premium = Options().get_option_previous_close(contract['ticker'])
 
                     # Stage the first leg (put or call) based on the contract
                     if first_leg_contract is None:
@@ -148,6 +148,7 @@ class VerticalSpread(SpreadDataModel):
         return self.long_contract
 
     def to_dict(self):
+        """Override to_dict to ensure only serializable data from the parent SpreadDataModel is included."""
         return super().to_dict()
 
     def get_plain_english_result(self):

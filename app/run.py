@@ -54,7 +54,7 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
                 spread_class = DebitSpread if strategy == DEBIT else CreditSpread
                 spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy)
 
-                target_expiration_date = Option.get_following_third_friday()
+                target_expiration_date = Options.get_following_third_friday()
                 key = {
                     "ticker": ticker,
                     "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), "direction": direction, "strategy": strategy}, default=str)

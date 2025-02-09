@@ -52,7 +52,7 @@ class SpreadDataModel:
         attributes = {
             key: (
                 value.strftime('%Y-%m-%d') if isinstance(value, datetime.date) else
-                self.round_decimal(value) if isinstance(value, float) else 
+                self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else 
                 value
             )
             for key, value in self.__dict__.items()
@@ -61,19 +61,19 @@ class SpreadDataModel:
 
         if self.long_contract is not None:
             attributes['long_contract'] = {
-                key: self.round_decimal(value) if isinstance(value, (Decimal, int)) else value
+                key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
                 for key, value in self.long_contract.items()
             }
 
         if self.short_contract is not None:
             attributes['short_contract'] = {
-                key: self.round_decimal(value) if isinstance(value, (Decimal, int)) else value
+                key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
                 for key, value in self.short_contract.items()
             }
         return attributes
 
     def round_decimal(self, value):
-        """Converts float to Decimal and rounds it to 5 decimal places, then converts to string."""
+        """Converts to Decimal and rounds it, then converts to string."""
         return str(Decimal(value).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP))
     
     def to_json(self, exclude=None):
