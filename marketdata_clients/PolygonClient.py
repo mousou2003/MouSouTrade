@@ -1,9 +1,8 @@
 import polygon
-from polygon import ReferenceClient
 import time
 import logging
 import asyncio
-from marketdata_clients.MarketDataClient import MarketDataStrikeNotFoundException, MarketDataException, MarketDataClient
+from marketdata_clients.MarketDataClient import *
 
 logger = logging.getLogger(__name__)
 

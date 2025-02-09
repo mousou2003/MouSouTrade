@@ -10,7 +10,7 @@ docker tag "%IMAGE_NAME%:%IMAGE_TAG%" "%DOCKERHUB_USERNAME%/%IMAGE_NAME%:%IMAGE_
 echo Pushing image...
 docker push "%DOCKERHUB_USERNAME%/%IMAGE_NAME%:%IMAGE_TAG%"
 
-set "IMAGE_NAME=mousoutrade-engine"
+set "IMAGE_NAME=mousoutrade-app"
 
 echo Tagging image for Docker Hub...
 docker tag "%IMAGE_NAME%:%IMAGE_TAG%" "%DOCKERHUB_USERNAME%/%IMAGE_NAME%:%IMAGE_TAG%"

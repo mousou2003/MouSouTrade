@@ -20,30 +20,29 @@ SPREAD_TYPE = {
 }
 
 class SpreadDataModel:
-    Datetime = None
-    Strategy = None
-    UnderlyingTicker = None
-    PreviousClose = None
-    ContractType = None
-    Direction = None
-    DistanceBetweenStrikes = None
-    ShortContract = None
-    LongContract = None
-    Contracts = None
-    DailyBars = None
-    Client = None
-    LongPremium = None
-    ShortPremium = None
-    MaxRisk = None
-    MaxReward = None
-    Breakeven = None
-    EntryPrice = None
-    TargetPrice = None
-    StopPrice = None
-    ExitDateStr = None
-    ExpirationDate = None
-    ExitDateStr = None
-    SecondLegDepth = None
+    datetime = None
+    strategy = None
+    underlying_ticker = None
+    previous_close = None
+    contract_type = None
+    direction = None
+    distance_between_strikes = None
+    short_contract = None
+    long_contract = None
+    contracts = None
+    daily_bars = None
+    client = None
+    long_premium = None
+    short_premium = None
+    max_risk = None
+    max_reward = None
+    breakeven = None
+    entry_price = None
+    target_price = None
+    stop_price = None
+    exit_date_str = None
+    expiration_date = None
+    second_leg_depth = None
 
     def to_dict(self, exclude=None):
         if exclude is None:
@@ -60,16 +59,16 @@ class SpreadDataModel:
             if key not in exclude and not key.startswith('_') and value is not None  # Exclude private and specified attributes
         }
 
-        if self.LongContract is not None:
-            attributes['LongContract'] = {
+        if self.long_contract is not None:
+            attributes['long_contract'] = {
                 key: self.round_decimal(value) if isinstance(value, (Decimal, int)) else value
-                for key, value in self.LongContract.items()
+                for key, value in self.long_contract.items()
             }
 
-        if self.ShortContract is not None:
-            attributes['ShortContract'] = {
+        if self.short_contract is not None:
+            attributes['short_contract'] = {
                 key: self.round_decimal(value) if isinstance(value, (Decimal, int)) else value
-                for key, value in self.ShortContract.items()
+                for key, value in self.short_contract.items()
             }
         return attributes
 

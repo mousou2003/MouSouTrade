@@ -12,12 +12,12 @@ x-common-dependencies: &common-dependencies
   - s3-local
 
 services:
-  engine:
+  app:
     build:
       context: ../
-      dockerfile: ./run_engine/run_engine.Dockerfile
-    image: mousoutrade-engine
-    container_name: engine
+      dockerfile: ./app/build-app-image.Dockerfile
+    image: mousoutrade-app
+    container_name: app
     environment:
       <<: *common-env
     depends_on:

@@ -19,9 +19,9 @@ services:
     depends_on:
       - dynamodb-local
 
-  engine:
-    image: mousou2011/mousoutrade-engine:latest
-    container_name: engine
+  app:
+    image: mousou2011/mousoutrade-app:latest
+    container_name: app
     environment:
       <<: *common-env
 
