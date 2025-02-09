@@ -3,5 +3,4 @@ __target__/
 __pycache__/
 *.backup
 config/SecurityKeys.json
-polygon_app/main.py
 data

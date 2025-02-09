@@ -38,6 +38,7 @@ services:
       - dynamodb-local
 
   dynamodb-local:
+    context: ../
     image: amazon/dynamodb-local:latest
     container_name: dynamodb-local
     ports:
@@ -50,6 +51,7 @@ services:
       <<: *common-env
 
   s3-local:
+    context: ../
     image: minio/minio
     container_name: s3-local
     ports:
