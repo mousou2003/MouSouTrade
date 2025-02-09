@@ -1,4 +1,6 @@
-from marketdata_clients.MarketDataClient import *
+from marketdata_clients.PolygonStocksClient import PolygonStocksClient
+from marketdata_clients.PolygonOptionsClient import PolygonOptionsClient
+from marketdata_clients.MarketDataClient import MarketDataStrikeNotFoundException, MarketDataException
 from engine.data_model import *
 import logging
 import datetime
@@ -11,12 +13,11 @@ class VerticalSpread(SpreadDataModel):
     MAX_STRIKES = 20  # Maximum number of strikes to consider
     MIN_DELTA = 0.26  # Minimum absolute delta for a contract to be considered
 
-    def __init__(self, underlying_ticker, direction, strategy, client):
+    def __init__(self, underlying_ticker, direction, strategy):
         """Initializes VerticalSpread with market data."""
         logger.info("Processing %s", underlying_ticker)
         self.underlying_ticker = underlying_ticker
-        self.client = MarketDataClient()
-        self.previous_close = self.client.get_previous_stock_close(self.underlying_ticker)
+        self.previous_close = PolygonStocksClient().get_previous_stock_close(self.underlying_ticker)
         logger.info("%s last close price :%s", self.underlying_ticker, self.previous_close)
         self.contract_type = SPREAD_TYPE[strategy][direction]
         self.order = self.get_order(strategy, direction)
@@ -48,7 +49,7 @@ class VerticalSpread(SpreadDataModel):
         self.expiration_date = date
 
         try:
-            self.contracts = self.client.get_option_contracts(
+            self.contracts = PolygonOptionsClient().get_option_contracts(
                 underlying_ticker=self.underlying_ticker,
                 expiration_date_gte=expiration_date_gte,
                 expiration_date_lte=expiration_date_lte,
@@ -61,7 +62,7 @@ class VerticalSpread(SpreadDataModel):
                                                                     round(float(contract['strike_price']), 2)) and \
                 self.second_leg_depth < self.MAX_STRIKES:
                     self.second_leg_depth += 1
-                    premium = self.client.get_option_previous_close(contract['ticker'])
+                    premium = PolygonOptionsClient().get_option_previous_close(contract['ticker'])
 
                     # Stage the first leg (put or call) based on the contract
                     if first_leg_contract is None:
@@ -174,8 +175,8 @@ class VerticalSpread(SpreadDataModel):
 class CreditSpread(VerticalSpread):
     ideal_expiration = 45
 
-    def __init__(self, underlying_ticker, direction, strategy, client):
-        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, client=client)
+    def __init__(self, underlying_ticker, direction, strategy):
+        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy)
         self.option = None
         self.description = None
 
@@ -218,8 +219,8 @@ class CreditSpread(VerticalSpread):
 class DebitSpread(VerticalSpread):
     ideal_expiration = 45
 
-    def __init__(self, underlying_ticker, direction, strategy, client):
-        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, client=client)
+    def __init__(self, underlying_ticker, direction, strategy):
+        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy)
         self.option = None
         self.description = None
 

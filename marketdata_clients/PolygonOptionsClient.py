@@ -1,0 +1,81 @@
+import asyncio
+import polygon
+import logging
+from marketdata_clients.PolygonClient import PolygonClient
+from marketdata_clients.MarketDataClient import *
+
+logger = logging.getLogger(__name__)
+
+class PolygonOptionsClient(PolygonClient):
+    client = None
+    DEFAULT_THROTTLE_LIMIT = 0
+
+    def __new__(cls, throttle_limit=DEFAULT_THROTTLE_LIMIT):
+        if PolygonOptionsClient.instance is None:
+            logger.info("Creating PolygonOptionsClient Singleton")
+            PolygonClient.instance = super(PolygonOptionsClient, cls).__new__(cls)
+            try:
+                PolygonOptionsClient.instance.THROTTLE_LIMIT = throttle_limit
+                PolygonOptionsClient.instance.client = polygon.OptionsClient(PolygonOptionsClient.instance._my_key)
+            except Exception as e:
+                logger.error(f"Failed to create PolygonOptionsClient: {e}")
+                raise
+        return PolygonOptionsClient.instance
+
+    def get_grouped_option_daily_bars(self, date):
+        self.wait_for_no_throttle()
+        try:
+            response = self.client.get_grouped_daily_bars(date)
+            if 'results' not in response or not response['results']:
+                raise KeyError('results')
+            return response['results']
+        except KeyError as err:
+            raise MarketDataStrikeNotFoundException(f"No results found for date {date}", err)
+        except Exception as err:
+            raise MarketDataException(f"Failed to get grouped option daily bars for {date}", err)
+
+    def get_option_previous_close(self, ticker):
+        self.wait_for_no_throttle()
+        try:
+            response = self.client.get_previous_close(ticker)
+            if 'results' not in response or not response['results']:
+                raise KeyError('results')
+            return response['results'][0]['c']
+        except KeyError as err:
+            raise MarketDataStrikeNotFoundException(f"No results found for ticker {ticker}", err)
+        except Exception as err:
+            raise MarketDataException(f"Failed to get previous close price for Option {ticker}", err)
+
+    async def async_get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
+        self.wait_for_no_throttle()
+        try:
+            contracts = polygon.ReferenceClient(self._my_key).get_option_contracts(
+                underlying_ticker=underlying_ticker,
+                expiration_date_lte=expiration_date_lte,
+                expiration_date_gte=expiration_date_gte,
+                contract_type=contract_type,
+                order=order,
+                sort='strike_price'
+            )
+            if 'results' not in contracts or not contracts['results']:
+                logger.warning(f"No option contracts found for {underlying_ticker}")
+                return []
+            return contracts['results']
+        except KeyError as err:
+            logger.warning(f"No option contracts found for {underlying_ticker}: {err}")
+            return []
+        except Exception as err:
+            raise MarketDataException(f"Failed to asynchronously get option contracts for {underlying_ticker}", err)
+
+    def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
+        self.wait_for_no_throttle()
+        try:
+            return asyncio.run(self.async_get_option_contracts(underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order))
+        except Exception as err:
+            raise MarketDataException(f"Failed to get option contracts for {underlying_ticker}", err)
+
+    def convert_option_symbol_formats(self, ticker):
+        try:
+            return polygon.convert_option_symbol_formats(ticker, from_format=PolygonClient.CLIENT_NAME, to_format='tos')
+        except Exception as err:
+            raise MarketDataException(f"Failed to convert option symbol formats for {ticker}", err)

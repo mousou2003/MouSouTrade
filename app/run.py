@@ -14,7 +14,7 @@ from engine.data_model import *
 from database.DynamoDB import DynamoDB
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 # Set the logging level to WARNING to suppress DEBUG messages
 logging.getLogger('botocore').setLevel(logging.WARNING)
@@ -52,7 +52,7 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
         for direction in [BULLISH, BEARISH]:
             for strategy in [CREDIT, DEBIT]:
                 spread_class = DebitSpread if strategy == DEBIT else CreditSpread
-                spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy, client=PolygonClient())
+                spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy)
 
                 target_expiration_date = Option.get_following_third_friday()
                 key = {
