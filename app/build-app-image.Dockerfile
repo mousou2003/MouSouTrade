@@ -4,19 +4,17 @@ WORKDIR /app
 
 ENV PYTHONPATH="/app"
 
-COPY ./app/requirements-run-app.txt requirements.txt
-COPY ./app/app.py /app/app/app.py
-COPY ./PolygoneClients /app/PolygoneClients
-COPY ./MarketDataClients /app/MarketDataClients
-COPY ./app /app/app
-COPY ./database /app/database
-COPY ./config /app/config
+COPY ./app .
+COPY ./engine engine
+COPY ./marketdata_clients marketdata_clients
+COPY ./database database
+COPY ./config config
 COPY ./app/crontab /etc/cron.d/app-cron
 COPY ./.aws /root/.aws/
 
 RUN apt-get update && apt-get install -y cron && \
     pip install --upgrade pip && \
-    pip install -r requirements.txt && \
+    pip install -r requirements-run-app.txt && \
     pip install --upgrade boto3
 
 # Give execution rights on the cron job
@@ -29,4 +27,4 @@ RUN crontab /etc/cron.d/app-cron
 RUN touch /var/log/cron.log
 
 # Run the script immediately and then start cron
-CMD python /app/app/app.py && cron && tail -f /var/log/cron.log
+CMD python /app/run.py && cron && tail -f /var/log/cron.log

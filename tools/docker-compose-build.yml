@@ -38,20 +38,18 @@ services:
       - dynamodb-local
 
   dynamodb-local:
-    context: ../
     image: amazon/dynamodb-local:latest
     container_name: dynamodb-local
     ports:
       - '8000:8000'
     volumes:
-      - ./docker/dynamodb:/home/dynamodblocal/data
+      - ../docker/dynamodb:/home/dynamodblocal/data
     working_dir: /home/dynamodblocal
     command: '-jar DynamoDBLocal.jar -sharedDb -dbPath ./data'
     environment:
       <<: *common-env
 
   s3-local:
-    context: ../
     image: minio/minio
     container_name: s3-local
     ports:
@@ -63,6 +61,6 @@ services:
       <<: *common-env
     command: server /data --console-address ":9001"
     volumes:
-      - ./data:/data
+      - ../docker/S3:/data
 
 

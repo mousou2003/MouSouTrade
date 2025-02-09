@@ -3,4 +3,4 @@ __target__/
 __pycache__/
 *.backup
 config/SecurityKeys.json
-data
+docker
