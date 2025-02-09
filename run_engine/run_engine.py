@@ -2,15 +2,16 @@ import json
 import sys
 import traceback
 import logging
-import os  # Add import for os module
+import os
 from requests import ReadTimeout
 from colorama import Fore
 
-from PolygoneClients.PolygoneClient import PolygoneClient
-from MarketDataClients.MarketDataClient import *
+from polygon_client.PolygonClient import PolygonClient
+from marketdata_clients.MarketDataClient import *
+from engine.VerticalSpread import CreditSpread, DebitSpread
 from engine.Options import *
-from engine.data_model import *
-from database.src import Database
+from data_model.data_model import *
+from database.DynamoDB import DynamoDB
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -49,59 +50,59 @@ def main():
         
         table_name = env_vars['MOUSOUTRADE_STAGE']
         
-        db = Database.Database(table_name)
+        dynamodb = DynamoDB(table_name)
         with open(config_file) as file:
             stocks = json.load(file)
             if isinstance(stocks, dict):
                 stocks = [stocks]
-            numberofstocks = len(stocks)
-            stocknumber = 0
+            number_of_stocks = len(stocks)
+            stock_number = 0
             for stock in stocks:
                 try:
-                    stocknumber += 1
+                    stock_number += 1
                     ticker = stock.get('Ticker')
                     if not ticker:
                         raise KeyError('Ticker')
-                    logger.info(f"Processing stock {stocknumber}/{numberofstocks} :{ticker}")
+                    logger.info(f"Processing stock {stock_number}/{number_of_stocks} :{ticker}")
                     for direction in [BULLISH, BEARISH]:  # Iterate through both bullish and bearish directions
                         for strategy in [CREDIT, DEBIT]:  # Iterate through both credit and debit strategies
 
                             spread_class = DebitSpread if strategy == DEBIT else CreditSpread
                             spread = spread_class(underlying_ticker=ticker, direction=direction,
-                                                   strategy=strategy, client=PolygoneClient())
+                                                   strategy=strategy, client=PolygonClient())
 
-                            if spread.matchOption(date=Option.get_followingThirdFriday()):
-                                Key = {
+                            if spread.match_option(date=Option.get_following_third_friday()):
+                                key = {
                                     "ticker": ticker,
                                     "option": json.dumps({"date": spread.get_expiration_date().strftime('%Y-%m-%d'), "direction": direction,
                                                       "strategy": strategy}, default=str)
                                 }
-                                merged_json = {**Key, **{"description": spread.get_plain_English_Result(),
+                                merged_json = {**key, **{"description": spread.get_plain_english_result(),
                                                          **spread.to_dict()}}
                                 print(Fore.GREEN)
                                 logger.info(merged_json)
                                 print(Fore.RESET)
-                                db.put_item(Item=merged_json)
-                                response = db.get_item(Key=Key)
+                                dynamodb.put_item(Item=merged_json)
+                                response = dynamodb.get_item(Key=key)
                                 if 'Item' in response:
-                                    logger.info("info stored for %s" % Key)
+                                    logger.info("Info stored for %s" % key)
                                 else:
                                     raise MarketDataStorageFailedException("Failed to store item in database")
                             else:
-                                Key = {
+                                key = {
                                     "ticker": ticker,
                                     "option": json.dumps({"date": spread.get_expiration_date().strftime('%Y-%m-%d'), "direction": direction,
                                                       "strategy": strategy}, default=str)
                                 }
-                                merged_json = {**Key, **{"description": f"No match for {ticker}"},
+                                merged_json = {**key, **{"description": f"No match for {ticker}"},
                                                **spread.to_dict()}
                                 logger.info(merged_json)
                             
-                            db.put_item(Item=merged_json)
-                            response = db.get_item(Key=Key)
+                            dynamodb.put_item(item=merged_json)
+                            response = dynamodb.get_item(key=key)
                             if 'Item' in response:
-                                logger.info("info stored for %s" % Key)
-                                logger.debug("saved in table: %s" % response)
+                                logger.info("Info stored for %s" % key)
+                                logger.debug("Saved in table: %s" % response)
                             else:
                                 raise MarketDataStrikeNotFoundException()
                                     
@@ -112,11 +113,11 @@ def main():
                 except ConnectionRefusedError as e:
                     logger.error(f"Connection refused: {e}")
                 except KeyError as e:
-                    logger.warning(f"Error processing stock {stocknumber}/{numberofstocks}: Missing key {e}")
+                    logger.warning(f"Error processing stock {stock_number}/{number_of_stocks}: Missing key {e}")
                 except Exception as e:
                     logger.warning(f"Error processing stock {stock.get('Ticker', 'N/A')}: {e}")
                     traceback.print_exc()
-            logger.info(f"Processed {numberofstocks} stocks")
+            logger.info(f"Processed {number_of_stocks} stocks")
             return 0
     except FileNotFoundError:
         logger.error("Input file not found.")

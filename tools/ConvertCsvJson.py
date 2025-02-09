@@ -9,20 +9,17 @@ logging.basicConfig(level=logging.INFO)
 # Function to convert a CSV to JSON
 # Takes the file paths as arguments
 def convert(csv_file_path, json_file_path):
-     
     # create a dictionary
     data = {}
-     
     # Open a csv reader called DictReader
     with open(csv_file_path, encoding='utf-8') as csvf:
         # Remove BOM if present
         content = csvf.read().lstrip('\ufeff')
         csvf.seek(0)
-        csvReader = csv.DictReader(content.splitlines())
-         
+        csv_reader = csv.DictReader(content.splitlines())
         # Convert each row into a dictionary
         # and add it to data
-        for rows in csvReader:
+        for rows in csv_reader:
             try:
                 # Assuming a column named 'Ticker' or 'Symbol' to be the primary key
                 key = rows.get('Ticker') or rows.get('Symbol')
