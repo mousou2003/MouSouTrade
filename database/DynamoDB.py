@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class DynamoDB:
     def __init__(self, table_name):
-        logger.info("Init Database")
+        logger.debug("Init Database")
         # Check for required environment variables
         required_env_vars = ['DYNAMODB_ENDPOINT_URL']
         missing_env_vars = [var for var in required_env_vars if not os.getenv(var)]
@@ -19,15 +19,15 @@ class DynamoDB:
 
         endpoint_url = os.getenv('DYNAMODB_ENDPOINT_URL', 'http://localhost:8000')
         dynamodb = boto3.Session().resource('dynamodb', endpoint_url=endpoint_url)
-        logger.info("Dynamo client created at endpoint %s" % endpoint_url)
+        logger.debug("Dynamo client created at endpoint %s" % endpoint_url)
 
         try:
             self.table = dynamodb.Table(table_name)
             self.table.load()
-            logger.info("Table exists %s" % table_name)
+            logger.debug("Table exists %s" % table_name)
         except ClientError as err:
             if err.response['Error']['Code'] == 'ResourceNotFoundException':
-                logger.info("Create the DynamoDB table.")
+                logger.debug("Create the DynamoDB table.")
                 self.table = dynamodb.create_table(
                     TableName=table_name,
                     KeySchema=[

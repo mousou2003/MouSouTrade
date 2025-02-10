@@ -13,11 +13,11 @@ class VerticalSpread(SpreadDataModel):
     MAX_STRIKES = 20  # Maximum number of strikes to consider
     MIN_DELTA = 0.26  # Minimum absolute delta for a contract to be considered
 
-    def __init__(self, underlying_ticker, direction, strategy):
+    def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
         """Initializes VerticalSpread with market data."""
         logger.info("Processing %s", underlying_ticker)
         self.underlying_ticker = underlying_ticker
-        self.previous_close = PolygonStocksClient().get_previous_stock_close(self.underlying_ticker)
+        self.previous_close = previous_close if previous_close is not None else PolygonStocksClient().get_previous_stock_close(self.underlying_ticker)
         logger.info("%s last close price :%s", self.underlying_ticker, self.previous_close)
         self.contract_type = SPREAD_TYPE[strategy][direction]
         self.order = self.get_order(strategy, direction)
@@ -62,7 +62,11 @@ class VerticalSpread(SpreadDataModel):
                                                                     round(float(contract['strike_price']), 2)) and \
                 self.second_leg_depth < self.MAX_STRIKES:
                     self.second_leg_depth += 1
-                    premium = Options().get_option_previous_close(contract['ticker'])
+                    try:
+                        premium = Options().get_option_previous_close(contract['ticker'])
+                    except MarketDataException as e:
+                        logger.debug(f"Error getting previous close for contract {contract['ticker']}: {e}")
+                        continue
 
                     # Stage the first leg (put or call) based on the contract
                     if first_leg_contract is None:
@@ -118,9 +122,6 @@ class VerticalSpread(SpreadDataModel):
                     previous_premium = premium
                     previous_contract = contract
             return self.short_contract is not None and self.long_contract is not None
-        except (MarketDataStrikeNotFoundException, MarketDataException) as e:
-            logger.warning(f"Error getting option contracts: {e}")
-            return False
         except Exception as e:
             logger.exception(f"An unexpected error occurred in match_option: {e}")
             return False
@@ -176,8 +177,8 @@ class VerticalSpread(SpreadDataModel):
 class CreditSpread(VerticalSpread):
     ideal_expiration = 45
 
-    def __init__(self, underlying_ticker, direction, strategy):
-        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy)
+    def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
+        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, previous_close=previous_close)
         self.option = None
         self.description = None
 
@@ -220,8 +221,8 @@ class CreditSpread(VerticalSpread):
 class DebitSpread(VerticalSpread):
     ideal_expiration = 45
 
-    def __init__(self, underlying_ticker, direction, strategy):
-        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy)
+    def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
+        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, previous_close=previous_close)
         self.option = None
         self.description = None
 

@@ -8,7 +8,7 @@ class MarketDataClient(object):
     client_name = None
 
     def __new__(cls, client_name):
-        logger.info("create MarketDataClient")        
+        logger.debug("create MarketDataClient")        
         instance = super(MarketDataClient, cls).__new__(cls)
         instance.client_name = client_name
         instance.load_key_secret(jsonfile="./config/SecurityKeys.json", stage="Sandbox")  
@@ -17,7 +17,7 @@ class MarketDataClient(object):
     def load_key_secret(self, jsonfile, stage):
         with open(jsonfile) as file:
             clients = json.load(file)
-            logger.info("loaded json")        
+            logger.debug("loaded json")        
             self._my_key= clients["Clients"][self.client_name][stage]["Key"]
             self._my_secret = clients["Clients"][self.client_name][stage]["Secret"]
 

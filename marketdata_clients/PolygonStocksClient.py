@@ -11,12 +11,12 @@ class PolygonStocksClient(PolygonClient):
 
     def __new__(cls, throttle_limit=DEFAULT_THROTTLE_LIMIT):
         if PolygonStocksClient.instance is None:
-            logger.info("Creating PolygonStocksClient Singleton")
+            logger.debug("Creating PolygonStocksClient Singleton")
             PolygonStocksClient.instance = super(PolygonStocksClient, cls).__new__(cls)
             try:
                 PolygonStocksClient.THROTTLE_LIMIT = throttle_limit
                 PolygonStocksClient.instance.client = polygon.StocksClient(PolygonStocksClient.instance._my_key)
-                logger.info("PolygonStocksClient Singleton created")
+                logger.debug("PolygonStocksClient Singleton created")
             except Exception as e:
                 logger.error(f"Failed to create PolygonStocksClient: {e}")
                 raise
@@ -34,10 +34,10 @@ class PolygonStocksClient(PolygonClient):
         except Exception as err:
             raise MarketDataException(f"Failed to get previous stock close for {ticker}", err)
 
-    def get_daily_open_close(self, ticker, date):
+    def get_grouped_daily_bars(self,date):
         self.wait_for_no_throttle()
         try:
-            response = PolygonStocksClient.client.get_daily_open_close(symbol=ticker, date=date)
+            response = PolygonStocksClient.client.get_grouped_daily_bars(date=date)
             if 'results' not in response or not response['results']:
                 raise KeyError('results')
             return response['results']

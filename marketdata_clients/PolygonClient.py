@@ -12,6 +12,6 @@ class PolygonClient(MarketDataClient):
     instance = None
        
     def __new__(cls):
-        logger.info("create PolygonClient")        
+        logger.debug("create PolygonClient")        
         instance = super(PolygonClient, cls).__new__(cls, PolygonClient.CLIENT_NAME)
         return instance

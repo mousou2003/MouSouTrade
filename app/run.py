@@ -10,6 +10,7 @@ from marketdata_clients.PolygonClient import *
 from marketdata_clients.MarketDataClient import *
 from engine.VerticalSpread import CreditSpread, DebitSpread
 from engine.Options import *
+from engine.Stocks import Stocks
 from engine.data_model import *
 from database.DynamoDB import DynamoDB
 
@@ -44,7 +45,6 @@ def load_configuration_file(config_file):
     return stocks
 
 def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
-    try:
         ticker = stock.get('Ticker')
         if not ticker:
             raise KeyError('Ticker')
@@ -52,7 +52,8 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
         for direction in [BULLISH, BEARISH]:
             for strategy in [CREDIT, DEBIT]:
                 spread_class = DebitSpread if strategy == DEBIT else CreditSpread
-                spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy)
+                spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy,
+                                      previous_close=stock['close'])
 
                 target_expiration_date = Options.get_following_third_friday()
                 key = {
@@ -61,33 +62,26 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
                 }
                 logger.info(f"Processing {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
 
-                if spread.match_option(date=target_expiration_date):
+                response = dynamodb.get_item(key=key)
+                if 'Item' in response:
+                    logger.info(f"Item already exists for {ticker} with key {key}. Skipping processing.")
+                    continue
+
+                matched = spread.match_option(date=target_expiration_date)
+                if matched:
                     merged_json = {**key, **{"description": spread.get_plain_english_result(), **spread.to_dict()}}
-                    print(Fore.GREEN)
-                    logger.info(merged_json)
-                    print(Fore.RESET)
+                    logger.debug(merged_json)
                 else:
                     merged_json = {**key, **{"description": f"No match for {ticker}"}, **spread.to_dict()}
-                    logger.info(merged_json)
+                    logger.debug(merged_json)
 
                 dynamodb.put_item(item=merged_json)
                 response = dynamodb.get_item(key=key)
                 if 'Item' in response:
-                    logger.info("Info stored for %s" % key)
+                    logger.info("Match %sfound, and stored in %s" % (("", key) if matched else ("not ", key)))
                     logger.debug("Saved in table: %s" % response)
                 else:
-                    raise MarketDataStrikeNotFoundException()
-    except MarketDataException as e:
-        logger.warning(f"Market data error for {ticker}: {e}")
-    except ReadTimeout as e:
-        logger.warning(f"Read timeout for {ticker}: {e}")
-    except ConnectionRefusedError as e:
-        logger.error(f"Connection refused: {e}")
-    except KeyError as e:
-        logger.warning(f"Error processing stock {stock_number}/{number_of_stocks}: Missing key {e}")
-    except Exception as e:
-        logger.warning(f"Error processing stock {stock.get('Ticker', 'N/A')}: {e}")
-        traceback.print_exc()
+                    raise MarketDataStrikeNotFoundException(f"No item found for ticker {ticker}")
 
 def main():
     try:
@@ -106,8 +100,21 @@ def main():
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
 
+        marketdata_stocks = Stocks()
+
         for stock_number, stock in enumerate(stocks, start=1):
-            process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name)
+            ticker = stock.get('Ticker')
+            if ticker in marketdata_stocks.stocks_data:
+                stock.update(marketdata_stocks.get_daily_bars(ticker))
+                try:
+                    process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name)
+                except ReadTimeout as e:
+                    logger.warning(f"Read timeout for {ticker}: {e}")
+                except ConnectionRefusedError as e:
+                    logger.exception(f"Connection refused for {ticker}: {e}")
+                    raise e
+                except (KeyError, MarketDataException) as e:
+                    logger.exception(f"Error processing stock {stock_number}/{number_of_stocks} ({ticker}): {e}")
 
         logger.info(f"Processed {number_of_stocks} stocks")
         return 0

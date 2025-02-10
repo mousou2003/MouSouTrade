@@ -12,7 +12,7 @@ class PolygonOptionsClient(PolygonClient):
 
     def __new__(cls, throttle_limit=DEFAULT_THROTTLE_LIMIT):
         if PolygonOptionsClient.instance is None:
-            logger.info("Creating PolygonOptionsClient Singleton")
+            logger.debug("Creating PolygonOptionsClient Singleton")
             PolygonClient.instance = super(PolygonOptionsClient, cls).__new__(cls)
             try:
                 PolygonOptionsClient.instance.THROTTLE_LIMIT = throttle_limit
@@ -27,10 +27,10 @@ class PolygonOptionsClient(PolygonClient):
         try:
             response = self.client.get_grouped_daily_bars(date)
             if 'results' not in response or not response['results']:
-                raise KeyError('results')
+                raise KeyError()
             return response['results']
         except KeyError as err:
-            raise MarketDataStrikeNotFoundException(f"No results found for date {date}", err)
+            raise MarketDataStrikeNotFoundException(f"No results found for date {date}")
         except Exception as err:
             raise MarketDataException(f"Failed to get grouped option daily bars for {date}", err)
 
@@ -39,10 +39,10 @@ class PolygonOptionsClient(PolygonClient):
         try:
             response = self.client.get_previous_close(ticker)
             if 'results' not in response or not response['results']:
-                raise KeyError('results')
+                raise KeyError()
             return response['results'][0]['c']
         except KeyError as err:
-            raise MarketDataStrikeNotFoundException(f"No results found for ticker {ticker}", err)
+            raise MarketDataStrikeNotFoundException(f"No results found for ticker {ticker}")
         except Exception as err:
             raise MarketDataException(f"Failed to get previous close price for Option {ticker}", err)
 
