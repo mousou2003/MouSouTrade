@@ -42,6 +42,6 @@ class PolygonStocksClient(PolygonClient):
                 raise KeyError('results')
             return response['results']
         except KeyError as err:
-            raise MarketDataException(f"No results found for ticker {ticker} on {date}", err)
+            raise MarketDataException(f"No results found on {date}", err)
         except Exception as err:
-            raise MarketDataException(f"Failed to get daily open close for {ticker} on {date}", err)
+            raise MarketDataException(f"Failed to get daily open close on {date}", err)
