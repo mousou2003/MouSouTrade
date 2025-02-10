@@ -48,7 +48,6 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
         ticker = stock.get('Ticker')
         if not ticker:
             raise KeyError('Ticker')
-        logger.info(f"Processing stock {stock_number}/{number_of_stocks} :{ticker}")
         for direction in [BULLISH, BEARISH]:
             for strategy in [CREDIT, DEBIT]:
                 spread_class = DebitSpread if strategy == DEBIT else CreditSpread
@@ -60,12 +59,12 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
                     "ticker": ticker,
                     "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), "direction": direction, "strategy": strategy}, default=str)
                 }
-                logger.info(f"Processing {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
-
                 response = dynamodb.get_item(key=key)
                 if 'Item' in response:
                     logger.info(f"Item already exists for {ticker} with key {key}. Skipping processing.")
                     continue
+
+                logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
 
                 matched = spread.match_option(date=target_expiration_date)
                 if matched:
@@ -115,7 +114,8 @@ def main():
                     raise e
                 except (KeyError, MarketDataException) as e:
                     logger.exception(f"Error processing stock {stock_number}/{number_of_stocks} ({ticker}): {e}")
-
+        logger.info(f"Number of stocks in initial config file: {number_of_stocks}")
+        logger.info(f"Number of stocks found in marketdata_stocks: {len(marketdata_stocks.stocks_data)}")
         logger.info(f"Processed {number_of_stocks} stocks")
         return 0
     except FileNotFoundError:
