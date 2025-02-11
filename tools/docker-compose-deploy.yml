@@ -1,3 +1,4 @@
+name: mousoutrade-${MOUSOUTRADE_STAGE}
 x-common-env: &common-env
   AWS_PROFILE: local-dev
   AWS_ACCESS_KEY_ID: DUMMYIDEXAMPLE
@@ -18,6 +19,7 @@ services:
 
     depends_on:
       - dynamodb-local
+      - app
 
   app:
     image: mousou2011/mousoutrade-app:latest

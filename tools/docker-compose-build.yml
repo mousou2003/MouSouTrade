@@ -1,3 +1,4 @@
+name: mousoutrade-${MOUSOUTRADE_STAGE}
 x-common-env: &common-env
   AWS_PROFILE: local-dev
   AWS_ACCESS_KEY_ID: DUMMYIDEXAMPLE
@@ -6,10 +7,6 @@ x-common-env: &common-env
   DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
   MOUSOUTRADE_CONFIG_FILE: /app/config/Portfolio_US_Positions_Jan-21-2025.json
   MOUSOUTRADE_STAGE: Alpha
-
-x-common-dependencies: &common-dependencies
-  - dynamodb-local
-  - s3-local
 
 services:
   app:
@@ -24,6 +21,7 @@ services:
       - dynamodb-local
     stdin_open: true  # Keep the container open for interactive mode
     tty: true  # Allocate a pseudo-TTY
+
   website:
     build:
       context: ../
@@ -36,6 +34,7 @@ services:
       <<: *common-env
     depends_on:
       - dynamodb-local
+      - app
 
   dynamodb-local:
     image: amazon/dynamodb-local:latest
@@ -48,19 +47,5 @@ services:
     command: '-jar DynamoDBLocal.jar -sharedDb -dbPath ./data'
     environment:
       <<: *common-env
-
-  s3-local:
-    image: minio/minio
-    container_name: s3-local
-    ports:
-      - '9000:9000'
-      - '9001:9001'
-    environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      <<: *common-env
-    command: server /data --console-address ":9001"
-    volumes:
-      - ../docker/S3:/data
 
 
