@@ -86,6 +86,9 @@ class VerticalSpread(SpreadDataModel):
                                                        previous_price=float(previous_contract['strike_price']),
                                                        price=float(contract['strike_price']))
                         logger.debug('delta %s, self.distance_between_strikes %s', delta, self.distance_between_strikes)
+                        if delta == 0:
+                            logger.warning("Delta is zero, skipping")
+                            continue
                         if delta <= self.MIN_DELTA:
                             spread_premium = abs(float(first_leg_premium) - float(premium))
                             logger.debug('spread_premium %s', spread_premium)

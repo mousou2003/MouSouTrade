@@ -3,6 +3,8 @@ import sys
 import traceback
 import logging
 import os
+import time
+import socket
 from requests import ReadTimeout
 from colorama import Fore
 
@@ -82,7 +84,22 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
                 else:
                     raise MarketDataStrikeNotFoundException(f"No item found for ticker {ticker}")
 
+def wait_for_debugger(host, port, timeout=60):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                print(f"Debugger is available on {host}:{port}")
+                return True
+        except (ConnectionRefusedError, socket.timeout):
+            print(f"Waiting for debugger to be available on {host}:{port}...")
+            time.sleep(1)
+    print(f"Timeout waiting for debugger on {host}:{port}")
+    return False
+
 def main():
+    if os.getenv("DEBUG_MODE") == "true":
+        wait_for_debugger("localhost", 5678)
     try:
         required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 'MOUSOUTRADE_CONFIG_FILE', 'MOUSOUTRADE_STAGE']
         env_vars = check_environment_variables(required_env_vars)
