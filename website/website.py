@@ -9,8 +9,10 @@ import sys
 app = Flask(__name__)
 
 # Check for required environment variables
-required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 
-                     'DYNAMODB_ENDPOINT_URL', 'MOUSOUTRADE_STAGE']
+required_env_vars = [
+    'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 
+    'DYNAMODB_ENDPOINT_URL', 'MOUSOUTRADE_STAGE', 'WEBSITE_PORT'
+]
 missing_env_vars = [var for var in required_env_vars if not os.getenv(var)]
 
 if missing_env_vars:
@@ -22,7 +24,7 @@ for var in required_env_vars:
     print(f"{var}: {os.getenv(var)}")
 
 # Configure DynamoDB connection
-dynamodb_endpoint = os.getenv('DYNAMODB_ENDPOINT_URL', 'http://localhost:8000')
+dynamodb_endpoint = os.getenv('DYNAMODB_ENDPOINT_URL')
 dynamodb = boto3.resource(
     'dynamodb',
     endpoint_url=dynamodb_endpoint,
@@ -30,18 +32,18 @@ dynamodb = boto3.resource(
     aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
     region_name=os.getenv('AWS_DEFAULT_REGION')
 )
-table_name = os.getenv('MOUSOUTRADE_STAGE', 'mousoutrade-dev')
+table_name = os.getenv('MOUSOUTRADE_STAGE')
 table = dynamodb.Table(table_name)
 
 def convert_decimals(obj):
     """Helper function to convert Decimal types to float."""
     if isinstance(obj, Decimal):
-        return float(obj)  # Convert Decimal to float
+        return float(obj)
     elif isinstance(obj, list):
-        return [convert_decimals(x) for x in obj]  # Recursively convert lists
+        return [convert_decimals(x) for x in obj]
     elif isinstance(obj, dict):
-        return {k: convert_decimals(v) for k, v in obj.items()}  # Recursively convert dicts
-    return obj  # Return the object if it's not Decimal, list, or dict
+        return {k: convert_decimals(v) for k, v in obj.items()}
+    return obj
 
 def get_all_items():
     print("Fetching all items from the DynamoDB table.")
@@ -63,7 +65,6 @@ def index():
 def get_data():
     records = get_all_items()
     try:
-        # Convert Decimal types to float for JSON serialization
         records = convert_decimals(records)
         return jsonify(records)
     except Exception as e:
@@ -76,4 +77,6 @@ def signal_handler(sig, frame):
 
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
-    app.run(host='0.0.0.0', port=5000)
+    website_port = int(os.getenv('WEBSITE_PORT'))
+    print(f"Website is running at http://localhost:{website_port}")
+    app.run(host='0.0.0.0', port=website_port)
