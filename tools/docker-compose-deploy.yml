@@ -1,44 +1,43 @@
-name: mousoutrade-${MOUSOUTRADE_STAGE}
-x-common-env: &common-env
-  AWS_PROFILE: local-dev
-  AWS_ACCESS_KEY_ID: DUMMYIDEXAMPLE
-  AWS_SECRET_ACCESS_KEY: DUMMYEXAMPLEKEY
-  AWS_DEFAULT_REGION: us-west-2
-  DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
-  MOUSOUTRADE_CONFIG_FILE: /app/config/Portfolio_US_Positions_Jan-21-2025.json
-  MOUSOUTRADE_STAGE: Beta
-  WEBSITE_PORT: 5000
-  
+name: mousoutrade
+
 services:
   website:
-    image: mousou2011/mousoutrade-website:latest
-    container_name: web
+    env_file:
+      - ../.env
+    image: ${DOCKERHUB_USERNAME}/${WEBSITE_IMAGE_NAME}:latest
+    container_name: ${WEBSITE_CONTAINER_NAME}
     ports:
-      - '5000:5000'
-    environment:
-      <<: *common-env
-
+      - '${WEBSITE_PORT}:${WEBSITE_PORT}'
     depends_on:
       - dynamodb-local
       - app
+    networks:
+      - mousoutrade-network
 
   app:
-    image: mousou2011/mousoutrade-app:latest
-    container_name: app
-    environment:
-      <<: *common-env
-
+    env_file:
+      - ../.env
+    image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:latest
+    container_name: ${APP_CONTAINER_NAME}
     depends_on:
       - dynamodb-local
+    networks:
+      - mousoutrade-network
 
   dynamodb-local:
+    env_file:
+      - ../.env
     image: amazon/dynamodb-local:latest
-    container_name: dynamodb-local
+    container_name: ${DYNAMODB_CONTAINER_NAME}
     ports:
       - '8000:8000'
     volumes:
       - ./docker/dynamodb:/home/dynamodblocal/data
     working_dir: /home/dynamodblocal
     command: '-jar DynamoDBLocal.jar -sharedDb -dbPath ./data'
-    environment:
-      <<: *common-env
+    networks:
+      - mousoutrade-network
+
+networks:
+  mousoutrade-network:
+    driver: bridge

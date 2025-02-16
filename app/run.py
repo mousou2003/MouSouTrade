@@ -142,7 +142,7 @@ def main():
         logger.error("Invalid JSON in input file.")
         return 1
     except ConnectionRefusedError as e:
-        logger.error(f"Connection refused: {e}")
+        logger.error(f"Connection refused: {e.with_traceback(None)}")
         return 1
     except MissingEnvironmentVariableException as e:
         logger.error(e)

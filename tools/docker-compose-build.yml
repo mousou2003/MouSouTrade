@@ -1,52 +1,81 @@
-name: mousoutrade-${MOUSOUTRADE_STAGE}
-x-common-env: &common-env
-  AWS_PROFILE: local-dev
-  AWS_ACCESS_KEY_ID: DUMMYIDEXAMPLE
-  AWS_SECRET_ACCESS_KEY: DUMMYEXAMPLEKEY
-  AWS_DEFAULT_REGION: us-west-2
-  DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
-  MOUSOUTRADE_CONFIG_FILE: /app/config/Portfolio_US_Positions_Jan-21-2025.json
-  MOUSOUTRADE_STAGE: Alpha
-  WEBSITE_PORT: 5000
-
+name: mousoutrade
 services:
   app:
+    env_file:
+      - ../.env
     build:
-      context: ../
+      context: .
       dockerfile: ./app/build-app-image.Dockerfile
-    image: mousoutrade-app
-    container_name: app
-    environment:
-      <<: *common-env
+      args:
+        AWS_PROFILE: ${AWS_PROFILE}
+        AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+        AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+        AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+        DYNAMODB_ENDPOINT_URL: ${DYNAMODB_ENDPOINT_URL}
+        MOUSOUTRADE_CONFIG_FILE: ${MOUSOUTRADE_CONFIG_FILE}
+        MOUSOUTRADE_STAGE: ${MOUSOUTRADE_STAGE}
+        MOUSOUTRADE_VERSION: ${MOUSOUTRADE_VERSION}
+        PYTHONPATH: ${PYTHONPATH}
+        WEBSITE_PORT: ${WEBSITE_PORT}
+        DYNAMODB_PORT: ${DYNAMODB_PORT}
+        PROJECT_NAME: ${PROJECT_NAME}
+    image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:latest
+    container_name: ${APP_CONTAINER_NAME}
     depends_on:
       - dynamodb-local
-    stdin_open: true  # Keep the container open for interactive mode
-    tty: true  # Allocate a pseudo-TTY
+    networks:
+      - mousoutrade-network
+    stdin_open: true # Keep the container open for interactive mode
+    tty: true # Allocate a pseudo-TTY
 
   website:
+    env_file:
+      - ../.env
     build:
-      context: ../
+      context: .
       dockerfile: ./website/website.Dockerfile
-    image: mousoutrade-website
-    container_name: web
+      args:
+        AWS_PROFILE: ${AWS_PROFILE}
+        AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+        AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+        AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+        DYNAMODB_ENDPOINT_URL: ${DYNAMODB_ENDPOINT_URL}
+        MOUSOUTRADE_CONFIG_FILE: ${MOUSOUTRADE_CONFIG_FILE}
+        MOUSOUTRADE_STAGE: ${MOUSOUTRADE_STAGE}
+        MOUSOUTRADE_VERSION: ${MOUSOUTRADE_VERSION}
+        PYTHONPATH: ${PYTHONPATH}
+        WEBSITE_PORT: ${WEBSITE_PORT}
+        DYNAMODB_PORT: ${DYNAMODB_PORT}
+        PROJECT_NAME: ${PROJECT_NAME}
+    image: ${DOCKERHUB_USERNAME}/${WEBSITE_IMAGE_NAME}:latest
+    container_name: ${WEBSITE_CONTAINER_NAME}
     ports:
-      - '5000:5000'
-    environment:
-      <<: *common-env
+      - '${WEBSITE_PORT}:${WEBSITE_PORT}'
     depends_on:
       - dynamodb-local
       - app
+    networks:
+      - mousoutrade-network
 
   dynamodb-local:
+    env_file:
+      - ../.env
     image: amazon/dynamodb-local:latest
-    container_name: dynamodb-local
+    container_name: ${DYNAMODB_CONTAINER_NAME}
     ports:
-      - '8000:8000'
+      - '${DYNAMODB_PORT}:${DYNAMODB_PORT}'
     volumes:
-      - ../docker/dynamodb:/home/dynamodblocal/data
+      - ./docker/dynamodb:/home/dynamodblocal/data
     working_dir: /home/dynamodblocal
     command: '-jar DynamoDBLocal.jar -sharedDb -dbPath ./data'
+    networks:
+      - mousoutrade-network
     environment:
-      <<: *common-env
+      - AWS_PROFILE=${AWS_PROFILE}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
 
-
+networks:
+  mousoutrade-network:
+    driver: bridge
