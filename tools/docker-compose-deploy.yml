@@ -25,7 +25,7 @@ services:
       - network
 
   dynamodb-local:
-    image: amazon/dynamodb-local:${MOUSOUTRADE_VERSION}
+    image: amazon/dynamodb-local:latest
     container_name: ${DYNAMODB_CONTAINER_NAME}
     ports:
       - '${DYNAMODB_PORT}:${DYNAMODB_PORT}'
