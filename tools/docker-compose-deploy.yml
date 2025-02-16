@@ -1,9 +1,11 @@
-name: mousoutrade
+name: ${PROJECT_NAME}
+networks:
+  network:
+    name: ${PROJECT_NAME}
+    driver: bridge
 
 services:
   website:
-    env_file:
-      - ../.env
     image: ${DOCKERHUB_USERNAME}/${WEBSITE_IMAGE_NAME}:latest
     container_name: ${WEBSITE_CONTAINER_NAME}
     ports:
@@ -12,32 +14,24 @@ services:
       - dynamodb-local
       - app
     networks:
-      - mousoutrade-network
+      - network
 
   app:
-    env_file:
-      - ../.env
     image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:latest
     container_name: ${APP_CONTAINER_NAME}
     depends_on:
       - dynamodb-local
     networks:
-      - mousoutrade-network
+      - network
 
   dynamodb-local:
-    env_file:
-      - ../.env
     image: amazon/dynamodb-local:latest
     container_name: ${DYNAMODB_CONTAINER_NAME}
     ports:
-      - '8000:8000'
+      - '${DYNAMODB_PORT}:${DYNAMODB_PORT}'
     volumes:
       - ./docker/dynamodb:/home/dynamodblocal/data
     working_dir: /home/dynamodblocal
     command: '-jar DynamoDBLocal.jar -sharedDb -dbPath ./data'
     networks:
-      - mousoutrade-network
-
-networks:
-  mousoutrade-network:
-    driver: bridge
+      - network

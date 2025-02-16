@@ -1,0 +1,17 @@
+version: '3.8'
+
+networks:
+  ${PROJECT_NAME}-network:
+    name: ${PROJECT_NAME}
+    driver: bridge
+
+services:
+  service1:
+    image: my-image1
+    networks:
+      - ${PROJECT_NAME}-network
+
+  service2:
+    image: my-image2
+    networks:
+      - ${PROJECT_NAME}-network

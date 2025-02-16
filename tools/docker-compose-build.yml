@@ -1,8 +1,11 @@
-name: mousoutrade
+name: ${PROJECT_NAME}
+networks:
+  ${PROJECT_NAME}-network:
+    name: ${PROJECT_NAME}
+    driver: bridge
+
 services:
   app:
-    env_file:
-      - ../.env
     build:
       context: .
       dockerfile: ./app/build-app-image.Dockerfile
@@ -20,17 +23,10 @@ services:
         DYNAMODB_PORT: ${DYNAMODB_PORT}
         PROJECT_NAME: ${PROJECT_NAME}
     image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:latest
-    container_name: ${APP_CONTAINER_NAME}
-    depends_on:
-      - dynamodb-local
     networks:
-      - mousoutrade-network
-    stdin_open: true # Keep the container open for interactive mode
-    tty: true # Allocate a pseudo-TTY
+      - ${PROJECT_NAME}-network
 
   website:
-    env_file:
-      - ../.env
     build:
       context: .
       dockerfile: ./website/website.Dockerfile
@@ -48,34 +44,5 @@ services:
         DYNAMODB_PORT: ${DYNAMODB_PORT}
         PROJECT_NAME: ${PROJECT_NAME}
     image: ${DOCKERHUB_USERNAME}/${WEBSITE_IMAGE_NAME}:latest
-    container_name: ${WEBSITE_CONTAINER_NAME}
-    ports:
-      - '${WEBSITE_PORT}:${WEBSITE_PORT}'
-    depends_on:
-      - dynamodb-local
-      - app
     networks:
-      - mousoutrade-network
-
-  dynamodb-local:
-    env_file:
-      - ../.env
-    image: amazon/dynamodb-local:latest
-    container_name: ${DYNAMODB_CONTAINER_NAME}
-    ports:
-      - '${DYNAMODB_PORT}:${DYNAMODB_PORT}'
-    volumes:
-      - ./docker/dynamodb:/home/dynamodblocal/data
-    working_dir: /home/dynamodblocal
-    command: '-jar DynamoDBLocal.jar -sharedDb -dbPath ./data'
-    networks:
-      - mousoutrade-network
-    environment:
-      - AWS_PROFILE=${AWS_PROFILE}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
-
-networks:
-  mousoutrade-network:
-    driver: bridge
+      - ${PROJECT_NAME}-network
