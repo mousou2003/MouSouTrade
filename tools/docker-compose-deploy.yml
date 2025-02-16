@@ -1,12 +1,12 @@
 name: ${PROJECT_NAME}
 networks:
   network:
-    name: ${PROJECT_NAME}
+    name: ${PROJECT_NAME}-${MOUSOUTRADE_VERSION}
     driver: bridge
 
 services:
   website:
-    image: ${DOCKERHUB_USERNAME}/${WEBSITE_IMAGE_NAME}:latest
+    image: ${DOCKERHUB_USERNAME}/${WEBSITE_IMAGE_NAME}:${MOUSOUTRADE_VERSION}
     container_name: ${WEBSITE_CONTAINER_NAME}
     ports:
       - '${WEBSITE_PORT}:${WEBSITE_PORT}'
@@ -17,7 +17,7 @@ services:
       - network
 
   app:
-    image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:latest
+    image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:${MOUSOUTRADE_VERSION}
     container_name: ${APP_CONTAINER_NAME}
     depends_on:
       - dynamodb-local
@@ -25,7 +25,7 @@ services:
       - network
 
   dynamodb-local:
-    image: amazon/dynamodb-local:latest
+    image: amazon/dynamodb-local:${MOUSOUTRADE_VERSION}
     container_name: ${DYNAMODB_CONTAINER_NAME}
     ports:
       - '${DYNAMODB_PORT}:${DYNAMODB_PORT}'
