@@ -80,6 +80,8 @@
             <dt>Exit Date:</dt> <dd id="exit-date-content"></dd>
             <dt>Short Contract:</dt> <dd id="short-contract-content"></dd>
             <dt>Long Contract:</dt> <dd id="long-contract-content"></dd>
+            <dt>Percentage Max Risk:</dt> <dd id="percentage-max-risk-content"></dd>
+            <dt>Percentage Max Reward:</dt> <dd id="percentage-max-reward-content"></dd>
             <dt>Description:</dt> <dd id="description-content"></dd>
         </dl>
         <button id="close-dialog">Close</button>
@@ -116,8 +118,12 @@
                     
                     let optionHtml = '';
                     if (item.short_contract && item.long_contract) {
-                        optionHtml = `Short: ${item.short_contract.ticker} (${item.short_contract.strike_price})<br>
-                                      Long: ${item.long_contract.ticker} (${item.long_contract.strike_price})`;
+                        optionHtml = `Strategy: ${item.strategy}<br>
+                                      Direction: ${item.direction}<br>
+                                      Short: ${item.short_contract.strike_price}<br>
+                                      Long: ${item.long_contract.strike_price}<br>
+                                      Max Risk: ${item.percentage_max_risk}%<br>
+                                      Max Reward: ${item.percentage_max_reward}%`;
                     } else {
                         optionHtml = 'N/A';
                     }
@@ -137,6 +143,8 @@
                                                 data-exit_date="${item.exit_date || 'N/A'}" 
                                                 data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
                                                 data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
+                                                data-percentage_max_risk="${item.percentage_max_risk || 'N/A'}"
+                                                data-percentage_max_reward="${item.percentage_max_reward || 'N/A'}"
                                                 data-description="${item.description || 'N/A'}">Details</button>
                                     </td>`);
                     row.append(detailsButton);
@@ -161,6 +169,8 @@
                 $('#target-price-content').text($(this).data('target_price') || 'N/A');
                 $('#stop-price-content').text($(this).data('stop_price') || 'N/A');
                 $('#exit-date-content').text($(this).data('exit_date') || 'N/A');
+                $('#percentage-max-risk-content').text($(this).data('percentage_max_risk') || 'N/A');
+                $('#percentage-max-reward-content').text($(this).data('percentage_max_reward') || 'N/A');
                 $('#overlay').show(); // Show the overlay
                 $('#dialog').show(); // Show the dialog
             });
@@ -189,6 +199,7 @@
             });
 
             refreshData();
+            setInterval(refreshData, 5000); // Refresh data every 5 seconds
         });
     </script>
 </body>

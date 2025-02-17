@@ -1,10 +1,4 @@
-# Conclusion on this class:
-# Next time I will use Libraries like Pydantic and Marshmallow provide powerful mechanisms for serialization and validation, 
-# making it easier to handle complex data types, such as fixed-point decimals, while ensuring data integrity. 
-# These libraries offer a concise way to deal with the serialization process rather than managing it manually, 
-# helping to avoid common pitfalls associated with floating-point representation in databases like DynamoDB.
-
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, Dict, Any, List
 import datetime
@@ -45,6 +39,8 @@ class SpreadDataModel(BaseModel):
     expiration_date: Optional[date]
     second_leg_depth: Optional[int]
     exit_date: Optional[date]
+    percentage_max_risk: Optional[Decimal] = None
+    percentage_max_reward: Optional[Decimal] = None
 
     @classmethod
     def from_dynamodb(cls, record: Dict[str, Any]):
@@ -72,7 +68,9 @@ class SpreadDataModel(BaseModel):
             stop_price=float(record.get('stop_price', 0.0)),
             expiration_date=record.get('expiration_date'),
             second_leg_depth=int(float(record.get('second_leg_depth', 0))),  # Convert to float first, then to int
-            exit_date=record.get('exit_date')
+            exit_date=record.get('exit_date'),
+            percentage_max_risk=Decimal(record.get('percentage_max_risk', 0)),
+            percentage_max_reward=Decimal(record.get('percentage_max_reward', 0))
         )
 
     def to_dict(self, exclude=None):
@@ -101,11 +99,12 @@ class SpreadDataModel(BaseModel):
                 key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
                 for key, value in self.short_contract.items()
             }
+
         return attributes
 
     def round_decimal(self, value):
         """Converts to Decimal and rounds it to five decimal places, then converts to string."""
         return str(Decimal(value).quantize(Decimal('0.00000'), rounding=ROUND_HALF_UP))
-    
+
     def to_json(self, exclude=None):
         return self.model_dump_json(exclude=exclude)

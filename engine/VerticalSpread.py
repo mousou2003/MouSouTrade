@@ -78,7 +78,7 @@ class VerticalSpread(SpreadDataModel):
                     if first_leg_contract is None:
                         first_leg_contract = contract
                         first_leg_premium = premium
-                        logger.info("Staging FIRST LEG contract: %s for a premium of %.2f", first_leg_contract['ticker'], first_leg_premium)
+                        logger.info("Staging FIRST LEG contract: %s for a premium of %.5f", first_leg_contract['ticker'], first_leg_premium)
 
                     # Stage the second leg (put or call) based on the contract
                     else:
@@ -115,7 +115,7 @@ class VerticalSpread(SpreadDataModel):
                                     # Handle other combinations as needed
                                     logger.warning("Unsupported strategy and direction combination.")
 
-                                logger.info("Assigned LONG contract: %s for a premium of %.2f",
+                                logger.info("Assigned LONG contract: %s for a premium of %.5f",
                                             self.long_contract['ticker'], self.long_premium)
 
                                 # Calculate and assign other parameters
@@ -126,6 +126,8 @@ class VerticalSpread(SpreadDataModel):
                                 self.target_price = self.get_target_price()
                                 self.stop_price = self.get_stop_price()
                                 self.exit_date = self.get_exit_date()
+                                self.percentage_max_risk = self.calculate_percentage_max_risk()
+                                self.percentage_max_reward = self.calculate_percentage_max_reward()
                                 break
 
                     previous_premium = premium
@@ -159,7 +161,8 @@ class VerticalSpread(SpreadDataModel):
 
     def to_dict(self):
         """Override to_dict to ensure only serializable data from the parent SpreadDataModel is included."""
-        return super().to_dict()
+        data = super().to_dict()
+        return data
 
     def get_plain_english_result(self):
         return f"Sell {self.get_short()['ticker']}, buy {self.get_long()['ticker']}; " \
@@ -182,6 +185,11 @@ class VerticalSpread(SpreadDataModel):
     def get_stop_price(self):
         pass
 
+    def calculate_percentage_max_risk(self):
+        pass
+
+    def calculate_percentage_max_reward(self):
+        pass
 
 class CreditSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
@@ -207,6 +215,17 @@ class CreditSpread(VerticalSpread):
         target_stop = (self.get_max_risk() / 2)
         return self.previous_close - (target_stop if self.direction == BULLISH else -target_stop)
 
+    def calculate_percentage_max_risk(self):
+        """Calculates the percentage of max risk based on the net premium."""
+        if self.max_risk is not None and self.get_net_premium() != 0:
+            return (self.max_risk / self.get_net_premium()) * 100
+        return 0
+    
+    def calculate_percentage_max_reward(self):
+        """Calculates the percentage of max reward based on the net premium."""
+        if self.max_reward is not None and self.get_net_premium() != 0:
+            return (self.max_reward / self.get_net_premium()) * 100
+        return 0
 
 class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
@@ -231,3 +250,15 @@ class DebitSpread(VerticalSpread):
     def get_stop_price(self):
         target_stop = (self.get_max_risk() / 2)
         return self.previous_close - (target_stop if self.direction == BULLISH else -target_stop)
+
+    def calculate_percentage_max_risk(self):
+        """Calculates the percentage of max risk based on the net premium."""
+        if self.max_risk is not None and self.get_net_premium() != 0:
+            return (self.max_risk / self.get_net_premium()) * 100
+        return 0.0
+
+    def calculate_percentage_max_reward(self):
+        """Calculates the percentage of max reward based on the net premium."""
+        if self.max_reward is not None and self.get_net_premium() != 0:
+            return (self.max_reward / self.get_net_premium()) * 100
+        return 0.0
