@@ -1,8 +1,4 @@
 name: ${PROJECT_NAME}
-networks:
-  ${PROJECT_NAME}-network:
-    name: ${PROJECT_NAME}
-    driver: bridge
 
 services:
   app:
@@ -10,39 +6,35 @@ services:
       context: .
       dockerfile: ./app/build-app-image.Dockerfile
       args:
-        AWS_PROFILE: ${AWS_PROFILE}
-        AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-        AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-        AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
-        DYNAMODB_ENDPOINT_URL: ${DYNAMODB_ENDPOINT_URL}
-        MOUSOUTRADE_CONFIG_FILE: ${MOUSOUTRADE_CONFIG_FILE}
-        MOUSOUTRADE_STAGE: ${MOUSOUTRADE_STAGE}
-        MOUSOUTRADE_VERSION: ${MOUSOUTRADE_VERSION}
-        PYTHONPATH: ${PYTHONPATH}
-        WEBSITE_PORT: ${WEBSITE_PORT}
-        DYNAMODB_PORT: ${DYNAMODB_PORT}
-        PROJECT_NAME: ${PROJECT_NAME}
+        - AWS_PROFILE
+        - AWS_ACCESS_KEY_ID
+        - AWS_SECRET_ACCESS_KEY
+        - AWS_DEFAULT_REGION
+        - DYNAMODB_ENDPOINT_URL
+        - MOUSOUTRADE_CONFIG_FILE
+        - MOUSOUTRADE_STAGE
+        - MOUSOUTRADE_VERSION
+        - PYTHONPATH
+        - WEBSITE_PORT
+        - DYNAMODB_PORT
+        - PROJECT_NAME
     image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:latest
-    networks:
-      - ${PROJECT_NAME}-network
 
   website:
     build:
       context: .
       dockerfile: ./website/website.Dockerfile
       args:
-        AWS_PROFILE: ${AWS_PROFILE}
-        AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-        AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-        AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
-        DYNAMODB_ENDPOINT_URL: ${DYNAMODB_ENDPOINT_URL}
-        MOUSOUTRADE_CONFIG_FILE: ${MOUSOUTRADE_CONFIG_FILE}
-        MOUSOUTRADE_STAGE: ${MOUSOUTRADE_STAGE}
-        MOUSOUTRADE_VERSION: ${MOUSOUTRADE_VERSION}
-        PYTHONPATH: ${PYTHONPATH}
-        WEBSITE_PORT: ${WEBSITE_PORT}
-        DYNAMODB_PORT: ${DYNAMODB_PORT}
-        PROJECT_NAME: ${PROJECT_NAME}
+        - AWS_PROFILE
+        - AWS_ACCESS_KEY_ID
+        - AWS_SECRET_ACCESS_KEY
+        - AWS_DEFAULT_REGION
+        - DYNAMODB_ENDPOINT_URL
+        - MOUSOUTRADE_CONFIG_FILE
+        - MOUSOUTRADE_STAGE
+        - MOUSOUTRADE_VERSION
+        - PYTHONPATH
+        - WEBSITE_PORT
+        - DYNAMODB_PORT
+        - PROJECT_NAME
     image: ${DOCKERHUB_USERNAME}/${WEBSITE_IMAGE_NAME}:latest
-    networks:
-      - ${PROJECT_NAME}-network
