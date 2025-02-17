@@ -12,7 +12,9 @@
             "console": "integratedTerminal",
             "args": ["config\\Portfolio_US_Positions_Jan-21-2025.json"],
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}",
+                "DYNAMODB_ENDPOINT_URL":"http://localhost:8000",
+                "MOUSOUTRADE_STAGE":"Alpha"
             }
         }
     ]
