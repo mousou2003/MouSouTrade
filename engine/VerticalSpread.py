@@ -14,12 +14,7 @@ class VerticalSpread(SpreadDataModel):
     MAX_STRIKES: ClassVar[int] = 20  # Maximum number of strikes to consider
     MIN_DELTA: ClassVar[float] = 0.26  # Minimum absolute delta for a contract to be considered
     def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
-        super().__init__(datetime=None, strategy=strategy, underlying_ticker=underlying_ticker, 
-                          previous_close=previous_close, contract_type=None, direction=direction, 
-                          distance_between_strikes=None, short_contract=None, long_contract=None, 
-                          contracts=None, daily_bars=None, client=None, long_premium=None, short_premium=None, 
-                          max_risk=None, max_reward=None, breakeven=None, entry_price=None, target_price=None, 
-                          stop_price=None, expiration_date=None, second_leg_depth=None, exit_date=None)
+        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy)
         
         """Initializes VerticalSpread with market data."""
         logger.info("Processing %s", underlying_ticker)
@@ -127,7 +122,7 @@ class VerticalSpread(SpreadDataModel):
                                 self.stop_price = self.get_stop_price()
                                 self.exit_date = self.get_exit_date()
                                 self.percentage_max_risk = self.calculate_percentage_max_risk()
-                                self.percentage_max_reward = self.calculate_percentage_max_reward()
+                                self.percentage_max_profit = self.calculate_percentage_max_profit()
                                 break
 
                     previous_premium = premium
@@ -188,7 +183,7 @@ class VerticalSpread(SpreadDataModel):
     def calculate_percentage_max_risk(self):
         pass
 
-    def calculate_percentage_max_reward(self):
+    def calculate_percentage_max_profit(self):
         pass
 
 class CreditSpread(VerticalSpread):
@@ -221,7 +216,7 @@ class CreditSpread(VerticalSpread):
             return (self.max_risk / self.get_net_premium()) * 100
         return 0
     
-    def calculate_percentage_max_reward(self):
+    def calculate_percentage_max_profit(self):
         """Calculates the percentage of max reward based on the net premium."""
         if self.max_reward is not None and self.get_net_premium() != 0:
             return (self.max_reward / self.get_net_premium()) * 100
@@ -257,7 +252,7 @@ class DebitSpread(VerticalSpread):
             return (self.max_risk / self.get_net_premium()) * 100
         return 0.0
 
-    def calculate_percentage_max_reward(self):
+    def calculate_percentage_max_profit(self):
         """Calculates the percentage of max reward based on the net premium."""
         if self.max_reward is not None and self.get_net_premium() != 0:
             return (self.max_reward / self.get_net_premium()) * 100

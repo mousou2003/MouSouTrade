@@ -123,7 +123,7 @@
                                       Short: ${item.short_contract.strike_price}<br>
                                       Long: ${item.long_contract.strike_price}<br>
                                       Max Risk: ${item.percentage_max_risk}%<br>
-                                      Max Reward: ${item.percentage_max_reward}%`;
+                                      Max Reward: ${item.percentage_max_profit}%`;
                     } else {
                         optionHtml = 'N/A';
                     }
@@ -144,7 +144,7 @@
                                                 data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
                                                 data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
                                                 data-percentage_max_risk="${item.percentage_max_risk || 'N/A'}"
-                                                data-percentage_max_reward="${item.percentage_max_reward || 'N/A'}"
+                                                data-percentage_max_reward="${item.percentage_max_profit || 'N/A'}"
                                                 data-description="${item.description || 'N/A'}">Details</button>
                                     </td>`);
                     row.append(detailsButton);
@@ -170,7 +170,7 @@
                 $('#stop-price-content').text($(this).data('stop_price') || 'N/A');
                 $('#exit-date-content').text($(this).data('exit_date') || 'N/A');
                 $('#percentage-max-risk-content').text($(this).data('percentage_max_risk') || 'N/A');
-                $('#percentage-max-reward-content').text($(this).data('percentage_max_reward') || 'N/A');
+                $('#percentage-max-reward-content').text($(this).data('percentage_max_profit') || 'N/A');
                 $('#overlay').show(); // Show the overlay
                 $('#dialog').show(); // Show the dialog
             });

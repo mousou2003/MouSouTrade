@@ -16,31 +16,31 @@ SPREAD_TYPE = {
 }
 
 class SpreadDataModel(BaseModel):
-    datetime: Optional[datetime.datetime]
+    datetime: Optional[date] = None
     strategy: Optional[str]
     underlying_ticker: Optional[str]
-    previous_close: Optional[float]
-    contract_type: Optional[str]
+    previous_close: Optional[float] = None
+    contract_type: Optional[str] = None
     direction: Optional[str]
-    distance_between_strikes: Optional[float]
-    short_contract: Optional[Dict[str, Any]]
-    long_contract: Optional[Dict[str, Any]]
-    contracts: Optional[List[Dict[str, Any]]]
-    daily_bars: Optional[List[Dict[str, Any]]]
-    client: Optional[str]
-    long_premium: Optional[Decimal]
-    short_premium: Optional[Decimal]
-    max_risk: Optional[float]
-    max_reward: Optional[float]
-    breakeven: Optional[float]
-    entry_price: Optional[float]
-    target_price: Optional[float]
-    stop_price: Optional[float]
-    expiration_date: Optional[date]
-    second_leg_depth: Optional[int]
-    exit_date: Optional[date]
+    distance_between_strikes: Optional[float] = None
+    short_contract: Optional[Dict[str, Any]] = None
+    long_contract: Optional[Dict[str, Any]] = None
+    contracts: Optional[List[Dict[str, Any]]] = None
+    daily_bars: Optional[List[Dict[str, Any]]] = None
+    client: Optional[str] = None
+    long_premium: Optional[Decimal] = None
+    short_premium: Optional[Decimal] = None
+    max_risk: Optional[float] = None
+    max_reward: Optional[float] = None
+    breakeven: Optional[float] = None
+    entry_price: Optional[float] = None
+    target_price: Optional[float] = None
+    stop_price: Optional[float] = None
+    expiration_date: Optional[date] = None
+    second_leg_depth: Optional[int] = None
+    exit_date: Optional[date] = None
     percentage_max_risk: Optional[Decimal] = None
-    percentage_max_reward: Optional[Decimal] = None
+    percentage_max_profit: Optional[Decimal] = None
 
     @classmethod
     def from_dynamodb(cls, record: Dict[str, Any]):
@@ -70,7 +70,7 @@ class SpreadDataModel(BaseModel):
             second_leg_depth=int(float(record.get('second_leg_depth', 0))),  # Convert to float first, then to int
             exit_date=record.get('exit_date'),
             percentage_max_risk=Decimal(record.get('percentage_max_risk', 0)),
-            percentage_max_reward=Decimal(record.get('percentage_max_reward', 0))
+            percentage_max_profit=Decimal(record.get('percentage_max_profit', 0))
         )
 
     def to_dict(self, exclude=None):
