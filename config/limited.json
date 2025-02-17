@@ -1,7 +1,7 @@
 [
     {
-        "Ticker": "GLD",
-        "Description": "SPDR GOLD SHARES",
+        "Ticker": "NFLX",
+        "Description": "streaming service",
         "Last": 174.41,
         "% Chg": 0.25,
         "Volume": "4,075,638",

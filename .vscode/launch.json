@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["config\\Portfolio_US_Positions_Jan-21-2025.json"],
+            "args": ["config\\limited.json"],
             "env": {
                 "PYTHONPATH": "${workspaceFolder}",
                 "DYNAMODB_ENDPOINT_URL":"http://localhost:8000",
