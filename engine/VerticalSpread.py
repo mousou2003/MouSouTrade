@@ -212,15 +212,11 @@ class CreditSpread(VerticalSpread):
 
     def calculate_percentage_max_risk(self):
         """Calculates the percentage of max risk based on the net premium."""
-        if self.max_risk is not None and self.get_net_premium() != 0:
-            return (self.max_risk / self.get_net_premium()) * 100
-        return 0
-    
+        return (self.get_max_risk() / self.get_net_premium()) * 100
+
     def calculate_percentage_max_profit(self):
         """Calculates the percentage of max reward based on the net premium."""
-        if self.max_reward is not None and self.get_net_premium() != 0:
-            return (self.max_reward / self.get_net_premium()) * 100
-        return 0
+        return (self.get_max_reward()/self.get_max_risk()) * 100
 
 class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
@@ -248,12 +244,8 @@ class DebitSpread(VerticalSpread):
 
     def calculate_percentage_max_risk(self):
         """Calculates the percentage of max risk based on the net premium."""
-        if self.max_risk is not None and self.get_net_premium() != 0:
-            return (self.max_risk / self.get_net_premium()) * 100
-        return 0.0
+        return (self.get_max_risk() / self.get_net_premium()) * 100
 
     def calculate_percentage_max_profit(self):
         """Calculates the percentage of max reward based on the net premium."""
-        if self.max_reward is not None and self.get_net_premium() != 0:
-            return (self.max_reward / self.get_net_premium()) * 100
-        return 0.0
+        return (self.get_max_reward()/self.get_max_risk()) * 100
