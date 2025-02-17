@@ -1,10 +1,10 @@
 from flask import Flask, render_template, jsonify
 import boto3
 from botocore.exceptions import ClientError
-from decimal import Decimal
 import os
 import signal
 import sys
+from engine.data_model import SpreadDataModel  # Import the data model
 
 app = Flask(__name__)
 
@@ -35,16 +35,6 @@ dynamodb = boto3.resource(
 table_name = os.getenv('MOUSOUTRADE_STAGE')
 table = dynamodb.Table(table_name)
 
-def convert_decimals(obj):
-    """Helper function to convert Decimal types to float."""
-    if isinstance(obj, Decimal):
-        return float(obj)
-    elif isinstance(obj, list):
-        return [convert_decimals(x) for x in obj]
-    elif isinstance(obj, dict):
-        return {k: convert_decimals(v) for k, v in obj.items()}
-    return obj
-
 def get_all_items():
     print("Fetching all items from the DynamoDB table.")
     try:
@@ -65,8 +55,9 @@ def index():
 def get_data():
     records = get_all_items()
     try:
-        records = convert_decimals(records)
-        return jsonify(records)
+        # Ensure data structure matches SpreadDataModel and provide default values
+        validated_records = [SpreadDataModel.from_dynamodb(record).to_dict() for record in records]
+        return jsonify(validated_records)
     except Exception as e:
         print(f"Error converting records: {e}")
         return jsonify([])

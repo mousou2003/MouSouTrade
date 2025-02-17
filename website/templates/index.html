@@ -108,28 +108,22 @@
                 $('#data-table tbody').empty(); // Clear previous data
 
                 const filterExitDate = $('#filter-exit-date').is(':checked');
-                const filteredData = filterExitDate ? data.filter(item => item.exit_date_str) : data;
+                const filteredData = filterExitDate ? data.filter(item => item.exit_date) : data;
 
                 $.each(filteredData, function(index, item) {
                     let row = $('<tr>'); // Variable 'row' is used here
                     row.append(`<td>${item.underlying_ticker || 'N/A'}</td>`);
-                    const optionData =item.option; // Get the option string from data attribute
-                    let optionContent = {};
-                    let optionHtml = ``;
-                    try {
-                        optionContent = JSON.parse(item.option || '{}');
-                        for (const key in optionContent) {
-                            optionHtml += `<strong>${key.charAt(0).toUpperCase() + key.slice(1)}:</strong> ${optionContent[key]}<br>`;
-                        }
-
-                    } catch (e) {
-                        console.error("Error parsing option JSON:", e);
-                        optionHtml = 'N/A'; // Handle parsing errors gracefully
+                    
+                    let optionHtml = '';
+                    if (item.short_contract && item.long_contract) {
+                        optionHtml = `Short: ${item.short_contract.ticker} (${item.short_contract.strike_price})<br>
+                                      Long: ${item.long_contract.ticker} (${item.long_contract.strike_price})`;
+                    } else {
+                        optionHtml = 'N/A';
                     }
                     row.append(`<td>${optionHtml}</td>`);
                     
                     // Add a button to view the details
-                    // Correctly set data attributes using individual fields from the item object.
                     const detailsButton = $(`<td >
                                         <button class="view-description" 
                                                 data-short_premium="${item.short_premium || 'N/A'}" 
@@ -140,7 +134,7 @@
                                                 data-entry_price="${item.entry_price || 'N/A'}" 
                                                 data-target_price="${item.target_price || 'N/A'}" 
                                                 data-stop_price="${item.stop_price || 'N/A'}" 
-                                                data-exit_date_str="${item.exit_date_str || 'N/A'}" 
+                                                data-exit_date="${item.exit_date || 'N/A'}" 
                                                 data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
                                                 data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
                                                 data-description="${item.description || 'N/A'}">Details</button>
@@ -155,8 +149,8 @@
                 const item = $(this).data('item');
 
                 // Set the content in the dialog
-                $('#description-content').text( $(this).data('description')); // Set the description text
-                $('#short-contract-content').text( $(this).data('short_contract')); // Set the short contract text
+                $('#description-content').text($(this).data('description')); // Set the description text
+                $('#short-contract-content').text($(this).data('short_contract')); // Set the short contract text
                 $('#long-contract-content').text($(this).data('long_contract')); // Set the long contract text
                 $('#credit-content').text($(this).data('short_premium') || 'N/A');
                 $('#debit-content').text($(this).data('long_premium') || 'N/A');
@@ -166,7 +160,7 @@
                 $('#entry-price-content').text($(this).data('entry_price') || 'N/A');
                 $('#target-price-content').text($(this).data('target_price') || 'N/A');
                 $('#stop-price-content').text($(this).data('stop_price') || 'N/A');
-                $('#exit-date-content').text($(this).data('exit_date_str') || 'N/A');
+                $('#exit-date-content').text($(this).data('exit_date') || 'N/A');
                 $('#overlay').show(); // Show the overlay
                 $('#dialog').show(); // Show the dialog
             });
@@ -182,10 +176,10 @@
                 }).get();
 
                 const filteredData = previousData.filter(item => {
-                        return (
-                            (item.underlying_ticker || '').toLowerCase().includes(filters[0]) &&
-                            (JSON.stringify(item.option).toLowerCase()).includes(filters[1])
-                        );
+                    return (
+                        (item.underlying_ticker || '').toLowerCase().includes(filters[0]) &&
+                        (JSON.stringify(item.option).toLowerCase()).includes(filters[1])
+                    );
                 });
                 renderTable(filteredData);
             });
@@ -194,7 +188,7 @@
                 renderTable(previousData); // Re-render the table when the checkbox state changes
             });
 
-        refreshData();
+            refreshData();
         });
     </script>
 </body>

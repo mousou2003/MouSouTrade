@@ -5,22 +5,28 @@ from engine.Options import Options
 import logging
 import datetime
 import operator
+from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
 class VerticalSpread(SpreadDataModel):
     """Base class for vertical spread calculations (credit and debit)."""
-    MAX_STRIKES = 20  # Maximum number of strikes to consider
-    MIN_DELTA = 0.26  # Minimum absolute delta for a contract to be considered
-
+    MAX_STRIKES: ClassVar[int] = 20  # Maximum number of strikes to consider
+    MIN_DELTA: ClassVar[float] = 0.26  # Minimum absolute delta for a contract to be considered
     def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
+        super().__init__(datetime=None, strategy=strategy, underlying_ticker=underlying_ticker, 
+                          previous_close=previous_close, contract_type=None, direction=direction, 
+                          distance_between_strikes=None, short_contract=None, long_contract=None, 
+                          contracts=None, daily_bars=None, client=None, long_premium=None, short_premium=None, 
+                          max_risk=None, max_reward=None, breakeven=None, entry_price=None, target_price=None, 
+                          stop_price=None, expiration_date=None, second_leg_depth=None, exit_date=None)
+        
         """Initializes VerticalSpread with market data."""
         logger.info("Processing %s", underlying_ticker)
         self.underlying_ticker = underlying_ticker
         self.previous_close = previous_close if previous_close is not None else PolygonStocksClient().get_previous_stock_close(self.underlying_ticker)
         logger.info("%s last close price :%s", self.underlying_ticker, self.previous_close)
         self.contract_type = SPREAD_TYPE[strategy][direction]
-        self.order = self.get_order(strategy, direction)
         self.direction = direction
         self.strategy = strategy
         self.second_leg_depth = 0
@@ -39,10 +45,10 @@ class VerticalSpread(SpreadDataModel):
             logger.warning(f"Division by zero calculating delta for {self.underlying_ticker}.")
             return 0
 
-    def match_option(self, date, expiration_date_gte, expiration_date_lte):
+    def match_option(self, date):
         """Finds suitable short and long options for a vertical spread."""
         self.second_leg_depth = 0
-        first_leg_contract = None  # First leg (e.g., short contract)
+        first_leg_contract = None
         first_leg_premium = None
         previous_premium = None
         previous_contract = None
@@ -51,10 +57,10 @@ class VerticalSpread(SpreadDataModel):
         try:
             self.contracts = Options().get_option_contracts(
                 underlying_ticker=self.underlying_ticker,
-                expiration_date_gte=expiration_date_gte,
-                expiration_date_lte=expiration_date_lte,
+                expiration_date_gte=self.expiration_date,
+                expiration_date_lte=self.expiration_date,
                 contract_type=self.contract_type,
-                order=self.order
+                order=self.get_order(self.strategy, self.direction)
             )
 
             for contract in self.contracts:
@@ -119,7 +125,7 @@ class VerticalSpread(SpreadDataModel):
                                 self.entry_price = self.get_close_price()
                                 self.target_price = self.get_target_price()
                                 self.stop_price = self.get_stop_price()
-                                self.exit_date_str = self.get_exit_date().strftime('%Y-%m-%d')
+                                self.exit_date = self.get_exit_date()
                                 break
 
                     previous_premium = premium
@@ -159,7 +165,7 @@ class VerticalSpread(SpreadDataModel):
         return f"Sell {self.get_short()['ticker']}, buy {self.get_long()['ticker']}; " \
             f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
             f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
-            f"stop loss at {self.stop_price:.2f} and before {self.exit_date_str}"
+            f"stop loss at {self.stop_price:.2f} and before {self.exit_date}"
 
     def get_max_reward(self):
         pass
@@ -178,29 +184,10 @@ class VerticalSpread(SpreadDataModel):
 
 
 class CreditSpread(VerticalSpread):
-    ideal_expiration = 45
+    ideal_expiration: ClassVar[int] = 45
 
     def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
         super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, previous_close=previous_close)
-        self.option = None
-        self.description = None
-
-    def match_option(self, date=None):
-        if date:
-            result = super().match_option(date, expiration_date_gte=date, expiration_date_lte=date)
-            if result:
-                self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
-                self.description = self.get_plain_english_result()
-            return result
-        else:
-            expiration_date = datetime.date.today()
-            result = super().match_option(expiration_date, expiration_date, expiration_date_gte=expiration_date + datetime.timedelta(days=self.ideal_expiration - 4),
-                                       expiration_date_lte=expiration_date + datetime.timedelta(days=self.ideal_expiration + 2))
-            if result:
-                date = datetime.date.today() + datetime.timedelta(days=self.ideal_expiration)
-                self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
-                self.description = self.get_plain_english_result()
-            return result
 
     def get_max_reward(self):
         return self.get_net_premium()
@@ -222,29 +209,10 @@ class CreditSpread(VerticalSpread):
 
 
 class DebitSpread(VerticalSpread):
-    ideal_expiration = 45
+    ideal_expiration: ClassVar[int] = 45
 
     def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
         super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, previous_close=previous_close)
-        self.option = None
-        self.description = None
-
-    def match_option(self, date=None):
-        if date:
-            result = super().match_option(date, expiration_date_gte=date, expiration_date_lte=date)
-            if result:
-                self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
-                self.description = self.get_plain_english_result()
-            return result
-        else:
-            expiration_date = datetime.date.today()
-            result = super().match_option(expiration_date, expiration_date_gte=expiration_date + datetime.timedelta(days=self.ideal_expiration - 4),
-                                       expiration_date_lte=expiration_date + datetime.timedelta(days=self.ideal_expiration + 2))
-            if result:
-                date = datetime.date.today() + datetime.timedelta(days=self.ideal_expiration)
-                self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
-                self.description = self.get_plain_english_result()
-            return result
 
     def get_max_reward(self):
         return self.distance_between_strikes + self.get_net_premium()

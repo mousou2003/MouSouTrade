@@ -67,8 +67,7 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
                     continue
 
                 logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
-
-                matched = spread.match_option(date=target_expiration_date)
+                matched = spread.match_option(date = target_expiration_date)
                 if matched:
                     merged_json = {**key, **{"description": spread.get_plain_english_result(), **spread.to_dict()}}
                     logger.debug(merged_json)
