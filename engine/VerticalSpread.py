@@ -106,9 +106,6 @@ class VerticalSpread(SpreadDataModel):
                                     self.long_contract = first_leg_contract
                                     self.short_contract = contract
                                     self.short_premium = premium
-                                else:
-                                    # Handle other combinations as needed
-                                    logger.warning("Unsupported strategy and direction combination.")
 
                                 logger.info("Assigned LONG contract: %s for a premium of %.5f",
                                             self.long_contract['ticker'], self.long_premium)
@@ -121,8 +118,7 @@ class VerticalSpread(SpreadDataModel):
                                 self.target_price = self.get_target_price()
                                 self.stop_price = self.get_stop_price()
                                 self.exit_date = self.get_exit_date()
-                                self.percentage_max_risk = self.calculate_percentage_max_risk()
-                                self.percentage_max_profit = self.calculate_percentage_max_profit()
+                                self.description = self.get_description()
                                 break
 
                     previous_premium = premium
@@ -159,7 +155,7 @@ class VerticalSpread(SpreadDataModel):
         data = super().to_dict()
         return data
 
-    def get_plain_english_result(self):
+    def get_description(self):
         return f"Sell {self.get_short()['ticker']}, buy {self.get_long()['ticker']}; " \
             f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
             f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
@@ -178,12 +174,6 @@ class VerticalSpread(SpreadDataModel):
         pass
 
     def get_stop_price(self):
-        pass
-
-    def calculate_percentage_max_risk(self):
-        pass
-
-    def calculate_percentage_max_profit(self):
         pass
 
 class CreditSpread(VerticalSpread):
@@ -210,14 +200,6 @@ class CreditSpread(VerticalSpread):
         target_stop = (self.get_max_risk() / 2)
         return self.previous_close - (target_stop if self.direction == BULLISH else -target_stop)
 
-    def calculate_percentage_max_risk(self):
-        """Calculates the percentage of max risk based on the net premium."""
-        return (self.get_max_risk() / self.get_net_premium()) * 100
-
-    def calculate_percentage_max_profit(self):
-        """Calculates the percentage of max reward based on the net premium."""
-        return (self.get_max_reward()/self.get_max_risk()) * 100
-
 class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
@@ -241,11 +223,3 @@ class DebitSpread(VerticalSpread):
     def get_stop_price(self):
         target_stop = (self.get_max_risk() / 2)
         return self.previous_close - (target_stop if self.direction == BULLISH else -target_stop)
-
-    def calculate_percentage_max_risk(self):
-        """Calculates the percentage of max risk based on the net premium."""
-        return (self.get_max_risk() / self.get_net_premium()) * 100
-
-    def calculate_percentage_max_profit(self):
-        """Calculates the percentage of max reward based on the net premium."""
-        return (self.get_max_reward()/self.get_max_risk()) * 100

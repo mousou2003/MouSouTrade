@@ -3,38 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Database Records</title>
+    <title>Souag Investment</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 8px;
-            text-align: left;
-            border: 1px solid #ddd;
-        }
         .filter-input {
             width: 100%;
             box-sizing: border-box;
         }
-        #dialog {
-            display: none; /* Initially hidden */
+        #dialog, #overlay {
+            display: none;
             position: fixed;
+            z-index: 1000;
+        }
+        #dialog {
             left: 50%;
             top: 50%;
             transform: translate(-50%, -50%);
-            z-index: 1000;
             background: white;
             padding: 20px;
             border: 2px solid #ccc;
             box-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
         #overlay {
-            display: none; /* Initially hidden */
-            position: fixed;
             top: 0;
             left: 0;
             width: 100%;
@@ -42,49 +32,91 @@
             background: rgba(0,0,0,0.5);
             z-index: 999;
         }
+        .record {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .record-header {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .record-details {
+            margin-left: 10px;
+            display: inline-block;
+            vertical-align: top;
+            width: 100%;
+        }
+        .data-container {
+            display: flex;
+        }
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .column {
+            flex: 1;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        #main-data-container {
+            flex: 2;
+        }
+        #details-container {
+            flex: 1;
+            padding-left: 20px;
+            display: none;
+        }
+        body {
+            font-size: 120%;
+        }
     </style>
 </head>
 <body>
-    <h1>Records from DynamoDB</h1>
+    <h1>Moustrade vertical spread analysis</h1>
     <div id="filter-section">
         <input type="text" class="filter-input" placeholder="Filter Ticker" />
-        <input type="text" class="filter-input" placeholder="Filter Option" />
         <label>
             <input type="checkbox" id="filter-exit-date" checked /> Show only records with a spread strategy
         </label>
     </div>
     
-    <table id="data-table" border="1">
-        <thead>
-            <tr>
-                <th>Ticker</th>
-                <th>Option</th>
-                <th>Details</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-
-    <div id="overlay"></div>
-    <div id="dialog">
-        <h2>Details</h2>
-        <dl>
-            <dt>Credit:</dt> <dd id="credit-content"></dd>
-            <dt>Debit:</dt> <dd id="debit-content"></dd>
-            <dt>Max Risk:</dt> <dd id="max-risk-content"></dd>
-            <dt>Max Reward:</dt> <dd id="max-reward-content"></dd>
-            <dt>Breakeven:</dt> <dd id="breakeven-content"></dd>
-            <dt>Entry Price:</dt> <dd id="entry-price-content"></dd>
-            <dt>Target Price:</dt> <dd id="target-price-content"></dd>
-            <dt>Stop Price:</dt> <dd id="stop-price-content"></dd>
-            <dt>Exit Date:</dt> <dd id="exit-date-content"></dd>
-            <dt>Short Contract:</dt> <dd id="short-contract-content"></dd>
-            <dt>Long Contract:</dt> <dd id="long-contract-content"></dd>
-            <dt>Percentage Max Risk:</dt> <dd id="percentage-max-risk-content"></dd>
-            <dt>Percentage Max Reward:</dt> <dd id="percentage-max-reward-content"></dd>
-            <dt>Description:</dt> <dd id="description-content"></dd>
-        </dl>
-        <button id="close-dialog">Close</button>
+    <div class="data-container">
+        <div id="main-data-container">
+            <table id="data-table">
+                <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Strategy</th>
+                        <th>Direction</th>
+                        <th>Max Risk</th>
+                        <th>Max Profit</th>
+                        <th>Return</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="main-data-container"></tbody>
+            </table>
+        </div>
+        <div id="details-container">
+            <h2>Details</h2>
+            <ul>
+                <li><strong>Credit:</strong> <span id="credit-content"></span></li>
+                <li><strong>Debit:</strong> <span id="debit-content"></span></li>
+                <li><strong>Max Risk:</strong> <span id="max-risk-content"></span></li>
+                <li><strong>Max Reward:</strong> <span id="max-reward-content"></span></li>
+                <li><strong>Breakeven:</strong> <span id="breakeven-content"></span></li>
+                <li><strong>Entry Price:</strong> <span id="entry-price-content"></span></li>
+                <li><strong>Target Price:</strong> <span id="target-price-content"></span></li>
+                <li><strong>Stop Price:</strong> <span id="stop-price-content"></span></li>
+                <li><strong>Exit Date:</strong> <span id="exit-date-content"></span></li>
+                <li><strong>Short Contract:</strong> <span id="short-contract-content"></span></li>
+                <li><strong>Long Contract:</strong> <span id="long-contract-content"></span></li>
+                <li><strong>Description:</strong> <span id="description-content"></span></li>
+            </ul>
+        </div>
     </div>
 
     <script>
@@ -97,8 +129,8 @@
                     type: 'GET',
                     dataType: 'json',
                     success: function(data) {
-                        previousData = data; // Store the original data for filtering
-                        renderTable(data); // Render the initial table
+                        previousData = data;
+                        renderData(data);
                     },
                     error: function(error) {
                         console.error("Error loading data:", error);
@@ -106,60 +138,56 @@
                 });
             }
 
-            function renderTable(data) {
-                $('#data-table tbody').empty(); // Clear previous data
+            function renderData(data) {
+                $('#main-data-container tbody').empty();
 
                 const filterExitDate = $('#filter-exit-date').is(':checked');
                 const filteredData = filterExitDate ? data.filter(item => item.exit_date) : data;
 
-                $.each(filteredData, function(index, item) {
-                    let row = $('<tr>'); // Variable 'row' is used here
-                    row.append(`<td>${item.underlying_ticker || 'N/A'}</td>`);
-                    
-                    let optionHtml = '';
-                    if (item.short_contract && item.long_contract) {
-                        optionHtml = `Strategy: ${item.strategy}<br>
-                                      Direction: ${item.direction}<br>
-                                      Short: ${item.short_contract.strike_price}<br>
-                                      Long: ${item.long_contract.strike_price}<br>
-                                      Max Risk: ${item.percentage_max_risk}%<br>
-                                      Max Reward: ${item.percentage_max_profit}%`;
-                    } else {
-                        optionHtml = 'N/A';
+                const groupedData = filteredData.reduce((acc, item) => {
+                    if (!acc[item.underlying_ticker]) {
+                        acc[item.underlying_ticker] = [];
                     }
-                    row.append(`<td>${optionHtml}</td>`);
-                    
-                    // Add a button to view the details
-                    const detailsButton = $(`<td >
-                                        <button class="view-description" 
-                                                data-short_premium="${item.short_premium || 'N/A'}" 
-                                                data-long_premium="${item.long_premium || 'N/A'}" 
-                                                data-max_risk="${item.max_risk || 'N/A'}" 
-                                                data-max_reward="${item.max_reward || 'N/A'}" 
-                                                data-breakeven="${item.breakeven || 'N/A'}" 
-                                                data-entry_price="${item.entry_price || 'N/A'}" 
-                                                data-target_price="${item.target_price || 'N/A'}" 
-                                                data-stop_price="${item.stop_price || 'N/A'}" 
-                                                data-exit_date="${item.exit_date || 'N/A'}" 
-                                                data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
-                                                data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
-                                                data-percentage_max_risk="${item.percentage_max_risk || 'N/A'}"
-                                                data-percentage_max_reward="${item.percentage_max_profit || 'N/A'}"
-                                                data-description="${item.description || 'N/A'}">Details</button>
-                                    </td>`);
-                    row.append(detailsButton);
-                    $('#data-table tbody').append(row); // 'row' is appended to the table here
+                    acc[item.underlying_ticker].push(item);
+                    return acc;
+                }, {});
+
+                $.each(groupedData, function(ticker, items) {
+                    items.forEach((item) => {
+                        let row = $('<tr>');
+                        row.append(`<td>${ticker || 'N/A'}</td>`);
+                        row.append(`<td>${item.strategy}</td>`);
+                        row.append(`<td>${item.direction}</td>`);
+                        row.append(`<td>$${(item.max_risk * 100).toFixed(2)}</td>`);
+                        row.append(`<td>$${(item.max_reward * 100).toFixed(2)}</td>`);
+                        row.append(`<td>${((item.max_reward / item.max_risk) * 100).toFixed(2)}%</td>`);
+
+                        const detailsButton = $(`<button class="view-description" 
+                            data-short_premium="${item.short_premium || 'N/A'}" 
+                            data-long_premium="${item.long_premium || 'N/A'}" 
+                            data-max_risk="${item.max_risk || 'N/A'}" 
+                            data-max_reward="${item.max_reward || 'N/A'}" 
+                            data-breakeven="${item.breakeven || 'N/A'}" 
+                            data-entry_price="${item.entry_price || 'N/A'}" 
+                            data-target_price="${item.target_price || 'N/A'}" 
+                            data-stop_price="${item.stop_price || 'N/A'}" 
+                            data-exit_date="${item.exit_date || 'N/A'}" 
+                            data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
+                            data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
+                            data-percentage_max_risk="${item.percentage_max_risk || 'N/A'}"
+                            data-percentage_max_reward="${item.percentage_max_profit || 'N/A'}"
+                            data-description="${item.description || 'N/A'}">Details</button>`);
+
+                        row.append($('<td>').append(detailsButton));
+                        $('#main-data-container tbody').append(row);
+                    });
                 });
             }
 
-            // Show details dialog
             $(document).on('click', '.view-description', function() {
-                const item = $(this).data('item');
-
-                // Set the content in the dialog
-                $('#description-content').text($(this).data('description')); // Set the description text
-                $('#short-contract-content').text($(this).data('short_contract')); // Set the short contract text
-                $('#long-contract-content').text($(this).data('long_contract')); // Set the long contract text
+                $('#description-content').text($(this).data('description'));
+                $('#short-contract-content').text($(this).data('short_contract'));
+                $('#long-contract-content').text($(this).data('long_contract'));
                 $('#credit-content').text($(this).data('short_premium') || 'N/A');
                 $('#debit-content').text($(this).data('long_premium') || 'N/A');
                 $('#max-risk-content').text($(this).data('max_risk') || 'N/A');
@@ -169,15 +197,11 @@
                 $('#target-price-content').text($(this).data('target_price') || 'N/A');
                 $('#stop-price-content').text($(this).data('stop_price') || 'N/A');
                 $('#exit-date-content').text($(this).data('exit_date') || 'N/A');
-                $('#percentage-max-risk-content').text($(this).data('percentage_max_risk') || 'N/A');
-                $('#percentage-max-reward-content').text($(this).data('percentage_max_profit') || 'N/A');
-                $('#overlay').show(); // Show the overlay
-                $('#dialog').show(); // Show the dialog
+                $('#details-container').show();
             });
-            // Close dialog
+
             $('#close-dialog').on('click', function() {
-                $('#overlay').hide(); // Hide the overlay
-                $('#dialog').hide(); // Hide the dialog
+                $('#details-container').hide();
             });
 
             $('.filter-input').on('keyup', function() {
@@ -187,19 +211,18 @@
 
                 const filteredData = previousData.filter(item => {
                     return (
-                        (item.underlying_ticker || '').toLowerCase().includes(filters[0]) &&
-                        (JSON.stringify(item.option).toLowerCase()).includes(filters[1])
+                        (item.underlying_ticker || '').toLowerCase().includes(filters[0])
                     );
                 });
-                renderTable(filteredData);
+                renderData(filteredData);
             });
 
             $('#filter-exit-date').on('change', function() {
-                renderTable(previousData); // Re-render the table when the checkbox state changes
+                renderData(previousData);
             });
 
             refreshData();
-            setInterval(refreshData, 5000); // Refresh data every 5 seconds
+            setInterval(refreshData, 5000);
         });
     </script>
 </body>

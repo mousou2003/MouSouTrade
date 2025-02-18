@@ -39,8 +39,7 @@ class SpreadDataModel(BaseModel):
     expiration_date: Optional[date] = None
     second_leg_depth: Optional[int] = None
     exit_date: Optional[date] = None
-    percentage_max_risk: Optional[Decimal] = None
-    percentage_max_profit: Optional[Decimal] = None
+    description: Optional[str] = None  # Add description field
 
     @classmethod
     def from_dynamodb(cls, record: Dict[str, Any]):
@@ -69,8 +68,7 @@ class SpreadDataModel(BaseModel):
             expiration_date=record.get('expiration_date'),
             second_leg_depth=int(float(record.get('second_leg_depth', 0))),  # Convert to float first, then to int
             exit_date=record.get('exit_date'),
-            percentage_max_risk=Decimal(record.get('percentage_max_risk', 0)),
-            percentage_max_profit=Decimal(record.get('percentage_max_profit', 0))
+            description=record.get('description', '')  # Add description field
         )
 
     def to_dict(self, exclude=None):
