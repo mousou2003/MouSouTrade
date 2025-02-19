@@ -7,6 +7,7 @@ import time
 import socket
 from requests import ReadTimeout
 from colorama import Fore
+from decimal import Decimal
 
 from marketdata_clients.PolygonClient import *
 from marketdata_clients.MarketDataClient import *
@@ -17,6 +18,10 @@ from engine.data_model import *
 from database.DynamoDB import DynamoDB
 
 logger = logging.getLogger(__name__)
+if os.getenv("DEBUG_MODE") != "true":
+    loglevel = logging.DEBUG
+else:
+    loglevel = logging.INFO
 logging.basicConfig(level=logging.INFO)
 
 # Set the logging level to WARNING to suppress DEBUG messages
@@ -47,41 +52,37 @@ def load_configuration_file(config_file):
     return stocks
 
 def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
-        ticker = stock.get('Ticker')
-        if not ticker:
-            raise KeyError('Ticker')
-        for direction in [BULLISH, BEARISH]:
-            for strategy in [CREDIT, DEBIT]:
-                spread_class = DebitSpread if strategy == DEBIT else CreditSpread
-                spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy,
-                                      previous_close=stock['close'])
+    ticker = stock.get('Ticker')
+    if not ticker:
+        raise KeyError('Ticker')
+    for direction in [BULLISH, BEARISH]:
+        for strategy in [CREDIT, DEBIT]:
+            spread_class = DebitSpread if strategy == DEBIT else CreditSpread
+            spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy,
+                                  previous_close=Decimal(stock['close']))
 
-                target_expiration_date = Options.get_following_third_friday()
-                key = {
-                    "ticker": ticker,
-                    "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), "direction": direction, "strategy": strategy}, default=str)
-                }
-                response = dynamodb.get_item(key=key)
-                if 'Item' in response:
-                    logger.info(f"Item already exists for {ticker} with key {key}. Skipping processing.")
-                    continue
+            target_expiration_date = Options.get_following_third_friday()
+            key = {
+                "ticker": ticker,
+                "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), "direction": direction, "strategy": strategy}, default=str)
+            }
 
-                logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
-                matched = spread.match_option(date = target_expiration_date)
-                if matched:
-                    merged_json = {**key, **{"description": spread.get_plain_english_result(), **spread.to_dict()}}
-                    logger.debug(merged_json)
-                else:
-                    merged_json = {**key, **{"description": f"No match for {ticker}"}, **spread.to_dict()}
-                    logger.debug(merged_json)
+            logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
+            matched = spread.match_option(date=target_expiration_date)
+            if matched:
+                merged_json = {**key, **{"description": spread.get_description(), **spread.to_dict()}}
+                logger.debug(merged_json)
+            else:
+                merged_json = {**key, **{"description": f"No match for {ticker}"}, **spread.to_dict()}
+                logger.debug(merged_json)
 
-                dynamodb.put_item(item=merged_json)
-                response = dynamodb.get_item(key=key)
-                if 'Item' in response:
-                    logger.info("Match %sfound, and stored in %s" % (("", key) if matched else ("not ", key)))
-                    logger.debug("Saved in table: %s" % response)
-                else:
-                    raise MarketDataStrikeNotFoundException(f"No item found for ticker {ticker}")
+            dynamodb.put_item(item=merged_json)
+            response = dynamodb.get_item(key=key)
+            if 'Item' in response:
+                logger.info("Match %sfound, and stored in %s" % (("", key) if matched else ("not ", key)))
+                logger.debug("Saved in table: %s" % response)
+            else:
+                raise MarketDataStrikeNotFoundException(f"No item found for ticker {ticker}")
 
 def wait_for_debugger(host, port, timeout=60):
     start_time = time.time()

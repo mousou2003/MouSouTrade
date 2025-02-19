@@ -11,7 +11,7 @@ CREDIT = 'credit'
 DEBIT = 'debit'
 DESC = 'desc'
 SPREAD_TYPE = {
-    CREDIT: {BULLISH: 'call', BEARISH: 'put'},
+    CREDIT: {BULLISH: 'put', BEARISH: 'call'},
     DEBIT: {BULLISH: 'call', BEARISH: 'put'}
 }
 
@@ -19,10 +19,10 @@ class SpreadDataModel(BaseModel):
     datetime: Optional[date] = None
     strategy: Optional[str]
     underlying_ticker: Optional[str]
-    previous_close: Optional[float] = None
+    previous_close: Optional[Decimal] = None
     contract_type: Optional[str] = None
     direction: Optional[str]
-    distance_between_strikes: Optional[float] = None
+    distance_between_strikes: Optional[Decimal] = None
     short_contract: Optional[Dict[str, Any]] = None
     long_contract: Optional[Dict[str, Any]] = None
     contracts: Optional[List[Dict[str, Any]]] = None
@@ -30,16 +30,17 @@ class SpreadDataModel(BaseModel):
     client: Optional[str] = None
     long_premium: Optional[Decimal] = None
     short_premium: Optional[Decimal] = None
-    max_risk: Optional[float] = None
-    max_reward: Optional[float] = None
-    breakeven: Optional[float] = None
-    entry_price: Optional[float] = None
-    target_price: Optional[float] = None
-    stop_price: Optional[float] = None
+    max_risk: Optional[Decimal] = None
+    max_reward: Optional[Decimal] = None
+    breakeven: Optional[Decimal] = None
+    entry_price: Optional[Decimal] = None
+    target_price: Optional[Decimal] = None
+    stop_price: Optional[Decimal] = None
     expiration_date: Optional[date] = None
     second_leg_depth: Optional[int] = None
     exit_date: Optional[date] = None
-    description: Optional[str] = None  # Add description field
+    description: Optional[str] = None
+    net_premium: Optional[Decimal] = None
 
     @classmethod
     def from_dynamodb(cls, record: Dict[str, Any]):
@@ -48,10 +49,10 @@ class SpreadDataModel(BaseModel):
             datetime=record.get('datetime'),
             strategy=record.get('strategy', ''),
             underlying_ticker=record.get('underlying_ticker', ''),
-            previous_close=float(record.get('previous_close', 0.0)),
+            previous_close=Decimal(record.get('previous_close', '0')),
             contract_type=record.get('contract_type', ''),
             direction=record.get('direction', ''),
-            distance_between_strikes=float(record.get('distance_between_strikes', 0.0)),
+            distance_between_strikes=Decimal(record.get('distance_between_strikes', '0')),
             short_contract=record.get('short_contract', {}),
             long_contract=record.get('long_contract', {}),
             contracts=record.get('contracts', []),
@@ -59,12 +60,12 @@ class SpreadDataModel(BaseModel):
             client=record.get('client', ''),
             long_premium=Decimal(record.get('long_premium', '0')),
             short_premium=Decimal(record.get('short_premium', '0')),
-            max_risk=float(record.get('max_risk', 0.0)),
-            max_reward=float(record.get('max_reward', 0.0)),
-            breakeven=float(record.get('breakeven', 0.0)),
-            entry_price=float(record.get('entry_price', 0.0)),
-            target_price=float(record.get('target_price', 0.0)),
-            stop_price=float(record.get('stop_price', 0.0)),
+            max_risk=Decimal(record.get('max_risk', '0')),
+            max_reward=Decimal(record.get('max_reward', '0')),
+            breakeven=Decimal(record.get('breakeven', '0')),
+            entry_price=Decimal(record.get('entry_price', '0')),
+            target_price=Decimal(record.get('target_price', '0')),
+            stop_price=Decimal(record.get('stop_price', '0')),
             expiration_date=record.get('expiration_date'),
             second_leg_depth=int(float(record.get('second_leg_depth', 0))),  # Convert to float first, then to int
             exit_date=record.get('exit_date'),

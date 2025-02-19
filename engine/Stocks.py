@@ -1,26 +1,31 @@
 import datetime
 import json
+from decimal import Decimal
 
 from marketdata_clients.PolygonStocksClient import PolygonStocksClient
 from marketdata_clients.MarketDataClient import MarketDataException
 
 class Stocks:
     def __init__(self, date=None):
-        self.date = date if date else self.get_previous_market_open_day()
-        self.stocks_data = {}
         self.instance = PolygonStocksClient()
-        response = self.instance.client.get_grouped_daily_bars(self.date)
-        if 'results' in response and response['results']:
-            self.populate_daily_bars(response['results'])
+        self.date = date if date else self.get_previous_market_open_day(date)
+        self.stocks_data = {}
+        for _ in range(6):
+            response = self.instance.client.get_grouped_daily_bars(self.date)
+            if 'results' in response and response['results']:
+                self.populate_daily_bars(response['results'])
+                break
+            else:
+                self.date = self.get_previous_market_open_day(self.date)
         else:
-            raise MarketDataException(f"No results found for date {self.date}")
+            raise MarketDataException(f"No results found for the past 7 days up to date {self.date}")
 
-    def get_previous_market_open_day(self):
-        today = datetime.datetime.now()
+    def get_previous_market_open_day(self, date=None):
+        date = date if date else datetime.datetime.now()
         while True:
-            today -= datetime.timedelta(days=1)
-            if today.weekday() < 5:  # Monday to Friday are considered market open days
-                return today.strftime('%Y-%m-%d')
+            date -= datetime.timedelta(days=1)
+            if date.weekday() < 5:  # Monday to Friday are considered market open days
+                return date
 
     def populate_daily_bars(self, grouped_daily_bars):
         for bar in grouped_daily_bars:
@@ -28,11 +33,11 @@ class Stocks:
             date = datetime.datetime.fromtimestamp(bar['t'] / 1000).strftime('%Y-%m-%d')
             daily_bar = {
                 "date": date,
-                "open": bar['o'],
-                "high": bar['h'],
-                "low": bar['l'],
-                "close": bar['c'],
-                "volume": bar['v']
+                "open": Decimal(bar['o']),
+                "high": Decimal(bar['h']),
+                "low": Decimal(bar['l']),
+                "close": Decimal(bar['c']),
+                "volume": Decimal(bar['v'])
             }
             if ticker not in self.stocks_data:
                 self.stocks_data[ticker] = {}

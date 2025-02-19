@@ -7,16 +7,21 @@ logger = logging.getLogger(__name__)
 
 class Options:
     """Helper class for calculating option expiration dates and fetching option contracts."""
-    def __init__(self):
+    def __init__(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
         self.client = PolygonOptionsClient()
+        self.underlying_ticker = underlying_ticker
+        self.expiration_date_gte = expiration_date_gte
+        self.expiration_date_lte = expiration_date_lte
+        self.contract_type = contract_type
+        self.order = order
 
-    def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
+    def get_option_contracts(self):
         return self.client.get_option_contracts(
-            underlying_ticker=underlying_ticker,
-            expiration_date_gte=expiration_date_gte,
-            expiration_date_lte=expiration_date_lte,
-            contract_type=contract_type,
-            order=order
+            underlying_ticker=self.underlying_ticker,
+            expiration_date_gte=self.expiration_date_gte,
+            expiration_date_lte=self.expiration_date_lte,
+            contract_type=self.contract_type,
+            order=self.order
         )
 
     def get_option_previous_close(self, ticker):

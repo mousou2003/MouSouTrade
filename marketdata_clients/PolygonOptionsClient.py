@@ -55,12 +55,14 @@ class PolygonOptionsClient(PolygonClient):
                 expiration_date_gte=expiration_date_gte,
                 contract_type=contract_type,
                 order=order,
-                sort='strike_price'
+                sort='strike_price',
+                all_pages=True
             )
-            if 'results' not in contracts or not contracts['results']:
+            #if 'results' not in contracts or not contracts['results']:
+            if len(contracts) == 0:
                 logger.warning(f"No option contracts found for {underlying_ticker}")
                 return []
-            return contracts['results']
+            return contracts
         except KeyError as err:
             logger.warning(f"No option contracts found for {underlying_ticker}: {err}")
             return []
