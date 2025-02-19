@@ -27,6 +27,15 @@ class Options:
     def get_option_previous_close(self, ticker):
         return self.client.get_option_previous_close(ticker)
 
+    def get_snapshot(
+        self,
+        option_symbol: str = None
+    ):
+        return self.client.get_snapshot(
+            underlying_symbol=self.underlying_ticker,
+            option_symbol=option_symbol
+        )
+    
     @staticmethod
     def get_third_friday_of_month(year, month):
         """Calculates the date of the third Friday of a given month and year."""
@@ -36,6 +45,15 @@ class Options:
                         day.weekday() == calendar.FRIDAY and
                         day.month == month][2]
         return third_friday
+
+    @staticmethod
+    def get_next_friday(date):
+        """Calculates the date of the next Friday after a given date."""
+        days_ahead = 4 - date.weekday()  # Friday is the 4th day of the week (0-indexed)
+        if days_ahead <= 0:  # Target day already passed this week
+            days_ahead += 7
+        next_friday = date + datetime.timedelta(days=days_ahead)
+        return next_friday
 
     @staticmethod
     def get_third_friday_of_current_month():
@@ -52,3 +70,4 @@ class Options:
         year = today.year
         month = today.month + 1
         return Options.get_third_friday_of_month(year, month)
+    

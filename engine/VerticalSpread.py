@@ -5,7 +5,7 @@ from engine.Options import Options
 import logging
 import datetime
 import operator
-from typing import ClassVar
+from typing import ClassVar, Optional
 from decimal import Decimal
 
 logger = logging.getLogger(__name__)
@@ -51,43 +51,48 @@ class VerticalSpread(SpreadDataModel):
             # First loop to search for the first_leg_contract
             first_leg_contract_position = 0
             first_leg_strike_price = Decimal(0.0)
+            premium: Optional[Decimal] = None
             for contract in self.contracts:
-                premium: Optional[Decimal] = None
                 first_leg_contract_position += 1
                 if self.get_search_op(self.strategy, self.direction)(Decimal(contract['strike_price']), self.previous_close):
                     try:
                         if self.direction == BEARISH and self.strategy == CREDIT:
-                            contract= self.contracts[first_leg_contract_position-2]
+                            contract = self.contracts[first_leg_contract_position - 2]
                             first_leg_contract_position -= 1
                         premium = options.get_option_previous_close(contract['ticker'])
-                    except MarketDataException as e:
-                        logger.warning(f"Error getting previous close for contract {contract['ticker']}: {e}")
-                        continue
-                    
-                    if first_leg_contract is None:
                         first_leg_contract = contract
                         first_leg_premium = premium
                         first_leg_strike_price = Decimal(contract['strike_price'])  # Store first leg strike price
                         logger.info("Staging FIRST LEG contract: %s for a premium of %.5f", first_leg_contract['ticker'], first_leg_premium)
                         break
-
+                    except MarketDataException as e:
+                        logger.debug(f"Error getting previous close for contract {contract}: {e}")
+                        continue
+                    
             if not first_leg_contract:
                 return False
 
-           
             # Second loop to search for the matching contract
-            for contract in reversed(self.contracts[:first_leg_contract_position-1]):
+            for contract in reversed(self.contracts[:first_leg_contract_position - 1]):
+                snapshot = None
                 try:
+                    snapshot = options.get_snapshot(option_symbol=contract['ticker'])
                     premium = options.get_option_previous_close(contract['ticker'])
+                    logger.debug(f"Snapshot for {contract['ticker']}: {snapshot}")
+                    #TODO: check why day is empty
+                    # premium = snapshot['day']['close']
                 except MarketDataException as e:
                     logger.warning(f"Error getting previous close for contract {contract['ticker']}: {e}")
+                    continue
+                except KeyError as e:
+                    logger.warning(f"KeyError accessing 'day' or 'close' in snapshot for {contract['ticker']}: {e}")
                     continue
 
                 if first_leg_contract['expiration_date'] != contract['expiration_date']:
                     logger.warning("Exit as we are going asymmetrical")
                     break
 
-                self.distance_between_strikes = Decimal(contract['strike_price']) - first_leg_strike_price
+                self.distance_between_strikes = Decimal(snapshot['details']['strike_price']) - first_leg_strike_price
                 self.net_premium = Decimal(first_leg_premium) - Decimal(premium)
                 relative_delta = abs(self.net_premium / self.distance_between_strikes)
 
@@ -96,6 +101,14 @@ class VerticalSpread(SpreadDataModel):
                     logger.warning("Delta is zero, skipping")
                     continue
                 if relative_delta >= self.MIN_DELTA:
+                    if abs(snapshot["greeks"]["delta"]) >= 0.5:
+                        logger.debug('Delta is less than 0.5, skipping')
+                        continue
+                    if abs(snapshot["greeks"]["delta"]) <= 0.7:
+                        logger.debug('Delta is greater than 0.7, good')
+                    if snapshot["open_interest"] < 100:
+                        logger.debug('Open Interest is less than 100, careful!')
+
                     logger.debug('Found a match!')
                     # Assign based on direction and strategy
                     if self.strategy == CREDIT:
@@ -130,7 +143,7 @@ class VerticalSpread(SpreadDataModel):
 
     def get_search_op(self, strategy, direction):
         """Returns the search operator (operator.ge or operator.le) based on strategy and direction.""" 
-        return {CREDIT: {BULLISH: operator.gt, BEARISH: operator.lt}, DEBIT: {BULLISH: operator.lt, BEARISH: operator.gt}}[strategy][direction]
+        return {CREDIT: {BULLISH: operator.ge, BEARISH: operator.le}, DEBIT: {BULLISH: operator.le, BEARISH: operator.ge}}[strategy][direction]
 
     def get_net_premium(self):
         return self.net_premium

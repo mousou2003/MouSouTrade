@@ -81,3 +81,33 @@ class PolygonOptionsClient(PolygonClient):
             return polygon.convert_option_symbol_formats(ticker, from_format=PolygonClient.CLIENT_NAME, to_format='tos')
         except Exception as err:
             raise MarketDataException(f"Failed to convert option symbol formats for {ticker}", err)
+        
+    def get_snapshot(
+        self,
+        underlying_symbol: str,
+        option_symbol: str = None):
+
+        all_pages: bool = False
+        max_pages: int = None
+        merge_all_pages: bool = True
+        verbose: bool = False
+        raw_page_responses: bool = False
+        raw_response: bool = False
+        self.wait_for_no_throttle()
+        try:
+            
+            response = self.client.get_snapshot(
+                underlying_symbol=underlying_symbol,
+                option_symbol=option_symbol,
+                all_pages=all_pages,
+                max_pages=max_pages,
+                merge_all_pages=merge_all_pages,
+                verbose=verbose,
+                raw_page_responses=raw_page_responses,
+                raw_response=raw_response,
+            )
+            if 'results' not in response or not response['results']:
+                raise KeyError()
+            return response['results']
+        except Exception as err:
+            raise MarketDataException(f"Failed to get snapshot for {option_symbol}", err)

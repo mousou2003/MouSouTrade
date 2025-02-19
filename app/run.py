@@ -29,7 +29,7 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-logging.getLogger('engine.VerticalSpread').setLevel(logging.WARNING)
+logging.getLogger('engine.VerticalSpread').setLevel(logging.INFO)
 
 class MissingEnvironmentVariableException(Exception):
     pass
@@ -55,13 +55,16 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
     ticker = stock.get('Ticker')
     if not ticker:
         raise KeyError('Ticker')
+    
+    ideal_expiration = datetime.datetime.today() + datetime.timedelta(weeks=6)    
+    target_expiration_date = Options.get_next_friday(ideal_expiration)
+
     for direction in [BULLISH, BEARISH]:
         for strategy in [CREDIT, DEBIT]:
             spread_class = DebitSpread if strategy == DEBIT else CreditSpread
             spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy,
                                   previous_close=Decimal(stock['close']))
-
-            target_expiration_date = Options.get_following_third_friday()
+            
             key = {
                 "ticker": ticker,
                 "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), "direction": direction, "strategy": strategy}, default=str)
