@@ -79,7 +79,7 @@
                         <th>Direction</th>
                         <th>Max Risk</th>
                         <th>Max Profit</th>
-                        <th>Return</th>
+                        <th>PoP</th>
                         <th>Details</th>
                     </tr>
                 </thead>
@@ -123,98 +123,115 @@
 
                 $.each(groupedData, function(ticker, items) {
                     items.forEach((item) => {
-                        let row = $('<tr>');
-                        row.append(`<td>${ticker || 'N/A'}</td>`);
-                        row.append(`<td>${item.strategy}</td>`);
-                        row.append(`<td>${item.direction}</td>`);
-                        row.append(`<td>$${(item.max_risk * 100).toFixed(2)}</td>`);
-                        row.append(`<td>$${(item.max_reward * 100).toFixed(2)}</td>`);
-                        row.append(`<td>${((item.max_reward / item.max_risk) * 100).toFixed(2)}%</td>`);
+                        try {
+                            let row = $('<tr>');
+                            row.append(`<td>${ticker || 'N/A'}</td>`);
+                            row.append(`<td>${item.strategy}</td>`);
+                            row.append(`<td>${item.direction}</td>`);
+                            row.append(`<td>$${(item.max_risk * 100).toFixed(2)}</td>`);
+                            row.append(`<td>$${(item.max_reward * 100).toFixed(2)}</td>`);
+                            const probabilityOfProfit = Number(item.probability_of_profit);
+                            row.append(`<td>${!isNaN(probabilityOfProfit) ? probabilityOfProfit.toFixed(2) : 'N/A'}%</td>`);
 
-                        const detailsButton = $(`<button class="view-description" 
-                            data-short_premium="${item.short_premium || 'N/A'}" 
-                            data-long_premium="${item.long_premium || 'N/A'}" 
-                            data-max_risk="${item.max_risk || 'N/A'}" 
-                            data-max_reward="${item.max_reward || 'N/A'}" 
-                            data-breakeven="${item.breakeven || 'N/A'}" 
-                            data-entry_price="${item.entry_price || 'N/A'}" 
-                            data-target_price="${item.target_price || 'N/A'}" 
-                            data-stop_price="${item.stop_price || 'N/A'}" 
-                            data-exit_date="${item.exit_date || 'N/A'}" 
-                            data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
-                            data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
-                            data-percentage_max_risk="${item.percentage_max_risk || 'N/A'}"
-                            data-percentage_max_reward="${item.percentage_max_profit || 'N/A'}"
-                            data-description="${item.description || 'N/A'}">Details</button>`);
+                            const detailsButton = $(`<button class="view-description" 
+                                data-short_premium="${item.short_premium || 'N/A'}" 
+                                data-long_premium="${item.long_premium || 'N/A'}" 
+                                data-max_risk="${item.max_risk || 'N/A'}" 
+                                data-max_reward="${item.max_reward || 'N/A'}" 
+                                data-breakeven="${item.breakeven || 'N/A'}" 
+                                data-entry_price="${item.entry_price || 'N/A'}" 
+                                data-target_price="${item.target_price || 'N/A'}" 
+                                data-stop_price="${item.stop_price || 'N/A'}" 
+                                data-exit_date="${item.exit_date || 'N/A'}" 
+                                data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
+                                data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
+                                data-percentage_max_risk="${item.percentage_max_risk || 'N/A'}"
+                                data-percentage_max_reward="${item.percentage_max_profit || 'N/A'}"
+                                data-description="${item.description || 'N/A'}">Details</button>`);
 
-                        row.append($('<td>').append(detailsButton));
-                        $('#main-data-container tbody').append(row);
+                            row.append($('<td>').append(detailsButton));
+                            $('#main-data-container tbody').append(row);
 
-                        const detailsContainer = $(`
-                            <tr class="details-container">
-                                <td colspan="7">
-                                    <div class="row">
-                                        <div class="column">
-                                            <ul>
-                                                <li><strong>Description:</strong> <span class="description-content"></span></li>
-                                                <li><strong>Credit:</strong> <span class="credit-content"></span></li>
-                                                <li><strong>Debit:</strong> <span class="debit-content"></span></li>
-                                                <li><strong>Max Risk:</strong> <span class="max-risk-content"></span></li>
-                                                <li><strong>Max Reward:</strong> <span class="max-reward-content"></span></li>
-                                                <li><strong>Breakeven:</strong> <span class="breakeven-content"></span></li>
-                                            </ul>
+                            const detailsContainer = $(`
+                                <tr class="details-container">
+                                    <td colspan="7">
+                                        <div class="row">
+                                            <div class="column">
+                                                <ul>
+                                                    <li><strong>Description:</strong> <span class="description-content"></span></li>
+                                                    <li><strong>Credit:</strong> <span class="credit-content"></span></li>
+                                                    <li><strong>Debit:</strong> <span class="debit-content"></span></li>
+                                                    <li><strong>Max Risk:</strong> <span class="max-risk-content"></span></li>
+                                                    <li><strong>Max Reward:</strong> <span class="max-reward-content"></span></li>
+                                                    <li><strong>Breakeven:</strong> <span class="breakeven-content"></span></li>
+                                                </ul>
+                                            </div>
+                                            <div class="column">
+                                                <ul>
+                                                    <li><strong>Entry Price:</strong> <span class="entry-price-content"></span></li>
+                                                    <li><strong>Target Price:</strong> <span class="target-price-content"></span></li>
+                                                    <li><strong>Stop Price:</strong> <span class="stop-price-content"></span></li>
+                                                    <li><strong>Exit Date:</strong> <span class="exit-date-content"></span></li>
+                                                    <li><strong>Short Contract:</strong> <span class="short-contract-content"></span></li>
+                                                    <li><strong>Long Contract:</strong> <span class="long-contract-content"></span></li>
+                                                </ul>
+                                            </div>
                                         </div>
-                                        <div class="column">
-                                            <ul>
-                                                <li><strong>Entry Price:</strong> <span class="entry-price-content"></span></li>
-                                                <li><strong>Target Price:</strong> <span class="target-price-content"></span></li>
-                                                <li><strong>Stop Price:</strong> <span class="stop-price-content"></span></li>
-                                                <li><strong>Exit Date:</strong> <span class="exit-date-content"></span></li>
-                                                <li><strong>Short Contract:</strong> <span class="short-contract-content"></span></li>
-                                                <li><strong>Long Contract:</strong> <span class="long-contract-content"></span></li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </td>
-                            </tr>
-                        `);
-                        row.after(detailsContainer);
+                                    </td>
+                                </tr>
+                            `);
+                            row.after(detailsContainer);
+                        } catch (error) {
+                            console.error("Error rendering data for item:", item, error);
+                        }
                     });
                 });
             }
 
             $(document).on('click', '.view-description', function() {
-                const detailsRow = $(this).closest('tr').next('.details-container');
-                detailsRow.find('.description-content').text($(this).data('description'));
-                detailsRow.find('.credit-content').text($(this).data('short_premium') || 'N/A');
-                detailsRow.find('.debit-content').text($(this).data('long_premium') || 'N/A');
-                detailsRow.find('.max-risk-content').text($(this).data('max_risk') || 'N/A');
-                detailsRow.find('.max-reward-content').text($(this).data('max_reward') || 'N/A');
-                detailsRow.find('.breakeven-content').text($(this).data('breakeven') || 'N/A');
-                detailsRow.find('.entry-price-content').text($(this).data('entry_price') || 'N/A');
-                detailsRow.find('.target-price-content').text($(this).data('target_price') || 'N/A');
-                detailsRow.find('.stop-price-content').text($(this).data('stop_price') || 'N/A');
-                detailsRow.find('.exit-date-content').text($(this).data('exit_date') || 'N/A');
-                detailsRow.find('.short-contract-content').text($(this).data('short_contract'));
-                detailsRow.find('.long-contract-content').text($(this).data('long_contract'));
-                detailsRow.toggle();
+                try {
+                    const detailsRow = $(this).closest('tr').next('.details-container');
+                    detailsRow.find('.description-content').text($(this).data('description'));
+                    detailsRow.find('.credit-content').text($(this).data('short_premium') || 'N/A');
+                    detailsRow.find('.debit-content').text($(this).data('long_premium') || 'N/A');
+                    detailsRow.find('.max-risk-content').text($(this).data('max_risk') || 'N/A');
+                    detailsRow.find('.max-reward-content').text($(this).data('max_reward') || 'N/A');
+                    detailsRow.find('.breakeven-content').text($(this).data('breakeven') || 'N/A');
+                    detailsRow.find('.entry-price-content').text($(this).data('entry_price') || 'N/A');
+                    detailsRow.find('.target-price-content').text($(this).data('target_price') || 'N/A');
+                    detailsRow.find('.stop-price-content').text($(this).data('stop_price') || 'N/A');
+                    detailsRow.find('.exit-date-content').text($(this).data('exit_date') || 'N/A');
+                    detailsRow.find('.short-contract-content').text($(this).data('short_contract'));
+                    detailsRow.find('.long-contract-content').text($(this).data('long_contract'));
+                    detailsRow.toggle();
+                } catch (error) {
+                    console.error("Error displaying details:", error);
+                }
             });
 
             $('.filter-input').on('keyup', function() {
-                const filters = $('.filter-input').map(function() {
-                    return $(this).val().toLowerCase();
-                }).get();
+                try {
+                    const filters = $('.filter-input').map(function() {
+                        return $(this).val().toLowerCase();
+                    }).get();
 
-                const filteredData = previousData.filter(item => {
-                    return (
-                        (item.underlying_ticker || '').toLowerCase().includes(filters[0])
-                    );
-                });
-                renderData(filteredData);
+                    const filteredData = previousData.filter(item => {
+                        return (
+                            (item.underlying_ticker || '').toLowerCase().includes(filters[0])
+                        );
+                    });
+                    renderData(filteredData);
+                } catch (error) {
+                    console.error("Error filtering data:", error);
+                }
             });
 
             $('#filter-exit-date').on('change', function() {
-                renderData(previousData);
+                try {
+                    renderData(previousData);
+                } catch (error) {
+                    console.error("Error applying filter:", error);
+                }
             });
 
             refreshData();

@@ -41,6 +41,7 @@ class SpreadDataModel(BaseModel):
     exit_date: Optional[date] = None
     description: Optional[str] = None
     net_premium: Optional[Decimal] = None
+    probability_of_profit: Optional[Decimal] = None
 
     @classmethod
     def from_dynamodb(cls, record: Dict[str, Any]):
@@ -66,10 +67,11 @@ class SpreadDataModel(BaseModel):
             entry_price=Decimal(record.get('entry_price', '0')),
             target_price=Decimal(record.get('target_price', '0')),
             stop_price=Decimal(record.get('stop_price', '0')),
-            expiration_date=record.get('expiration_date'),
+            expiration_date=datetime.datetime.strptime(record.get('expiration_date'), '%Y-%m-%d').date() if record.get('expiration_date') else None,
             second_leg_depth=int(float(record.get('second_leg_depth', 0))),  # Convert to float first, then to int
-            exit_date=record.get('exit_date'),
-            description=record.get('description', '')  # Add description field
+            exit_date=datetime.datetime.strptime(record.get('exit_date'), '%Y-%m-%d').date() if record.get('exit_date') else None,
+            description=record.get('description', ''),  # Add description field
+            probability_of_profit=Decimal(record.get('probability_of_profit', '0'))
         )
 
     def to_dict(self, exclude=None):

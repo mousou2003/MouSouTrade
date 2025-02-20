@@ -25,13 +25,12 @@ class VerticalSpread(SpreadDataModel):
         self.contract_type = SPREAD_TYPE[strategy][direction]
         self.direction = direction
         self.strategy = strategy
-        self.second_leg_depth = 0
 
     def get_order(self, strategy, direction):
         """Returns the order (ASC/DESC) based on strategy and direction."""
         return {CREDIT: {BULLISH: ASC, BEARISH: DESC}, DEBIT: {BULLISH: ASC, BEARISH: DESC}}[strategy][direction]
 
-    def match_option(self, date):
+    def match_option(self, date: datetime.date):
         """Finds suitable short and long options for a vertical spread."""
         self.second_leg_depth = 0
         first_leg_contract = None
@@ -44,45 +43,65 @@ class VerticalSpread(SpreadDataModel):
                 expiration_date_gte=self.expiration_date,
                 expiration_date_lte=self.expiration_date,
                 contract_type=self.contract_type,
-                order=self.get_order(self.strategy, self.direction)
+                order=self.get_order(strategy=self.strategy, direction=self.direction)
             )
             self.contracts = options.get_option_contracts()
 
             # First loop to search for the first_leg_contract
-            first_leg_contract_position = 0
+            first_leg_contract_position = -1
             first_leg_strike_price = Decimal(0.0)
             premium: Optional[Decimal] = None
             for contract in self.contracts:
                 first_leg_contract_position += 1
-                if self.get_search_op(self.strategy, self.direction)(Decimal(contract['strike_price']), self.previous_close):
+                distance_between_strikes = abs(Decimal(contract['strike_price']) - self.previous_close)
+                if self.get_search_op(self.strategy, self.direction)(Decimal(contract['strike_price']), self.previous_close) and\
+                    distance_between_strikes < Decimal(0.1) * self.previous_close :
                     try:
-                        if self.direction == BEARISH and self.strategy == CREDIT:
-                            contract = self.contracts[first_leg_contract_position - 2]
-                            first_leg_contract_position -= 1
-                        premium = options.get_option_previous_close(contract['ticker'])
+                        if self.get_order(strategy=self.strategy, direction=self.direction) == DESC:
+                            contract = self.contracts[first_leg_contract_position - 1]
+                        snapshot = options.get_snapshot(option_symbol=contract['ticker'])
+                        premium = snapshot['day']['close']
                         first_leg_contract = contract
                         first_leg_premium = premium
                         first_leg_strike_price = Decimal(contract['strike_price'])  # Store first leg strike price
-                        logger.info("Staging FIRST LEG contract: %s for a premium of %.5f", first_leg_contract['ticker'], first_leg_premium)
+                        logger.info("Staging FIRST LEG contract: %s for a premium of %.5f, for previous close of %.5f", first_leg_contract['ticker'],
+                                     first_leg_premium,self.previous_close)
                         break
                     except MarketDataException as e:
-                        logger.debug(f"Error getting previous close for contract {contract}: {e}")
+                        logger.warning(f"Error getting previous close for first leg contract {contract['ticker']}:\n{e.with_traceback(None)}")
+                        continue
+                    except KeyError as e:
+                        logger.warning(f"KeyError accessing 'day' or 'close' in snapshot for {contract['ticker']}: {e}")
                         continue
                     
             if not first_leg_contract:
+                logger.info("No suitable short contract found.")
                 return False
+            
+            # Assign based on direction and strategy
+            if self.strategy == CREDIT:
+                self.short_contract = first_leg_contract
+                self.short_premium = first_leg_premium
+            elif self.strategy == DEBIT:
+                self.long_premium = first_leg_premium
+                self.long_contract = first_leg_contract
 
             # Second loop to search for the matching contract
-            for contract in reversed(self.contracts[:first_leg_contract_position - 1]):
+            for contract in self.contracts[first_leg_contract_position-self.MAX_STRIKES:first_leg_contract_position - 1]:
                 snapshot = None
+                self.second_leg_depth += 1
+                self.distance_between_strikes = abs(Decimal(contract['strike_price'] - first_leg_strike_price))
                 try:
+                    if self.distance_between_strikes > Decimal(0.1) * self.previous_close :
+                        logger.debug(f"Distance between strikes {self.distance_between_strikes} is more than 10% of previous close {self.previous_close}")
+                        continue
                     snapshot = options.get_snapshot(option_symbol=contract['ticker'])
-                    premium = options.get_option_previous_close(contract['ticker'])
+                    #premium = options.get_option_previous_close(contract['ticker'])
                     logger.debug(f"Snapshot for {contract['ticker']}: {snapshot}")
                     #TODO: check why day is empty
-                    # premium = snapshot['day']['close']
+                    premium = snapshot['day']['close']
                 except MarketDataException as e:
-                    logger.warning(f"Error getting previous close for contract {contract['ticker']}: {e}")
+                    logger.warning(f"Error getting previous close for second leg contract {contract['ticker']}:\n{e}")
                     continue
                 except KeyError as e:
                     logger.warning(f"KeyError accessing 'day' or 'close' in snapshot for {contract['ticker']}: {e}")
@@ -92,7 +111,6 @@ class VerticalSpread(SpreadDataModel):
                     logger.warning("Exit as we are going asymmetrical")
                     break
 
-                self.distance_between_strikes = Decimal(snapshot['details']['strike_price']) - first_leg_strike_price
                 self.net_premium = Decimal(first_leg_premium) - Decimal(premium)
                 relative_delta = abs(self.net_premium / self.distance_between_strikes)
 
@@ -101,24 +119,21 @@ class VerticalSpread(SpreadDataModel):
                     logger.warning("Delta is zero, skipping")
                     continue
                 if relative_delta >= self.MIN_DELTA:
-                    if abs(snapshot["greeks"]["delta"]) >= 0.5:
-                        logger.debug('Delta is less than 0.5, skipping')
+                    if abs(Decimal(snapshot["greeks"]["delta"])) < 0.3:
+                        logger.debug(f'Delta is less than {snapshot["greeks"]["delta"]}, skipping')
                         continue
-                    if abs(snapshot["greeks"]["delta"]) <= 0.7:
-                        logger.debug('Delta is greater than 0.7, good')
+                    if abs(Decimal(snapshot["greeks"]["delta"])) > 0.5:
+                        logger.warning('Delta is greater than 0.7, carefull!')
                     if snapshot["open_interest"] < 100:
-                        logger.debug('Open Interest is less than 100, careful!')
+                        logger.warning('Open Interest is less than 100, careful!')
 
-                    logger.debug('Found a match!')
+                    logger.info(f'Found a match! {contract["ticker"]} with delta {snapshot["greeks"]["delta"]}')
+                    
                     # Assign based on direction and strategy
                     if self.strategy == CREDIT:
                         self.long_premium = premium
                         self.long_contract = contract
-                        self.short_contract = first_leg_contract
-                        self.short_premium = first_leg_premium
                     elif self.strategy == DEBIT:
-                        self.long_premium = first_leg_premium
-                        self.long_contract = first_leg_contract
                         self.short_contract = contract
                         self.short_premium = premium
 
@@ -134,7 +149,20 @@ class VerticalSpread(SpreadDataModel):
                     self.stop_price = self.get_stop_price()
                     self.exit_date = self.get_exit_date()
                     self.description = self.get_description()
+                    
+                    # Calculate Probability of Profit (POP)
+                    days_to_expiration = (self.expiration_date - datetime.date.today()).days
+                    self.probability_of_profit = Options.calculate_probability_of_profit(
+                        current_price=Decimal(self.previous_close),
+                        breakeven_price=Decimal(self.breakeven),
+                        days_to_expiration=days_to_expiration,
+                        implied_volatility=Decimal(snapshot['implied_volatility'])
+                    )
+                    
                     break
+
+            if self.long_contract is None:
+                logger.info("No suitable long contract found.")
 
             return self.short_contract is not None and self.long_contract is not None
         except Exception as e:

@@ -29,7 +29,7 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-logging.getLogger('engine.VerticalSpread').setLevel(logging.INFO)
+logging.getLogger('engine.VerticalSpread').setLevel(logging.WARNING)
 
 class MissingEnvironmentVariableException(Exception):
     pass
@@ -57,7 +57,7 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
         raise KeyError('Ticker')
     
     ideal_expiration = datetime.datetime.today() + datetime.timedelta(weeks=6)    
-    target_expiration_date = Options.get_next_friday(ideal_expiration)
+    target_expiration_date = Options.get_next_friday(ideal_expiration).date()
 
     for direction in [BULLISH, BEARISH]:
         for strategy in [CREDIT, DEBIT]:

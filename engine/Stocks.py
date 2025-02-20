@@ -21,7 +21,7 @@ class Stocks:
             raise MarketDataException(f"No results found for the past 7 days up to date {self.date}")
 
     def get_previous_market_open_day(self, date=None):
-        date = date if date else datetime.datetime.now()
+        date = date if date else datetime.datetime.now().date()
         while True:
             date -= datetime.timedelta(days=1)
             if date.weekday() < 5:  # Monday to Friday are considered market open days
@@ -30,7 +30,7 @@ class Stocks:
     def populate_daily_bars(self, grouped_daily_bars):
         for bar in grouped_daily_bars:
             ticker = bar['T']
-            date = datetime.datetime.fromtimestamp(bar['t'] / 1000).strftime('%Y-%m-%d')
+            date = datetime.datetime.fromtimestamp(bar['t'] / 1000).date()
             daily_bar = {
                 "date": date,
                 "open": Decimal(bar['o']),
