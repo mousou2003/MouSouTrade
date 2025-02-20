@@ -158,6 +158,12 @@ class VerticalSpread(SpreadDataModel):
                         days_to_expiration=days_to_expiration,
                         implied_volatility=Decimal(snapshot['implied_volatility'])
                     )
+
+                    self.description = f"Sell {self.short_contract['strike_price']} {self.short_contract['contract_type']}, "\
+                        f"buy {self.long_contract['strike_price']} {self.long_contract['contract_type']}; " \
+                        f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
+                        f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
+                        f"stop loss at {self.stop_price:.2f} and before {self.exit_date}"
                     
                     break
 
@@ -197,10 +203,7 @@ class VerticalSpread(SpreadDataModel):
         return data
 
     def get_description(self):
-        return f"Sell {self.get_short()['ticker']}, buy {self.get_long()['ticker']}; " \
-            f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
-            f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
-            f"stop loss at {self.stop_price:.2f} and before {self.exit_date}"
+        return self.description
 
     def get_max_reward(self):
         pass
