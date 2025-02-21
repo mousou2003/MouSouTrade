@@ -1,6 +1,7 @@
 import calendar
 import datetime
 import logging
+import time
 from marketdata_clients.PolygonOptionsClient import PolygonOptionsClient
 import numpy as np
 from scipy.stats import norm
@@ -21,30 +22,48 @@ class Options:
         self.sigma = sigma  # Implied volatility (20%)
 
     def get_option_contracts(self):
-        return self.client.get_option_contracts(
-            underlying_ticker=self.underlying_ticker,
-            expiration_date_gte=self.expiration_date_gte,
-            expiration_date_lte=self.expiration_date_lte,
-            contract_type=self.contract_type,
-            order=self.order
-        )
+        retries = 3
+        for attempt in range(retries):
+            try:
+                return self.client.get_option_contracts(
+                    underlying_ticker=self.underlying_ticker,
+                    expiration_date_gte=self.expiration_date_gte,
+                    expiration_date_lte=self.expiration_date_lte,
+                    contract_type=self.contract_type,
+                    order=self.order
+                )
+            except Exception as err:
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                raise err
 
     def get_option_previous_close(self, ticker):
-        return self.client.get_option_previous_close(ticker)
+        retries = 3
+        for attempt in range(retries):
+            try:
+                return self.client.get_option_previous_close(ticker)
+            except Exception as err:
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                raise err
 
-    def get_snapshot(
-        self,
-        option_symbol: str = None
-    ):
-        return self.client.get_snapshot(
-            underlying_symbol=self.underlying_ticker,
-            option_symbol=option_symbol
-        )
-    
-    def estimate_premium(
-        self,
-        option_symbol: str = None
-    ):
+    def get_snapshot(self, option_symbol: str = None):
+        retries = 3
+        for attempt in range(retries):
+            try:
+                return self.client.get_snapshot(
+                    underlying_symbol=self.underlying_ticker,
+                    option_symbol=option_symbol
+                )
+            except Exception as err:
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                raise err
+
+    def estimate_premium(self, option_symbol: str = None):
         return self.client.estimate_premium(
             underlying_symbol=self.underlying_ticker,
             option_symbol=option_symbol
@@ -147,27 +166,3 @@ class Options:
         probability_of_profit = Decimal(norm.cdf(float(z_score)))
 
         return probability_of_profit * Decimal(100)
-        """
-        Calculate the Probability of Profit (POP) for an option position.
-        
-        Parameters:
-        current_price : float : Current price of the underlying asset
-        breakeven_price : float : Breakeven price of the option position
-        days_to_expiration : int : Number of days until the option expires
-        implied_volatility : float : Implied volatility of the underlying asset
-        
-        Returns:
-        float : Probability of Profit (POP) as a percentage
-        """
-        # Calculate standard deviation for the underlying asset price
-        annualized_sd = implied_volatility * current_price
-        daily_sd = annualized_sd / np.sqrt(252)  # 252 trading days in a year
-        price_movement_sd = daily_sd * np.sqrt(days_to_expiration)
-
-        # Calculate Z-Score for Breakeven
-        z_score = (breakeven_price - current_price) / price_movement_sd
-
-        # Calculate Probability of Profit (POP)
-        probability_of_profit = norm.cdf(z_score)
-
-        return probability_of_profit * 100
