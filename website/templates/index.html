@@ -49,7 +49,7 @@
             margin-top: 10px;
             border-radius: 5px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            font-size: 50%; /* Reduced font size */
+            font-size: 90%; /* Reduced font size */
         }
         .details-container .column {
             flex: 1;
@@ -72,7 +72,7 @@
     </style>
 </head>
 <body>
-    <h1>Moustrade vertical spread analysis</h1>
+    <h1>Mousoutrade vertical spread analysis</h1>
     <div id="filter-section">
         <input type="text" class="filter-input" placeholder="Filter Ticker" />
         <label>
@@ -91,6 +91,7 @@
                         <th>Max Risk</th>
                         <th>Max Profit</th>
                         <th>PoP</th>
+                        <th>Description</th>
                         <th>Details</th>
                     </tr>
                 </thead>
@@ -139,10 +140,11 @@
                             row.append(`<td>${ticker || 'N/A'}</td>`);
                             row.append(`<td>${item.strategy}</td>`);
                             row.append(`<td>${item.direction}</td>`);
-                            row.append(`<td>$${(item.max_risk * 100).toFixed(2)}</td>`);
-                            row.append(`<td>$${(item.max_reward * 100).toFixed(2)}</td>`);
+                            row.append(`<td>$${item.max_risk}</td>`);
+                            row.append(`<td>$${item.max_reward}</td>`);
                             const probabilityOfProfit = Number(item.probability_of_profit);
                             row.append(`<td>${!isNaN(probabilityOfProfit) ? probabilityOfProfit.toFixed(2) : 'N/A'}%</td>`);
+                            row.append(`<td>${item.description || 'N/A'}</td>`);
 
                             const detailsButton = $(`<button class="view-description" 
                                 data-short_premium="${item.short_premium || 'N/A'}" 
@@ -157,37 +159,31 @@
                                 data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
                                 data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
                                 data-percentage_max_risk="${item.percentage_max_risk || 'N/A'}"
-                                data-percentage_max_reward="${item.percentage_max_profit || 'N/A'}"
-                                data-description="${item.description || 'N/A'}">Details</button>`);
+                                data-percentage_max_reward="${item.percentage_max_profit || 'N/A'}">Details</button>`);
 
                             row.append($('<td>').append(detailsButton));
                             $('#main-data-container tbody').append(row);
 
                             const detailsContainer = $(`
                                 <tr class="details-container">
-                                    <td colspan="7">
-                                        <div class="row">
-                                            <div class="column">
-                                                <ul>
-                                                    <li><strong>Description:</strong> <span class="description-content"></span></li>
-                                                    <li><strong>Credit:</strong> <span class="credit-content"></span></li>
-                                                    <li><strong>Debit:</strong> <span class="debit-content"></span></li>
-                                                    <li><strong>Max Risk:</strong> <span class="max-risk-content"></span></li>
-                                                    <li><strong>Max Reward:</strong> <span class="max-reward-content"></span></li>
-                                                    <li><strong>Breakeven:</strong> <span class="breakeven-content"></span></li>
-                                                </ul>
-                                            </div>
-                                            <div class="column">
-                                                <ul>
-                                                    <li><strong>Entry Price:</strong> <span class="entry-price-content"></span></li>
-                                                    <li><strong>Target Price:</strong> <span class="target-price-content"></span></li>
-                                                    <li><strong>Stop Price:</strong> <span class="stop-price-content"></span></li>
-                                                    <li><strong>Exit Date:</strong> <span class="exit-date-content"></span></li>
-                                                    <li><strong>Short Contract:</strong> <span class="short-contract-content"></span></li>
-                                                    <li><strong>Long Contract:</strong> <span class="long-contract-content"></span></li>
-                                                </ul>
-                                            </div>
-                                        </div>
+                                    <td colspan="4">
+                                        <ul>
+                                            <li><strong>Credit:</strong> <span class="credit-content"></span></li>
+                                            <li><strong>Debit:</strong> <span class="debit-content"></span></li>
+                                            <li><strong>Max Risk:</strong> <span class="max-risk-content"></span></li>
+                                            <li><strong>Max Reward:</strong> <span class="max-reward-content"></span></li>
+                                            <li><strong>Breakeven:</strong> <span class="breakeven-content"></span></li>
+                                        </ul>
+                                    </td>
+                                    <td colspan="4">
+                                        <ul>
+                                            <li><strong>Entry Price:</strong> <span class="entry-price-content"></span></li>
+                                            <li><strong>Target Price:</strong> <span class="target-price-content"></span></li>
+                                            <li><strong>Stop Price:</strong> <span class="stop-price-content"></span></li>
+                                            <li><strong>Exit Date:</strong> <span class="exit-date-content"></span></li>
+                                            <li><strong>Short Contract:</strong> <span class="short-contract-content"></span></li>
+                                            <li><strong>Long Contract:</strong> <span class="long-contract-content"></span></li>
+                                        </ul>
                                     </td>
                                 </tr>
                             `);
@@ -202,7 +198,6 @@
             $(document).on('click', '.view-description', function() {
                 try {
                     const detailsRow = $(this).closest('tr').next('.details-container');
-                    detailsRow.find('.description-content').text($(this).data('description'));
                     detailsRow.find('.credit-content').text($(this).data('short_premium') || 'N/A');
                     detailsRow.find('.debit-content').text($(this).data('long_premium') || 'N/A');
                     detailsRow.find('.max-risk-content').text($(this).data('max_risk') || 'N/A');

@@ -42,6 +42,8 @@ class SpreadDataModel(BaseModel):
     description: Optional[str] = None
     net_premium: Optional[Decimal] = None
     probability_of_profit: Optional[Decimal] = None
+    first_leg_snapshot: Optional[Dict[str, Any]] = None
+    second_leg_snapshot: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_dynamodb(cls, record: Dict[str, Any]):
@@ -71,7 +73,9 @@ class SpreadDataModel(BaseModel):
             second_leg_depth=int(float(record.get('second_leg_depth', 0))),  # Convert to float first, then to int
             exit_date=datetime.datetime.strptime(record.get('exit_date'), '%Y-%m-%d').date() if record.get('exit_date') else None,
             description=record.get('description', ''),  # Add description field
-            probability_of_profit=Decimal(record.get('probability_of_profit', '0'))
+            probability_of_profit=Decimal(record.get('probability_of_profit', '0')),
+            first_leg_snapshot=record.get('first_leg_snapshot', {}),
+            second_leg_snapshot=record.get('second_leg_snapshot', {})
         )
 
     def to_dict(self, exclude=None):
@@ -91,17 +95,33 @@ class SpreadDataModel(BaseModel):
 
         if self.long_contract is not None:
             attributes['long_contract'] = {
-                key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
-                for key, value in self.long_contract.items()
+            key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
+            for key, value in self.long_contract.items()
             }
 
         if self.short_contract is not None:
             attributes['short_contract'] = {
-                key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
-                for key, value in self.short_contract.items()
+            key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
+            for key, value in self.short_contract.items()
             }
 
+        if self.first_leg_snapshot is not None:
+            self.round_nested_dict(self.first_leg_snapshot)
+            attributes['first_leg_snapshot'] = self.first_leg_snapshot
+
+        if self.second_leg_snapshot is not None:
+            self.round_nested_dict(self.second_leg_snapshot)
+            attributes['second_leg_snapshot'] = self.second_leg_snapshot
+
         return attributes
+
+    def round_nested_dict(self, d):
+        """Recursively rounds decimals in a nested dictionary."""
+        for key, value in d.items():
+            if isinstance(value, dict):
+                self.round_nested_dict(value)
+            elif isinstance(value, (Decimal, int, float)):
+                d[key] = self.round_decimal(value)
 
     def round_decimal(self, value):
         """Converts to Decimal and rounds it to five decimal places, then converts to string."""
