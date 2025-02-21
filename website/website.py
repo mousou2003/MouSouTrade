@@ -39,7 +39,17 @@ def get_all_items():
     print("Fetching all items from the DynamoDB table.")
     try:
         response = table.scan()
-        return response['Items']
+        items = response['Items']
+        for item in items:
+            try:
+                ticker, target_expiration_date, update_date = item['ticker'].split(';')
+                item['underlying_ticker'] = ticker
+                item['expiration_date'] = target_expiration_date
+                item['update_date'] = update_date
+            except ValueError:
+                print(f"Warning: Skipping record with old format: {item['ticker']}")
+                continue
+        return items
     except ClientError as e:
         print(f"Unable to scan the DynamoDB table: {e.response['Error']['Message']}")
         return []

@@ -85,9 +85,7 @@
             <table id="data-table">
                 <thead>
                     <tr>
-                        <th>Ticker</th>
-                        <th>Strategy</th>
-                        <th>Direction</th>
+                        <th>Spread Info</th>
                         <th>Max Risk</th>
                         <th>Max Profit</th>
                         <th>PoP</th>
@@ -135,11 +133,18 @@
 
                 $.each(groupedData, function(ticker, items) {
                     items.forEach((item) => {
+                        console.log("Content of item:", item);
                         try {
                             let row = $('<tr>');
-                            row.append(`<td>${ticker || 'N/A'}</td>`);
-                            row.append(`<td>${item.strategy}</td>`);
-                            row.append(`<td>${item.direction}</td>`);
+                            row.append(`
+                                <td>
+                                    <strong>Ticker:</strong> ${ticker || 'N/A'}<br>
+                                    <strong>Expiration Date:</strong> ${item.expiration_date || 'N/A'}<br>
+                                    <strong>Update Date:</strong> ${item.update_date || 'N/A'}<br>
+                                    <strong>Strategy:</strong> ${item.strategy}<br>
+                                    <strong>Direction:</strong> ${item.direction}
+                                </td>
+                            `);
                             row.append(`<td>$${item.max_risk}</td>`);
                             row.append(`<td>$${item.max_reward}</td>`);
                             const probabilityOfProfit = Number(item.probability_of_profit);

@@ -44,6 +44,7 @@ class SpreadDataModel(BaseModel):
     probability_of_profit: Optional[Decimal] = None
     first_leg_snapshot: Optional[Dict[str, Any]] = None
     second_leg_snapshot: Optional[Dict[str, Any]] = None
+    update_date: Optional[date] = None
 
     @classmethod
     def from_dynamodb(cls, record: Dict[str, Any]):
@@ -75,7 +76,8 @@ class SpreadDataModel(BaseModel):
             description=record.get('description', ''),  # Add description field
             probability_of_profit=Decimal(record.get('probability_of_profit', '0')),
             first_leg_snapshot=record.get('first_leg_snapshot', {}),
-            second_leg_snapshot=record.get('second_leg_snapshot', {})
+            second_leg_snapshot=record.get('second_leg_snapshot', {}),
+            update_date=datetime.datetime.strptime(record.get('update_date'), '%Y-%m-%d').date() if record.get('update_date') else None
         )
 
     def to_dict(self, exclude=None):
