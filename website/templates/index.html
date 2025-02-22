@@ -69,6 +69,16 @@
         td {
             padding: 20px;
         }
+        th.sortable {
+            cursor: pointer;
+        }
+        th.sortable:after {
+            content: '\25B2'; /* Up arrow */
+            float: right;
+        }
+        th.sortable.desc:after {
+            content: '\25BC'; /* Down arrow */
+        }
     </style>
 </head>
 <body>
@@ -85,10 +95,10 @@
             <table id="data-table">
                 <thead>
                     <tr>
-                        <th>Spread Info</th>
-                        <th>Max Risk</th>
-                        <th>Max Profit</th>
-                        <th>PoP</th>
+                        <th class="sortable" data-sort="ticker">Spread Info</th>
+                        <th class="sortable" data-sort="max_risk">Max Risk</th>
+                        <th class="sortable" data-sort="max_reward">Max Profit</th>
+                        <th class="sortable" data-sort="probability_of_profit">PoP</th>
                         <th>Description</th>
                         <th>Details</th>
                     </tr>
@@ -101,6 +111,7 @@
     <script>
         $(document).ready(function() {
             let previousData = [];
+            let sortOrders = {};
 
             function refreshData() {
                 $.ajax({
@@ -123,7 +134,15 @@
                 const filterExitDate = $('#filter-exit-date').is(':checked');
                 const filteredData = filterExitDate ? data.filter(item => item.exit_date) : data;
 
-                const groupedData = filteredData.reduce((acc, item) => {
+                const sortedData = filteredData.sort((a, b) => {
+                    for (const [column, order] of Object.entries(sortOrders)) {
+                        if (a[column] > b[column]) return order === 'asc' ? 1 : -1;
+                        if (a[column] < b[column]) return order === 'asc' ? -1 : 1;
+                    }
+                    return 0;
+                });
+
+                const groupedData = sortedData.reduce((acc, item) => {
                     if (!acc[item.underlying_ticker]) {
                         acc[item.underlying_ticker] = [];
                     }
@@ -242,6 +261,13 @@
                 } catch (error) {
                     console.error("Error applying filter:", error);
                 }
+            });
+
+            $('th.sortable').on('click', function() {
+                const column = $(this).data('sort');
+                sortOrders[column] = sortOrders[column] === 'asc' ? 'desc' : 'asc';
+                $(this).toggleClass('desc', sortOrders[column] === 'desc');
+                renderData(previousData);
             });
 
             refreshData();
