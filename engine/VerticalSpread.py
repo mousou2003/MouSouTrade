@@ -27,6 +27,7 @@ class VerticalSpread(SpreadDataModel):
         self.contract_type = SPREAD_TYPE[strategy][direction]
         self.direction = direction
         self.strategy = strategy
+        self.update_date = datetime.datetime.now().date()
 
     def get_order(self, strategy, direction):
         """Returns the order (ASC/DESC) based on strategy and direction."""

@@ -147,8 +147,7 @@
                             `);
                             row.append(`<td>$${item.max_risk}</td>`);
                             row.append(`<td>$${item.max_reward}</td>`);
-                            const probabilityOfProfit = Number(item.probability_of_profit);
-                            row.append(`<td>${!isNaN(probabilityOfProfit) ? probabilityOfProfit.toFixed(2) : 'N/A'}%</td>`);
+                            row.append(`<td>${item.probability_of_profit}%</td>`);
                             row.append(`<td>${item.description || 'N/A'}</td>`);
 
                             const detailsButton = $(`<button class="view-description" 

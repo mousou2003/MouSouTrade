@@ -64,16 +64,15 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
             spread_class = DebitSpread if strategy == DEBIT else CreditSpread
             spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy,
                                   previous_close=Decimal(stock['close']))
-            
+
+            logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
+            matched = spread.match_option(date=target_expiration_date)
             key = {
-                "ticker": ticker,
+                "ticker": f"{spread.underlying_ticker}-{spread.expiration_date.strftime('%Y-%m-%d')}-{spread.update_date.strftime('%Y-%m-%d')}",
                 "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), 
                                       "direction": direction, 
                                       "strategy": strategy}, default=str)
             }
-
-            logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
-            matched = spread.match_option(date=target_expiration_date)
             if matched:
                 merged_json = {**key, **{"description": spread.get_description(), **spread.to_dict()}}
                 logger.debug(merged_json)
