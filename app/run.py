@@ -121,7 +121,7 @@ def main():
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
 
-        marketdata_stocks = Stocks(date= (datetime.datetime.today()-datetime.timedelta(days=1)).date())
+        marketdata_stocks = Stocks()
 
         for stock_number, stock in enumerate(stocks, start=1):
             ticker = stock.get('Ticker')

@@ -3,9 +3,10 @@ FROM python:3.9-slim
 WORKDIR /app
 
 COPY ./website/requirements-website.txt requirements.txt
-COPY ./website/website.py .
+COPY ./website/website.py . 
 COPY ./website/templates ./templates
 COPY ./.aws /root/.aws/
+COPY ./engine ./engine
 
 # Define build arguments
 ARG AWS_PROFILE
@@ -34,10 +35,12 @@ ENV PYTHONPATH=$PYTHONPATH
 ENV WEBSITE_PORT=$WEBSITE_PORT
 ENV DYNAMODB_PORT=$DYNAMODB_PORT
 ENV PROJECT_NAME=$PROJECT_NAME
+ENV TZ="America/Los_Angeles"
 
 RUN apt-get update && apt-get install -y cron iputils-ping && \
     pip install --upgrade pip && \
     pip install -r requirements.txt && \
-    pip install --upgrade boto3
+    pip install --upgrade boto3 && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 CMD ["sh", "-c", "while true; do python website.py; sleep 10; done"]
