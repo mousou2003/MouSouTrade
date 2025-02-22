@@ -29,7 +29,7 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
+logging.getLogger('engine.VerticalSpread').setLevel(logging.WARNING)
 
 class MissingEnvironmentVariableException(Exception):
     pass
@@ -67,7 +67,9 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
             
             key = {
                 "ticker": ticker,
-                "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), "direction": direction, "strategy": strategy}, default=str)
+                "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), 
+                                      "direction": direction, 
+                                      "strategy": strategy}, default=str)
             }
 
             logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
@@ -119,7 +121,7 @@ def main():
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
 
-        marketdata_stocks = Stocks()
+        marketdata_stocks = Stocks(date= (datetime.datetime.today()-datetime.timedelta(days=1)).date())
 
         for stock_number, stock in enumerate(stocks, start=1):
             ticker = stock.get('Ticker')
