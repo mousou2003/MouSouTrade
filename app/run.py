@@ -18,18 +18,18 @@ from engine.data_model import *
 from database.DynamoDB import DynamoDB
 
 logger = logging.getLogger(__name__)
-if os.getenv("DEBUG_MODE") != "true":
+if os.getenv("DEBUG_MODE").lower() != "true":
     loglevel = logging.DEBUG
 else:
-    loglevel = logging.INFO
-logging.basicConfig(level=logging.INFO)
+    loglevel = logging.ERROR
+logging.basicConfig(level=loglevel)
 
 # Set the logging level to WARNING to suppress DEBUG messages
 logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-logging.getLogger('engine.VerticalSpread').setLevel(logging.WARNING)
+logging.getLogger('engine.VerticalSpread').setLevel(loglevel)
 
 class MissingEnvironmentVariableException(Exception):
     pass
