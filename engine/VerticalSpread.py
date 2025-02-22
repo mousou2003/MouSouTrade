@@ -98,7 +98,7 @@ class VerticalSpread(SpreadDataModel):
             # Second loop to search for the matching contract
             for contract in self.contracts[start:stop]:
                 self.second_leg_depth += 1
-                self.distance_between_strikes = abs(Decimal(contract['strike_price'] - first_leg_strike_price))
+                self.distance_between_strikes = abs(Decimal(contract['strike_price']) - first_leg_strike_price)
                 try:
                     self.second_leg_snapshot = options.get_snapshot(option_symbol=contract['ticker'])
                     logger.debug(f"Snapshot for {contract['ticker']}")
@@ -115,7 +115,7 @@ class VerticalSpread(SpreadDataModel):
                     logger.warning("Exit as we are going asymmetrical")
                     break
 
-                premium_delta = Decimal(first_leg_premium) - Decimal(premium)
+                premium_delta = first_leg_premium - premium
                 relative_delta = abs(premium_delta / self.distance_between_strikes)
 
                 logger.debug('distance_between_strikes %.5f, premium_delta %.5f', self.distance_between_strikes, premium_delta)
