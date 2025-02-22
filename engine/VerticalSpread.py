@@ -98,7 +98,7 @@ class VerticalSpread(SpreadDataModel):
             # Second loop to search for the matching contract
             for contract in self.contracts[start:stop]:
                 self.second_leg_depth += 1
-                self.distance_between_strikes = abs(Decimal(contract['strike_price'] - first_leg_strike_price))
+                self.distance_between_strikes = abs(Decimal(contract['strike_price']) - first_leg_strike_price)
                 try:
                     self.second_leg_snapshot = options.get_snapshot(option_symbol=contract['ticker'])
                     logger.debug(f"Snapshot for {contract['ticker']}")
@@ -115,7 +115,7 @@ class VerticalSpread(SpreadDataModel):
                     logger.warning("Exit as we are going asymmetrical")
                     break
 
-                premium_delta = Decimal(first_leg_premium) - Decimal(premium)
+                premium_delta = first_leg_premium - premium
                 relative_delta = abs(premium_delta / self.distance_between_strikes)
 
                 logger.debug('distance_between_strikes %.5f, premium_delta %.5f', self.distance_between_strikes, premium_delta)
@@ -123,30 +123,28 @@ class VerticalSpread(SpreadDataModel):
                     logger.warning("Delta is zero, skipping")
                     continue
                 if relative_delta >= self.MIN_DELTA:
-                    if self.strategy == CREDIT and abs(Decimal(self.second_leg_snapshot["greeks"]["delta"])) < 0.3:
-                        logger.debug(f'Delta is less than 0.3, skipping')
-                        continue
-                    if self.strategy == DEBIT and abs(Decimal(self.second_leg_snapshot["greeks"]["delta"])) > 0.15:
-                        logger.debug(f'Delta is more than 0.15, skipping')
-                        continue
-
-                    logger.info(f'Found a match! {contract["ticker"]} with delta {self.second_leg_snapshot["greeks"]["delta"]}')
-                    if self.second_leg_snapshot["open_interest"] < 100:
-                        logger.warning('Open Interest is less than 100, careful!')
-
-                    # Assign based on direction and strategy
+                    # Check validity and assign based on direction and strategy
                     if self.strategy == CREDIT:
+                        if abs(Decimal(self.second_leg_snapshot["greeks"]["delta"])) < 0.3:
+                            logger.debug(f'Delta is less than 0.3, skipping')
+                            continue
                         self.long_premium = premium * self.LONG_PREMIUM_MULTIPLIER
                         self.long_contract = contract
                     elif self.strategy == DEBIT:
+                        if abs(Decimal(self.second_leg_snapshot["greeks"]["delta"])) > 0.15:
+                            logger.debug(f'Delta is more than 0.15, skipping')
+                            continue
                         self.short_contract = contract
                         self.short_premium = premium * self.SHORT_PREMIUM_MULTIPLIER
-                    
-                    self.net_premium = self.short_premium - self.long_premium
+
+                    if self.second_leg_snapshot["open_interest"] < 10:
+                        logger.warning('Open Interest is less than 10, careful!')
 
                     logger.info("Assigned LONG contract: %s for a premium of %.5f",
                                 self.long_contract['ticker'], self.long_premium)
-
+                    
+                    self.net_premium = self.short_premium - self.long_premium 
+                    
                     # Calculate and assign other parameters
                     self.max_risk = self.get_max_risk()
                     self.max_reward = self.get_max_reward()
@@ -155,8 +153,7 @@ class VerticalSpread(SpreadDataModel):
                     self.target_price = self.get_target_price()
                     self.stop_price = self.get_stop_price()
                     self.exit_date = self.get_exit_date()
-                    self.description = self.get_description()
-                    
+                    self.description = self.get_description()                   
                     # Calculate Probability of Profit (POP)
                     days_to_expiration = (self.expiration_date - datetime.date.today()).days
                     self.probability_of_profit = Options.calculate_probability_of_profit(
@@ -172,6 +169,8 @@ class VerticalSpread(SpreadDataModel):
                         f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
                         f"stop loss at {self.stop_price:.2f} and before {self.exit_date}"
                     
+                    logger.info(f'Found a match! {contract["ticker"]} with delta {self.second_leg_snapshot["greeks"]["delta"]}')
+
                     break
 
             if self.long_contract is None:
@@ -183,7 +182,7 @@ class VerticalSpread(SpreadDataModel):
             return False
 
     def get_net_premium(self):
-        return self.net_premium
+        return Decimal(self.net_premium)
 
     def get_close_price(self):
         return Decimal(self.previous_close)
@@ -234,7 +233,7 @@ class CreditSpread(VerticalSpread):
         return self.get_net_premium()*100
 
     def get_max_risk(self):
-        return (abs(self.distance_between_strikes) - self.get_net_premium())*100 
+        return Decimal(abs(self.distance_between_strikes) - self.get_net_premium()*Decimal(100))
 
     def get_breakeven_price(self):
         net_premium = self.get_net_premium()

@@ -37,12 +37,13 @@ ENV PYTHONPATH=$PYTHONPATH
 ENV WEBSITE_PORT=$WEBSITE_PORT
 ENV DYNAMODB_PORT=$DYNAMODB_PORT
 ENV PROJECT_NAME=$PROJECT_NAME
+ENV TZ="America/Los_Angeles"
 
 RUN apt-get update && apt-get install -y cron iputils-ping && \
     pip install --upgrade pip && \
     pip install -r requirements-run-app.txt && \
-    pip install --upgrade boto3 
-
+    pip install --upgrade boto3 && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # Give execution rights on the cron job
 RUN chmod 0644 /etc/cron.d/app-cron
 
