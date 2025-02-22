@@ -1,5 +1,6 @@
 import polygon
 import logging
+import time
 from marketdata_clients.PolygonClient import PolygonClient
 from marketdata_clients.MarketDataClient import *
 
@@ -24,24 +25,40 @@ class PolygonStocksClient(PolygonClient):
 
     def get_previous_stock_close(self, ticker):
         self.wait_for_no_throttle()
-        try:
-            response = self.client.get_previous_close(ticker)
-            if 'results' not in response or not response['results']:
-                raise KeyError('results')
-            return response['results'][0]['c']
-        except KeyError as err:
-            raise MarketDataException(f"No results found for ticker {ticker}", err)
-        except Exception as err:
-            raise MarketDataException(f"Failed to get previous stock close for {ticker}", err)
+        retries = 3
+        for attempt in range(retries):
+            try:
+                response = self.client.get_previous_close(ticker)
+                if 'results' not in response or not response['results']:
+                    raise KeyError('results')
+                return response['results'][0]['c']
+            except KeyError as err:
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                raise MarketDataException(f"No results found for ticker {ticker}", err)
+            except Exception as err:
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                raise MarketDataException(f"Failed to get previous stock close for {ticker}", err)
 
-    def get_grouped_daily_bars(self,date):
+    def get_grouped_daily_bars(self, date):
         self.wait_for_no_throttle()
-        try:
-            response = PolygonStocksClient.client.get_grouped_daily_bars(date=date)
-            if 'results' not in response or not response['results']:
-                raise KeyError('results')
-            return response['results']
-        except KeyError as err:
-            raise MarketDataException(f"No results found on {date}", err)
-        except Exception as err:
-            raise MarketDataException(f"Failed to get daily open close on {date}", err)
+        retries = 3
+        for attempt in range(retries):
+            try:
+                response = PolygonStocksClient.client.get_grouped_daily_bars(date=date)
+                if 'results' not in response or not response['results']:
+                    raise KeyError('results')
+                return response['results']
+            except KeyError as err:
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                raise MarketDataException(f"No results found on {date}", err)
+            except Exception as err:
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                raise MarketDataException(f"Failed to get daily open close on {date}", err)

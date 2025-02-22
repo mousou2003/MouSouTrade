@@ -5,139 +5,188 @@ from engine.Options import Options
 import logging
 import datetime
 import operator
+from typing import ClassVar, Optional
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
 class VerticalSpread(SpreadDataModel):
     """Base class for vertical spread calculations (credit and debit)."""
-    MAX_STRIKES = 20  # Maximum number of strikes to consider
-    MIN_DELTA = 0.26  # Minimum absolute delta for a contract to be considered
-
+    MAX_STRIKES: ClassVar[int] = 20  # Maximum number of strikes to consider
+    MIN_DELTA: ClassVar[Decimal] = Decimal(0.26)  # Minimum absolute delta for a contract to be considered
+    SHORT_PREMIUM_MULTIPLIER: ClassVar[Decimal] = Decimal(0.95)  # Multiplier for short premium
+    LONG_PREMIUM_MULTIPLIER: ClassVar[Decimal] = Decimal(1.05)  # Multiplier for long premium
     def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
+        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy)
+        
         """Initializes VerticalSpread with market data."""
         logger.info("Processing %s", underlying_ticker)
         self.underlying_ticker = underlying_ticker
         self.previous_close = previous_close if previous_close is not None else PolygonStocksClient().get_previous_stock_close(self.underlying_ticker)
-        logger.info("%s last close price :%s", self.underlying_ticker, self.previous_close)
+        logger.info("%s last close price :%.5f", self.underlying_ticker, self.previous_close)
         self.contract_type = SPREAD_TYPE[strategy][direction]
-        self.order = self.get_order(strategy, direction)
         self.direction = direction
         self.strategy = strategy
-        self.second_leg_depth = 0
 
     def get_order(self, strategy, direction):
         """Returns the order (ASC/DESC) based on strategy and direction."""
-        return {CREDIT: {BULLISH: DESC, BEARISH: ASC}, DEBIT: {BULLISH: ASC, BEARISH: DESC}}[strategy][direction]
-
-    def calculate_abs_delta(self, previous_premium, premium, previous_price, price):
-        """Calculates the absolute delta between two option contracts."""
-        try:
-            premium_delta = previous_premium - premium
-            price_delta = previous_price - price
-            return abs(premium_delta / price_delta)
-        except ZeroDivisionError:
-            logger.warning(f"Division by zero calculating delta for {self.underlying_ticker}.")
-            return 0
-
-    def match_option(self, date, expiration_date_gte, expiration_date_lte):
-        """Finds suitable short and long options for a vertical spread."""
-        self.second_leg_depth = 0
-        first_leg_contract = None  # First leg (e.g., short contract)
-        first_leg_premium = None
-        previous_premium = None
-        previous_contract = None
-        self.expiration_date = date
-
-        try:
-            self.contracts = Options().get_option_contracts(
-                underlying_ticker=self.underlying_ticker,
-                expiration_date_gte=expiration_date_gte,
-                expiration_date_lte=expiration_date_lte,
-                contract_type=self.contract_type,
-                order=self.order
-            )
-
-            for contract in self.contracts:
-                if self.get_search_op(self.strategy, self.direction)(self.previous_close,
-                                                                    round(float(contract['strike_price']), 2)) and \
-                self.second_leg_depth < self.MAX_STRIKES:
-                    self.second_leg_depth += 1
-                    try:
-                        premium = Options().get_option_previous_close(contract['ticker'])
-                    except MarketDataException as e:
-                        logger.debug(f"Error getting previous close for contract {contract['ticker']}: {e}")
-                        continue
-
-                    # Stage the first leg (put or call) based on the contract
-                    if first_leg_contract is None:
-                        first_leg_contract = contract
-                        first_leg_premium = premium
-                        logger.info("Staging FIRST LEG contract: %s for a premium of %.2f", first_leg_contract['ticker'], first_leg_premium)
-
-                    # Stage the second leg (put or call) based on the contract
-                    else:
-                        if first_leg_contract['expiration_date'] != contract['expiration_date']:
-                            logger.warning("Exit as we are going vertical")
-                            break
-
-                        self.distance_between_strikes = abs(
-                            float(contract['strike_price']) - float(first_leg_contract['strike_price']))
-                        delta = self.calculate_abs_delta(previous_premium=float(previous_premium), premium=float(premium),
-                                                       previous_price=float(previous_contract['strike_price']),
-                                                       price=float(contract['strike_price']))
-                        logger.debug('delta %s, self.distance_between_strikes %s', delta, self.distance_between_strikes)
-                        if delta == 0:
-                            logger.warning("Delta is zero, skipping")
-                            continue
-                        if delta <= self.MIN_DELTA:
-                            spread_premium = abs(float(first_leg_premium) - float(premium))
-                            logger.debug('spread_premium %s', spread_premium)
-
-                            if spread_premium >= self.distance_between_strikes / 3:
-                                # Assign based on direction and strategy
-                                if self.strategy == CREDIT:
-                                    self.long_premium = premium
-                                    self.long_contract = contract
-                                    self.short_contract = first_leg_contract
-                                    self.short_premium = first_leg_premium
-                                elif self.strategy == DEBIT:
-                                    self.long_premium = first_leg_premium
-                                    self.long_contract = first_leg_contract
-                                    self.short_contract = contract
-                                    self.short_premium = premium
-                                else:
-                                    # Handle other combinations as needed
-                                    logger.warning("Unsupported strategy and direction combination.")
-
-                                logger.info("Assigned LONG contract: %s for a premium of %.2f",
-                                            self.long_contract['ticker'], self.long_premium)
-
-                                # Calculate and assign other parameters
-                                self.max_risk = self.get_max_risk()
-                                self.max_reward = self.get_max_reward()
-                                self.breakeven = self.get_breakeven_price()
-                                self.entry_price = self.get_close_price()
-                                self.target_price = self.get_target_price()
-                                self.stop_price = self.get_stop_price()
-                                self.exit_date_str = self.get_exit_date().strftime('%Y-%m-%d')
-                                break
-
-                    previous_premium = premium
-                    previous_contract = contract
-            return self.short_contract is not None and self.long_contract is not None
-        except Exception as e:
-            logger.exception(f"An unexpected error occurred in match_option: {e}")
-            return False
+        return {CREDIT: {BULLISH: ASC, BEARISH: DESC}, DEBIT: {BULLISH: DESC, BEARISH: ASC}}[strategy][direction]
 
     def get_search_op(self, strategy, direction):
         """Returns the search operator (operator.ge or operator.le) based on strategy and direction.""" 
         return {CREDIT: {BULLISH: operator.ge, BEARISH: operator.le}, DEBIT: {BULLISH: operator.le, BEARISH: operator.ge}}[strategy][direction]
 
+    def match_option(self, date: datetime.date):
+        """Finds suitable short and long options for a vertical spread."""
+        self.second_leg_depth = 0
+        first_leg_contract = None
+        first_leg_premium: Optional[Decimal] = None
+        self.expiration_date = date
+
+        try:
+            options = Options(
+                underlying_ticker=self.underlying_ticker,
+                expiration_date_gte=self.expiration_date,
+                expiration_date_lte=self.expiration_date,
+                contract_type=self.contract_type,
+                order=self.get_order(strategy=self.strategy, direction=self.direction)
+            )
+            self.contracts = options.get_option_contracts()
+
+            # First loop to search for the first_leg_contract
+            first_leg_contract_position = -1
+            first_leg_strike_price = Decimal(0.0)
+            premium: Optional[Decimal] = None
+            for contract in self.contracts:
+                first_leg_contract_position += 1
+                if self.get_search_op(self.strategy, self.direction)(Decimal(contract['strike_price']), self.previous_close):
+                    try:
+                        if self.strategy == CREDIT:
+                            contract = self.contracts[first_leg_contract_position - 1]
+
+                        self.first_leg_snapshot = options.get_snapshot(option_symbol=contract['ticker'])
+                        premium = Decimal(self.first_leg_snapshot['day']['close'])
+                        first_leg_contract = contract
+                        first_leg_premium = premium
+                        first_leg_strike_price = Decimal(contract['strike_price'])  # Store first leg strike price
+                        logger.info("Staging FIRST LEG contract: %s for a premium of %.5f, for previous close of %.5f", first_leg_contract['ticker'],
+                                     first_leg_premium, self.previous_close)
+                        break
+                    except MarketDataException as e:
+                        logger.warning(f"Error getting previous close for first leg contract {contract['ticker']}:\n{e.with_traceback(None)}")
+                        continue
+                    except KeyError as e:
+                        logger.warning(f"KeyError accessing 'day' or 'close' in snapshot for {contract['ticker']}: {e}")
+                        continue
+                    
+            if not first_leg_contract:
+                logger.info("No suitable short contract found.")
+                return False
+            
+            # Assign based on direction and strategy
+            if self.strategy == CREDIT:
+                self.short_contract = first_leg_contract
+                self.short_premium = first_leg_premium * self.SHORT_PREMIUM_MULTIPLIER
+
+            elif self.strategy == DEBIT:
+                self.long_premium = first_leg_premium * self.LONG_PREMIUM_MULTIPLIER
+                self.long_contract = first_leg_contract
+
+            start = first_leg_contract_position - self.MAX_STRIKES
+            stop = first_leg_contract_position
+
+            # Second loop to search for the matching contract
+            for contract in self.contracts[start:stop]:
+                self.second_leg_depth += 1
+                self.distance_between_strikes = abs(Decimal(contract['strike_price'] - first_leg_strike_price))
+                try:
+                    self.second_leg_snapshot = options.get_snapshot(option_symbol=contract['ticker'])
+                    logger.debug(f"Snapshot for {contract['ticker']}")
+                    #TODO: check why day is empty
+                    premium = Decimal(self.second_leg_snapshot['day']['close'])
+                except MarketDataException as e:
+                    logger.warning(f"Error getting previous close for second leg contract {contract['ticker']}:\n{e}")
+                    continue
+                except KeyError as e:
+                    logger.warning(f"KeyError accessing 'day' or 'close' in snapshot for {contract['ticker']}: {e}")
+                    continue
+
+                if first_leg_contract['expiration_date'] != contract['expiration_date']:
+                    logger.warning("Exit as we are going asymmetrical")
+                    break
+
+                premium_delta = Decimal(first_leg_premium) - Decimal(premium)
+                relative_delta = abs(premium_delta / self.distance_between_strikes)
+
+                logger.debug('distance_between_strikes %.5f, premium_delta %.5f', self.distance_between_strikes, premium_delta)
+                if relative_delta == Decimal(0):
+                    logger.warning("Delta is zero, skipping")
+                    continue
+                if relative_delta >= self.MIN_DELTA:
+                    if self.strategy == CREDIT and abs(Decimal(self.second_leg_snapshot["greeks"]["delta"])) < 0.3:
+                        logger.debug(f'Delta is less than 0.3, skipping')
+                        continue
+                    if self.strategy == DEBIT and abs(Decimal(self.second_leg_snapshot["greeks"]["delta"])) > 0.15:
+                        logger.debug(f'Delta is more than 0.15, skipping')
+                        continue
+
+                    logger.info(f'Found a match! {contract["ticker"]} with delta {self.second_leg_snapshot["greeks"]["delta"]}')
+                    if self.second_leg_snapshot["open_interest"] < 100:
+                        logger.warning('Open Interest is less than 100, careful!')
+
+                    # Assign based on direction and strategy
+                    if self.strategy == CREDIT:
+                        self.long_premium = premium * self.LONG_PREMIUM_MULTIPLIER
+                        self.long_contract = contract
+                    elif self.strategy == DEBIT:
+                        self.short_contract = contract
+                        self.short_premium = premium * self.SHORT_PREMIUM_MULTIPLIER
+                    
+                    self.net_premium = self.short_premium - self.long_premium
+
+                    logger.info("Assigned LONG contract: %s for a premium of %.5f",
+                                self.long_contract['ticker'], self.long_premium)
+
+                    # Calculate and assign other parameters
+                    self.max_risk = self.get_max_risk()
+                    self.max_reward = self.get_max_reward()
+                    self.breakeven = self.get_breakeven_price()
+                    self.entry_price = self.get_close_price()
+                    self.target_price = self.get_target_price()
+                    self.stop_price = self.get_stop_price()
+                    self.exit_date = self.get_exit_date()
+                    self.description = self.get_description()
+                    
+                    # Calculate Probability of Profit (POP)
+                    days_to_expiration = (self.expiration_date - datetime.date.today()).days
+                    self.probability_of_profit = Options.calculate_probability_of_profit(
+                        current_price=Decimal(self.previous_close),
+                        breakeven_price=Decimal(self.breakeven),
+                        days_to_expiration=days_to_expiration,
+                        implied_volatility=Decimal(self.second_leg_snapshot['implied_volatility'])
+                    )
+
+                    self.description = f"Sell {self.short_contract['strike_price']} {self.short_contract['contract_type']}, "\
+                        f"buy {self.long_contract['strike_price']} {self.long_contract['contract_type']}; " \
+                        f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
+                        f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
+                        f"stop loss at {self.stop_price:.2f} and before {self.exit_date}"
+                    
+                    break
+
+            if self.long_contract is None:
+                logger.info("No suitable long contract found.")
+
+            return self.short_contract is not None and self.long_contract is not None
+        except Exception as e:
+            logger.exception(f"An unexpected error occurred in match_option: {e}")
+            return False
+
     def get_net_premium(self):
-        return abs(self.short_premium - self.long_premium)
+        return self.net_premium
 
     def get_close_price(self):
-        return self.previous_close
+        return Decimal(self.previous_close)
 
     def get_expiration_date(self):
         return self.expiration_date
@@ -153,13 +202,11 @@ class VerticalSpread(SpreadDataModel):
 
     def to_dict(self):
         """Override to_dict to ensure only serializable data from the parent SpreadDataModel is included."""
-        return super().to_dict()
+        data = super().to_dict()
+        return data
 
-    def get_plain_english_result(self):
-        return f"Sell {self.get_short()['ticker']}, buy {self.get_long()['ticker']}; " \
-            f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
-            f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
-            f"stop loss at {self.stop_price:.2f} and before {self.exit_date_str}"
+    def get_description(self):
+        return self.description
 
     def get_max_reward(self):
         pass
@@ -175,91 +222,52 @@ class VerticalSpread(SpreadDataModel):
 
     def get_stop_price(self):
         pass
-
 
 class CreditSpread(VerticalSpread):
-    ideal_expiration = 45
+
+    ideal_expiration: ClassVar[int] = 45
 
     def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
         super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, previous_close=previous_close)
-        self.option = None
-        self.description = None
-
-    def match_option(self, date=None):
-        if date:
-            result = super().match_option(date, expiration_date_gte=date, expiration_date_lte=date)
-            if result:
-                self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
-                self.description = self.get_plain_english_result()
-            return result
-        else:
-            expiration_date = datetime.date.today()
-            result = super().match_option(expiration_date, expiration_date, expiration_date_gte=expiration_date + datetime.timedelta(days=self.ideal_expiration - 4),
-                                       expiration_date_lte=expiration_date + datetime.timedelta(days=self.ideal_expiration + 2))
-            if result:
-                date = datetime.date.today() + datetime.timedelta(days=self.ideal_expiration)
-                self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
-                self.description = self.get_plain_english_result()
-            return result
 
     def get_max_reward(self):
-        return self.get_net_premium()
+        return self.get_net_premium()*100
 
     def get_max_risk(self):
-        return self.distance_between_strikes - self.get_net_premium()
+        return (abs(self.distance_between_strikes) - self.get_net_premium())*100 
 
     def get_breakeven_price(self):
         net_premium = self.get_net_premium()
-        return float(self.short_contract['strike_price']) + (-net_premium if self.direction == BULLISH else net_premium)
+        return Decimal(self.short_contract['strike_price']) + (-net_premium if self.direction == BULLISH else net_premium)
 
     def get_target_price(self):
-        target_reward = (self.get_max_reward() * 0.8)
+        target_reward = (self.get_net_premium() * Decimal(0.8))
         return self.previous_close + (target_reward if self.direction == BULLISH else -target_reward)
 
     def get_stop_price(self):
-        target_stop = (self.get_max_risk() / 2)
+        target_stop = (self.get_net_premium() / Decimal(2))
         return self.previous_close - (target_stop if self.direction == BULLISH else -target_stop)
 
-
 class DebitSpread(VerticalSpread):
-    ideal_expiration = 45
+    ideal_expiration: ClassVar[int] = 45
 
     def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
         super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, previous_close=previous_close)
-        self.option = None
-        self.description = None
-
-    def match_option(self, date=None):
-        if date:
-            result = super().match_option(date, expiration_date_gte=date, expiration_date_lte=date)
-            if result:
-                self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
-                self.description = self.get_plain_english_result()
-            return result
-        else:
-            expiration_date = datetime.date.today()
-            result = super().match_option(expiration_date, expiration_date_gte=expiration_date + datetime.timedelta(days=self.ideal_expiration - 4),
-                                       expiration_date_lte=expiration_date + datetime.timedelta(days=self.ideal_expiration + 2))
-            if result:
-                date = datetime.date.today() + datetime.timedelta(days=self.ideal_expiration)
-                self.option = f'{{"date": "{date.strftime("%Y-%m-%d")}", "direction": "{self.direction}", "strategy": "{self.strategy}"}}'
-                self.description = self.get_plain_english_result()
-            return result
 
     def get_max_reward(self):
-        return self.distance_between_strikes + self.get_net_premium()
+        return (self.distance_between_strikes - self.long_premium)*100
 
     def get_max_risk(self):
-        return self.get_net_premium()
+        return abs(self.get_net_premium()*100)
 
     def get_breakeven_price(self):
         net_premium = self.get_net_premium()
-        return float(self.long_contract['strike_price']) + (-net_premium if self.direction == BULLISH else net_premium)
+        return Decimal(self.long_contract['strike_price']) + (-net_premium if self.direction == BULLISH else net_premium)
 
     def get_target_price(self):
-        target_reward = (self.get_max_reward() * 0.8)
+        target_reward = (self.get_net_premium() * Decimal(0.8))
         return self.previous_close + (target_reward if self.direction == BULLISH else -target_reward)
 
     def get_stop_price(self):
-        target_stop = (self.get_max_risk() / 2)
+        target_stop = (self.get_net_premium() / Decimal(2))
         return self.previous_close - (target_stop if self.direction == BULLISH else -target_stop)

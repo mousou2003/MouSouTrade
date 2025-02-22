@@ -1,12 +1,8 @@
-# Conclusion on this class:
-# Next time I will use Libraries like Pydantic and Marshmallow provide powerful mechanisms for serialization and validation, 
-# making it easier to handle complex data types, such as fixed-point decimals, while ensuring data integrity. 
-# These libraries offer a concise way to deal with the serialization process rather than managing it manually, 
-# helping to avoid common pitfalls associated with floating-point representation in databases like DynamoDB.
-
-import json
+from pydantic import BaseModel, Field
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Optional, Dict, Any, List
 import datetime
+from datetime import date
 
 ASC = 'asc'
 BEARISH = 'bearish'
@@ -15,34 +11,74 @@ CREDIT = 'credit'
 DEBIT = 'debit'
 DESC = 'desc'
 SPREAD_TYPE = {
-    CREDIT: {BULLISH: 'call', BEARISH: 'put'},
+    CREDIT: {BULLISH: 'put', BEARISH: 'call'},
     DEBIT: {BULLISH: 'call', BEARISH: 'put'}
 }
 
-class SpreadDataModel:
-    datetime = None
-    strategy = None
-    underlying_ticker = None
-    previous_close = None
-    contract_type = None
-    direction = None
-    distance_between_strikes = None
-    short_contract = None
-    long_contract = None
-    contracts = None
-    daily_bars = None
-    client = None
-    long_premium = None
-    short_premium = None
-    max_risk = None
-    max_reward = None
-    breakeven = None
-    entry_price = None
-    target_price = None
-    stop_price = None
-    exit_date_str = None
-    expiration_date = None
-    second_leg_depth = None
+class SpreadDataModel(BaseModel):
+    datetime: Optional[date] = None
+    strategy: Optional[str]
+    underlying_ticker: Optional[str]
+    previous_close: Optional[Decimal] = None
+    contract_type: Optional[str] = None
+    direction: Optional[str]
+    distance_between_strikes: Optional[Decimal] = None
+    short_contract: Optional[Dict[str, Any]] = None
+    long_contract: Optional[Dict[str, Any]] = None
+    contracts: Optional[List[Dict[str, Any]]] = None
+    daily_bars: Optional[List[Dict[str, Any]]] = None
+    client: Optional[str] = None
+    long_premium: Optional[Decimal] = None
+    short_premium: Optional[Decimal] = None
+    max_risk: Optional[Decimal] = None
+    max_reward: Optional[Decimal] = None
+    breakeven: Optional[Decimal] = None
+    entry_price: Optional[Decimal] = None
+    target_price: Optional[Decimal] = None
+    stop_price: Optional[Decimal] = None
+    expiration_date: Optional[date] = None
+    second_leg_depth: Optional[int] = None
+    exit_date: Optional[date] = None
+    description: Optional[str] = None
+    net_premium: Optional[Decimal] = None
+    probability_of_profit: Optional[Decimal] = None
+    first_leg_snapshot: Optional[Dict[str, Any]] = None
+    second_leg_snapshot: Optional[Dict[str, Any]] = None
+    update_date: Optional[date] = None
+
+    @classmethod
+    def from_dynamodb(cls, record: Dict[str, Any]):
+        """Convert types of the record to match SpreadDataModel."""
+        return cls(
+            datetime=record.get('datetime'),
+            strategy=record.get('strategy', ''),
+            underlying_ticker=record.get('underlying_ticker', ''),
+            previous_close=Decimal(record.get('previous_close', '0')),
+            contract_type=record.get('contract_type', ''),
+            direction=record.get('direction', ''),
+            distance_between_strikes=Decimal(record.get('distance_between_strikes', '0')),
+            short_contract=record.get('short_contract', {}),
+            long_contract=record.get('long_contract', {}),
+            contracts=record.get('contracts', []),
+            daily_bars=record.get('daily_bars', []),
+            client=record.get('client', ''),
+            long_premium=Decimal(record.get('long_premium', '0')),
+            short_premium=Decimal(record.get('short_premium', '0')),
+            max_risk=Decimal(record.get('max_risk', '0')),
+            max_reward=Decimal(record.get('max_reward', '0')),
+            breakeven=Decimal(record.get('breakeven', '0')),
+            entry_price=Decimal(record.get('entry_price', '0')),
+            target_price=Decimal(record.get('target_price', '0')),
+            stop_price=Decimal(record.get('stop_price', '0')),
+            expiration_date=datetime.datetime.strptime(record.get('expiration_date'), '%Y-%m-%d').date() if record.get('expiration_date') else None,
+            second_leg_depth=int(float(record.get('second_leg_depth', 0))),  # Convert to float first, then to int
+            exit_date=datetime.datetime.strptime(record.get('exit_date'), '%Y-%m-%d').date() if record.get('exit_date') else None,
+            description=record.get('description', ''),  # Add description field
+            probability_of_profit=Decimal(record.get('probability_of_profit', '0')),
+            first_leg_snapshot=record.get('first_leg_snapshot', {}),
+            second_leg_snapshot=record.get('second_leg_snapshot', {}),
+            update_date=datetime.datetime.strptime(record.get('update_date'), '%Y-%m-%d').date() if record.get('update_date') else None
+        )
 
     def to_dict(self, exclude=None):
         if exclude is None:
@@ -61,20 +97,37 @@ class SpreadDataModel:
 
         if self.long_contract is not None:
             attributes['long_contract'] = {
-                key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
-                for key, value in self.long_contract.items()
+            key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
+            for key, value in self.long_contract.items()
             }
 
         if self.short_contract is not None:
             attributes['short_contract'] = {
-                key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
-                for key, value in self.short_contract.items()
+            key: self.round_decimal(value) if isinstance(value, (Decimal, int, float)) else value
+            for key, value in self.short_contract.items()
             }
+
+        if self.first_leg_snapshot is not None:
+            self.round_nested_dict(self.first_leg_snapshot)
+            attributes['first_leg_snapshot'] = self.first_leg_snapshot
+
+        if self.second_leg_snapshot is not None:
+            self.round_nested_dict(self.second_leg_snapshot)
+            attributes['second_leg_snapshot'] = self.second_leg_snapshot
+
         return attributes
 
+    def round_nested_dict(self, d):
+        """Recursively rounds decimals in a nested dictionary."""
+        for key, value in d.items():
+            if isinstance(value, dict):
+                self.round_nested_dict(value)
+            elif isinstance(value, (Decimal, int, float)):
+                d[key] = self.round_decimal(value)
+
     def round_decimal(self, value):
-        """Converts to Decimal and rounds it, then converts to string."""
-        return str(Decimal(value).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP))
-    
+        """Converts to Decimal and rounds it to five decimal places, then converts to string."""
+        return str(Decimal(value).quantize(Decimal('0.00000'), rounding=ROUND_HALF_UP))
+
     def to_json(self, exclude=None):
-        return json.dumps(self.to_dict(), default=str)  # Convert dictionary to JSON
+        return self.model_dump_json(exclude=exclude)
