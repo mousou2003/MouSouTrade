@@ -111,7 +111,7 @@
     <script>
         $(document).ready(function() {
             let previousData = [];
-            let sortOrders = {};
+            let sortOrders = [];
 
             function refreshData() {
                 $.ajax({
@@ -135,7 +135,7 @@
                 const filteredData = filterExitDate ? data.filter(item => item.exit_date) : data;
 
                 const sortedData = filteredData.sort((a, b) => {
-                    for (const [column, order] of Object.entries(sortOrders)) {
+                    for (const { column, order } of sortOrders) {
                         if (a[column] > b[column]) return order === 'asc' ? 1 : -1;
                         if (a[column] < b[column]) return order === 'asc' ? -1 : 1;
                     }
@@ -164,25 +164,25 @@
                                     <strong>Direction:</strong> ${item.direction}
                                 </td>
                             `);
-                            row.append(`<td>$${item.max_risk}</td>`);
-                            row.append(`<td>$${item.max_reward}</td>`);
-                            row.append(`<td>${item.probability_of_profit}%</td>`);
+                            row.append(`<td>$${Number(item.max_risk).toFixed(2)}</td>`);
+                            row.append(`<td>$${Number(item.max_reward).toFixed(2)}</td>`);
+                            row.append(`<td>${Number(item.probability_of_profit).toFixed(2)}%</td>`);
                             row.append(`<td>${item.description || 'N/A'}</td>`);
 
                             const detailsButton = $(`<button class="view-description" 
-                                data-short_premium="${item.short_premium || 'N/A'}" 
-                                data-long_premium="${item.long_premium || 'N/A'}" 
-                                data-max_risk="${item.max_risk || 'N/A'}" 
-                                data-max_reward="${item.max_reward || 'N/A'}" 
-                                data-breakeven="${item.breakeven || 'N/A'}" 
-                                data-entry_price="${item.entry_price || 'N/A'}" 
-                                data-target_price="${item.target_price || 'N/A'}" 
-                                data-stop_price="${item.stop_price || 'N/A'}" 
+                                data-short_premium="${item.short_premium ? Number(item.short_premium).toFixed(2) : 'N/A'}" 
+                                data-long_premium="${item.long_premium ? Number(item.long_premium).toFixed(2) : 'N/A'}" 
+                                data-max_risk="${item.max_risk ? Number(item.max_risk).toFixed(2) : 'N/A'}" 
+                                data-max_reward="${item.max_reward ? Number(item.max_reward).toFixed(2) : 'N/A'}" 
+                                data-breakeven="${item.breakeven ? Number(item.breakeven).toFixed(2) : 'N/A'}" 
+                                data-entry_price="${item.entry_price ? Number(item.entry_price).toFixed(2) : 'N/A'}" 
+                                data-target_price="${item.target_price ? Number(item.target_price).toFixed(2) : 'N/A'}" 
+                                data-stop_price="${item.stop_price ? Number(item.stop_price).toFixed(2) : 'N/A'}" 
                                 data-exit_date="${item.exit_date || 'N/A'}" 
-                                data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + item.short_contract.strike_price + ')' : 'N/A'}" 
-                                data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + item.long_contract.strike_price + ')' : 'N/A'}" 
-                                data-percentage_max_risk="${item.percentage_max_risk || 'N/A'}"
-                                data-percentage_max_reward="${item.percentage_max_profit || 'N/A'}">Details</button>`);
+                                data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + Number(item.short_contract.strike_price).toFixed(2) + ')' : 'N/A'}" 
+                                data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + Number(item.long_contract.strike_price).toFixed(2) + ')' : 'N/A'}" 
+                                data-percentage_max_risk="${item.percentage_max_risk ? Number(item.percentage_max_risk).toFixed(2) : 'N/A'}"
+                                data-percentage_max_reward="${item.percentage_max_profit ? Number(item.percentage_max_profit).toFixed(2) : 'N/A'}">Details</button>`);
 
                             row.append($('<td>').append(detailsButton));
                             $('#main-data-container tbody').append(row);
@@ -265,8 +265,15 @@
 
             $('th.sortable').on('click', function() {
                 const column = $(this).data('sort');
-                sortOrders[column] = sortOrders[column] === 'asc' ? 'desc' : 'asc';
-                $(this).toggleClass('desc', sortOrders[column] === 'desc');
+                const existingSortOrderIndex = sortOrders.findIndex(order => order.column === column);
+                if (existingSortOrderIndex !== -1) {
+                    const existingSortOrder = sortOrders.splice(existingSortOrderIndex, 1)[0];
+                    existingSortOrder.order = existingSortOrder.order === 'asc' ? 'desc' : 'asc';
+                    sortOrders.unshift(existingSortOrder);
+                } else {
+                    sortOrders.unshift({ column, order: 'asc' });
+                }
+                $(this).toggleClass('desc', sortOrders[0].order === 'desc');
                 renderData(previousData);
             });
 
