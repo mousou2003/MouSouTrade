@@ -18,10 +18,11 @@ from engine.data_model import *
 from database.DynamoDB import DynamoDB
 
 logger = logging.getLogger(__name__)
-if os.getenv("DEBUG_MODE").lower() != "true":
+debug_mode = os.getenv("DEBUG_MODE")
+if debug_mode and debug_mode.lower() == "true":
     loglevel = logging.DEBUG
 else:
-    loglevel = logging.ERROR
+    loglevel = logging.INFO
 logging.basicConfig(level=loglevel)
 
 # Set the logging level to WARNING to suppress DEBUG messages
