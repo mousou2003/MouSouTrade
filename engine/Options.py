@@ -6,8 +6,14 @@ from marketdata_clients.PolygonOptionsClient import PolygonOptionsClient
 import numpy as np
 from scipy.stats import norm
 from decimal import Decimal
+from enum import Enum  # Import Enum
 
 logger = logging.getLogger(__name__)
+
+class TradeStrategy(Enum):
+    HIGH_PROBABILITY = 'high_probability'
+    BALANCED = 'balanced'
+    DIRECTIONAL = 'directional'
 
 class Options:
     """Helper class for calculating option expiration dates and fetching option contracts."""
@@ -166,3 +172,38 @@ class Options:
         probability_of_profit = Decimal(norm.cdf(float(z_score)))
 
         return probability_of_profit * Decimal(100)
+
+    @staticmethod
+    def get_delta_range(trade_strategy: TradeStrategy):
+        """
+        Provides typical delta ranges for vertical spreads based on the trading strategy.
+        
+        Parameters:
+        trade_strategy : TradeStrategy : The trading strategy (TradeStrategy.HIGH_PROBABILITY, TradeStrategy.BALANCED, TradeStrategy.DIRECTIONAL)
+        
+        Returns:
+        tuple : A tuple containing the lower and upper bounds of the delta range
+        """
+        if trade_strategy == TradeStrategy.HIGH_PROBABILITY:
+            return (0.10, 0.30)
+        elif trade_strategy == TradeStrategy.BALANCED:
+            return (0.30, 0.50)
+        elif trade_strategy == TradeStrategy.DIRECTIONAL:
+            return (0.50, 0.70)
+        else:
+            raise ValueError("Invalid trade strategy. Choose from TradeStrategy.HIGH_PROBABILITY, TradeStrategy.BALANCED, or TradeStrategy.DIRECTIONAL.")
+
+    @staticmethod
+    def calculate_standard_deviation(current_price: Decimal, iv: Decimal, days_to_expiration: Decimal) -> Decimal:
+        """
+        Calculate the standard deviation of the underlying asset.
+        
+        Parameters:
+        current_price : Decimal : Current price of the underlying asset
+        iv : Decimal : Implied volatility (expressed as a decimal)
+        time_to_expiration : Decimal : Time to expiration in years
+        
+        Returns:
+        Decimal : Standard deviation of the underlying asset
+        """
+        return current_price * iv * Decimal(np.sqrt(Decimal(days_to_expiration/365)))
