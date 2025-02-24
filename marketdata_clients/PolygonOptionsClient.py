@@ -75,12 +75,6 @@ class PolygonOptionsClient(PolygonClient):
             return asyncio.run(self.async_get_option_contracts(underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order))
         except Exception as err:
             raise MarketDataException(f"Failed to get option contracts for {underlying_ticker}", err)
-
-    def convert_option_symbol_formats(self, ticker):
-        try:
-            return polygon.convert_option_symbol_formats(ticker, from_format=PolygonClient.CLIENT_NAME, to_format='tos')
-        except Exception as err:
-            raise MarketDataException(f"Failed to convert option symbol formats for {ticker}", err)
         
     def get_snapshot(
         self,

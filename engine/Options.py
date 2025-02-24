@@ -27,47 +27,7 @@ class Options:
         self.r = r  # Risk-free interest rate (5%)
         self.sigma = sigma  # Implied volatility (20%)
 
-    def get_option_contracts(self):
-        retries = 3
-        for attempt in range(retries):
-            try:
-                return self.client.get_option_contracts(
-                    underlying_ticker=self.underlying_ticker,
-                    expiration_date_gte=self.expiration_date_gte,
-                    expiration_date_lte=self.expiration_date_lte,
-                    contract_type=self.contract_type,
-                    order=self.order
-                )
-            except Exception as err:
-                if attempt < retries - 1:
-                    time.sleep(2 ** attempt)  # Exponential backoff
-                    continue
-                raise err
 
-    def get_option_previous_close(self, ticker):
-        retries = 3
-        for attempt in range(retries):
-            try:
-                return self.client.get_option_previous_close(ticker)
-            except Exception as err:
-                if attempt < retries - 1:
-                    time.sleep(2 ** attempt)  # Exponential backoff
-                    continue
-                raise err
-
-    def get_snapshot(self, option_symbol: str = None):
-        retries = 3
-        for attempt in range(retries):
-            try:
-                return self.client.get_snapshot(
-                    underlying_symbol=self.underlying_ticker,
-                    option_symbol=option_symbol
-                )
-            except Exception as err:
-                if attempt < retries - 1:
-                    time.sleep(2 ** attempt)  # Exponential backoff
-                    continue
-                raise err
 
     def estimate_premium(self, option_symbol: str = None):
         return self.client.estimate_premium(
