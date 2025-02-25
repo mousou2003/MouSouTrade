@@ -13,7 +13,13 @@ from market.market import Market
 
 # loading configuration file
 config = configparser.ConfigParser()
-config.read('config.ini')
+config.read(r'C:\Users\mouso\Documents\GitHub\MouSouTrade\marketdata_clients\EtradePythonClient\etrade_python_client\config.ini', encoding='utf-8')
+print (config.sections())
+print(config.get('DEFAULT', 'CONSUMER_KEY'))
+print(config.get('DEFAULT', 'CONSUMER_SECRET'))
+print(config.get('DEFAULT', 'SANDBOX_BASE_URL'))
+print(config.get('DEFAULT', 'PROD_BASE_URL'))
+
 
 # logger settings
 logger = logging.getLogger('my_logger')
@@ -57,9 +63,16 @@ def oauth():
             print("Unknown Option Selected!")
     print("")
 
-    # Step 1: Get OAuth 1 request token and secret
-    request_token, request_token_secret = etrade.get_request_token(
-        params={"oauth_callback": "oob", "format": "json"})
+    try:
+        # Step 1: Get OAuth 1 request token and secret
+        request_token, request_token_secret = etrade.get_request_token(
+            params={"oauth_callback": "oob", "format": "json"})
+    except KeyError as e:
+        if 'oauth_token' in str(e):
+            print("Error: Consumer key rejected. Please check your credentials.")
+            return
+        else:
+            raise
 
     # Step 2: Go through the authentication flow. Login to E*TRADE.
     # After you login, the page will provide a verification code to enter.
