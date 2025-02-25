@@ -59,7 +59,7 @@ def load_configuration_file(config_file):
         raise
 
 def process_stock(market_data_client, stock, stock_number, number_of_stocks, dynamodb, stage):
-    ticker = stock.get('Ticker')
+    ticker = stock['Ticker']
     if not ticker:
         raise KeyError('Ticker')
     
@@ -70,7 +70,7 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
         for strategy in [CREDIT, DEBIT]:
             spread_class = DebitSpread if strategy == DEBIT else CreditSpread
             spread = spread_class(market_data_client= market_data_client, underlying_ticker=ticker, 
-                                  direction=direction, strategy=strategy,previous_close=Decimal(stock.get('Last')))
+                                  direction=direction, strategy=strategy,previous_close=stock['close'])
 
             logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
             matched = spread.match_option(date=target_expiration_date)
@@ -136,6 +136,7 @@ def main():
             ticker = stock.get('Ticker')
             if ticker in marketdata_stocks.stocks_data:
                 try:
+                    stock.update(marketdata_stocks.stocks_data[ticker])
                     process_stock(market_data_client=market_data_client, stock=stock, 
                                   stock_number=stock_number, number_of_stocks=number_of_stocks, 
                                   dynamodb=dynamodb, stage=stage)
