@@ -73,6 +73,7 @@ class DynamoDB:
                 "Couldn't access endpoint %s. Here's why: %s",
                 self.table,
                 err)
+            raise
 
     def put_item(self, item):
         try:
@@ -82,3 +83,4 @@ class DynamoDB:
                 "Couldn't access endpoint %s. Here's why: %s",
                 self.table,
                 err)
+            raise

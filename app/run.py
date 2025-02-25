@@ -9,13 +9,15 @@ from requests import ReadTimeout
 from colorama import Fore
 from decimal import Decimal
 
-from marketdata_clients.PolygonClient import *
+from marketdata_clients.BaseMarketDataClient import MarketDataException, MarketDataStrikeNotFoundException
+from marketdata_clients.PolygonClient import POLYGON_CLIENT_NAME
 from marketdata_clients.MarketDataClient import *
 from engine.VerticalSpread import CreditSpread, DebitSpread
 from engine.Options import *
 from engine.Stocks import Stocks
 from engine.data_model import *
 from database.DynamoDB import DynamoDB
+from config.ConfigLoader import ClientKeys, ConfigLoader
 
 logger = logging.getLogger(__name__)
 debug_mode = os.getenv("DEBUG_MODE")
@@ -46,13 +48,17 @@ def check_environment_variables(required_env_vars):
     return env_vars
 
 def load_configuration_file(config_file):
-    with open(config_file) as file:
-        stocks = json.load(file)
-        if isinstance(stocks, dict):
-            stocks = [stocks]
-    return stocks
+    try:
+        with open(config_file) as file:
+            stocks = json.load(file)
+            if isinstance(stocks, dict):
+                stocks = [stocks]
+        return stocks
+    except FileNotFoundError:
+        logger.error(f"Configuration file not found: {config_file}")
+        raise
 
-def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
+def process_stock(market_data_client, stock, stock_number, number_of_stocks, dynamodb, stage):
     ticker = stock.get('Ticker')
     if not ticker:
         raise KeyError('Ticker')
@@ -63,8 +69,8 @@ def process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name):
     for direction in [BULLISH, BEARISH]:
         for strategy in [CREDIT, DEBIT]:
             spread_class = DebitSpread if strategy == DEBIT else CreditSpread
-            spread = spread_class(underlying_ticker=ticker, direction=direction, strategy=strategy,
-                                  previous_close=Decimal(stock['close']))
+            spread = spread_class(market_data_client= market_data_client, underlying_ticker=ticker, 
+                                  direction=direction, strategy=strategy,previous_close=Decimal(stock.get('Last')))
 
             logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
             matched = spread.match_option(date=target_expiration_date)
@@ -116,19 +122,23 @@ def main():
         if not config_file:
             raise ConfigurationFileException("No configuration file provided and MOUSOUTRADE_CONFIG_FILE environment variable is not set.")
         
-        table_name = env_vars['MOUSOUTRADE_STAGE']
-        dynamodb = DynamoDB(table_name)
+        stage = env_vars['MOUSOUTRADE_STAGE']
+        dynamodb = DynamoDB(stage)
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
-
-        marketdata_stocks = Stocks()
+        config_loader = ConfigLoader('./config/SecurityKeys.json')
+        market_data_client=MarketDataClient(client_name=POLYGON_CLIENT_NAME, 
+                                                    json_content=config_loader.config, 
+                                                    stage=stage)
+        marketdata_stocks = Stocks(market_data_client=market_data_client)
 
         for stock_number, stock in enumerate(stocks, start=1):
             ticker = stock.get('Ticker')
             if ticker in marketdata_stocks.stocks_data:
-                stock.update(marketdata_stocks.get_daily_bars(ticker))
                 try:
-                    process_stock(stock, stock_number, number_of_stocks, dynamodb, table_name)
+                    process_stock(market_data_client=market_data_client, stock=stock, 
+                                  stock_number=stock_number, number_of_stocks=number_of_stocks, 
+                                  dynamodb=dynamodb, stage=stage)
                 except ReadTimeout as e:
                     logger.warning(f"Read timeout for {ticker}: {e}")
                 except ConnectionRefusedError as e:
@@ -136,6 +146,8 @@ def main():
                     raise e
                 except (KeyError, MarketDataException) as e:
                     logger.exception(f"Error processing stock {stock_number}/{number_of_stocks} ({ticker}): {e}")
+            else:
+                logger.warning(f"Stock {stock_number}/{number_of_stocks} ({ticker}) not found in market")
         logger.info(f"Number of stocks in initial config file: {number_of_stocks}")
         logger.info(f"Number of stocks found in marketdata_stocks: {len(marketdata_stocks.stocks_data)}")
         logger.info(f"Processed {number_of_stocks} stocks")

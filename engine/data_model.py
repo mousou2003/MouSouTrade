@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
+# from pydantic import BaseModel, Field
 from decimal import Decimal, ROUND_HALF_UP
+import json
 from typing import Optional, Dict, Any, List
 import datetime
 from datetime import date
@@ -15,7 +16,7 @@ SPREAD_TYPE = {
     DEBIT: {BULLISH: 'call', BEARISH: 'put'}
 }
 
-class SpreadDataModel(BaseModel):
+class SpreadDataModel:
     datetime: Optional[date] = None
     strategy: Optional[str]
     underlying_ticker: Optional[str]
@@ -82,7 +83,7 @@ class SpreadDataModel(BaseModel):
 
     def to_dict(self, exclude=None):
         if exclude is None:
-            exclude = ['client', 'contracts']
+            exclude = ['market_data_client']
         
         # Collect initial attributes
         attributes = {
@@ -130,4 +131,4 @@ class SpreadDataModel(BaseModel):
         return str(Decimal(value).quantize(Decimal('0.00000'), rounding=ROUND_HALF_UP))
 
     def to_json(self, exclude=None):
-        return self.model_dump_json(exclude=exclude)
+        return json.dumps(self.to_dict(exclude=exclude))

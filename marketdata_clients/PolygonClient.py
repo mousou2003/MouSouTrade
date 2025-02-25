@@ -1,80 +1,104 @@
+from datetime import datetime, timedelta
+from decimal import Decimal
 import polygon
-import time
 import logging
 import asyncio
-from marketdata_clients.MarketDataClient import MarketDataException, MarketDataClient
+from marketdata_clients.BaseMarketDataClient import BaseMarketDataClient
 
 logger = logging.getLogger(__name__)
 
-class PolygonClient(MarketDataClient):
-    CLIENT_NAME = "polygon"
-    instance = None
-    DEFAULT_THROTTLE_LIMIT = 12
+POLYGON_CLIENT_NAME: str = "polygon"
 
-    def __new__(cls, throttle_limit=DEFAULT_THROTTLE_LIMIT):
-        if PolygonClient.instance is None:
-            logger.debug("Creating PolygonClient Singleton")
-            PolygonClient.instance = super(PolygonClient, cls).__new__(cls)
-            try:
-                PolygonClient.instance.THROTTLE_LIMIT = throttle_limit
-                PolygonClient.instance.client = polygon.StocksClient(PolygonClient.instance._my_key)
-                PolygonClient.instance.options_client = polygon.OptionsClient(PolygonClient.instance._my_key)
-                logger.debug("PolygonClient Singleton created")
-            except Exception as e:
-                logger.error(f"Failed to create PolygonClient: {e}")
-                raise
-        return PolygonClient.instance
+class PolygonClient(BaseMarketDataClient):
+    DEFAULT_THROTTLE_LIMIT = 12
+    OPTION_THROTTLE_LIMIT = 0
+    stocks_data = {}
+
+    def __init__(self, json_content: dict, stage: str, throttle_limit=DEFAULT_THROTTLE_LIMIT):
+        self.client_name = POLYGON_CLIENT_NAME
+        self._load_key_secret(json_content, stage)
+        self.THROTTLE_LIMIT = throttle_limit
+        self.client = polygon.StocksClient(self._my_key)
+        self.options_client = polygon.OptionsClient(self._my_key)
+        logger.debug("PolygonClient created")
 
     def get_previous_close(self, ticker):
-        self._wait_for_no_throttle()
-        return self._exponential_backoff(self.client.get_previous_close, ticker)
+        self._wait_for_no_throttle(self.DEFAULT_THROTTLE_LIMIT)
+        response = self.client.get_previous_close(ticker)
+        return Decimal(response['results'][0]['c'])
 
     def get_grouped_daily_bars(self, date):
-        self._wait_for_no_throttle()
-        return self._exponential_backoff(self.client.get_grouped_daily_bars, date=date)
+        self._wait_for_no_throttle(self.DEFAULT_THROTTLE_LIMIT)
+        response = self.client.get_grouped_daily_bars(date=date)
+        self._populate_daily_bars(response['results'])
+        return self.stocks_data
 
     def get_snapshot(self, symbol):
-        self._wait_for_no_throttle()
-        return self._exponential_backoff(self.client.get_snapshot, symbol)
+        self._wait_for_no_throttle(self.DEFAULT_THROTTLE_LIMIT)
+        response = self.client.get_snapshot(symbol)
+        return response['results']
 
     def get_option_previous_close(self, ticker):
-        self._wait_for_no_throttle()
-        return self._exponential_backoff(self.options_client.get_previous_close, ticker)
+        self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
+        response = self.options_client.get_previous_close(ticker)
+        return Decimal(response['results'][0]['c'])
 
-    def get_grouped_option_daily_bars(self, date):
-        self._wait_for_no_throttle()
-        return self._exponential_backoff(self.options_client.get_grouped_daily_bars, date=date)
-
-    async def async_get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
-        self._wait_for_no_throttle()
-        try:
-            contracts = polygon.ReferenceClient(self._my_key).get_option_contracts(
-                underlying_ticker=underlying_ticker,
-                expiration_date_lte=expiration_date_lte,
-                expiration_date_gte=expiration_date_gte,
-                contract_type=contract_type,
-                order=order,
-                sort='strike_price',
-                all_pages=True
-            )
-            if len(contracts) == 0:
-                logger.warning(f"No option contracts found for {underlying_ticker}")
-                return []
-            return contracts
-        except KeyError as err:
-            logger.warning(f"No option contracts found for {underlying_ticker}: {err}")
-            return []
-        except Exception as err:
-            raise MarketDataException(f"Failed to asynchronously get option contracts for {underlying_ticker}", err)
+    async def _async_get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
+        self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
+        contracts = polygon.ReferenceClient(self._my_key).get_option_contracts(
+            underlying_ticker=underlying_ticker,
+            expiration_date_lte=expiration_date_lte,
+            expiration_date_gte=expiration_date_gte,
+            contract_type=contract_type,
+            order=order,
+            sort='strike_price',
+            all_pages=True
+        )
+        return contracts
 
     def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
-        self._wait_for_no_throttle()
-        return asyncio.run(self.async_get_option_contracts(underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order))
+        self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
+        return asyncio.run(self._async_get_option_contracts(underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order))
 
-    def get_option_snapshot(self, symbol, option_symbol=None):
-        self._wait_for_no_throttle()
-        return self._exponential_backoff(
-            self.options_client.get_snapshot,
-            underlying_symbol=symbol,
-            option_symbol=option_symbol
+    def get_option_snapshot(
+        self,
+        underlying_symbol: str,
+        option_symbol: str = None):
+        self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
+        response =  self.options_client.get_snapshot(
+            underlying_symbol=underlying_symbol,
+            option_symbol=option_symbol,
+            all_pages=False,
+            max_pages=None,
+            merge_all_pages=True,
+            verbose=False,
+            raw_page_responses=False,
+            raw_response=False,
         )
+        return response['results']
+
+    def get_previous_market_open_day(self, date=None):
+        date = date if date else datetime.now().date()
+        days_checked = 0
+        while days_checked < 7:
+            date -= timedelta(days=1)
+            days_checked += 1
+            if date.weekday() < 5:  # Monday to Friday are considered market open days
+                return date
+        raise IndexError("Failed to find a previous market open day within the last 7 days")
+        
+    def _populate_daily_bars(self, grouped_daily_bars):
+        for bar in grouped_daily_bars:
+            ticker = bar['T']
+            date = datetime.fromtimestamp(bar['t'] / 1000).date()
+            daily_bar = {
+                "date": date,
+                "open": Decimal(bar['o']),
+                "high": Decimal(bar['h']),
+                "low": Decimal(bar['l']),
+                "close": Decimal(bar['c']),
+                "volume": Decimal(bar['v'])
+            }
+            if ticker not in self.stocks_data:
+                self.stocks_data[ticker] = {}
+            self.stocks_data[ticker] = daily_bar

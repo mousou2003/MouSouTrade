@@ -1,22 +1,20 @@
 import datetime
 import json
-import time
 from decimal import Decimal
 
-from marketdata_clients.PolygonStocksClient import PolygonStocksClient
-from marketdata_clients.MarketDataClient import MarketDataException
+from marketdata_clients.BaseMarketDataClient import IMarketDataClient, MarketDataException
+
 
 class Stocks:
-    def __init__(self, date=None):
-        self.instance = PolygonStocksClient()
-        self.date = date if date else self.instance.get_previous_market_open_day(date)
+    def __init__(self,  market_data_client: IMarketDataClient, date: datetime.date = None):
+        self.market_data_client = market_data_client
+        self.date = date if date else self.market_data_client.get_previous_market_open_day(date)
         self.stocks_data = {}
         # explore the past 7 days to find the most recent data
         for _ in range(6):
-            response = self.get_grouped_daily_bars(self.date)
-            if 'results' in response and response['results']:
-                self.instance.populate_daily_bars(response['results'])
-                break
+            self.stocks_data = self.market_data_client.get_grouped_daily_bars(self.date)
+            if self.stocks_data != {}:
+               return
             else:
                 self.date = self.instance.get_previous_market_open_day(self.date)
         else:

@@ -15,7 +15,7 @@
                 "PYTHONPATH": "${workspaceFolder}",
                 "DYNAMODB_ENDPOINT_URL":"http://localhost:8000",
                 "MOUSOUTRADE_STAGE":"Alpha",
-                "DEBUG_MODE":"True"
+                "DEBUG_MODE":"False"
             },
             "autoReload": { "enable": true }
         }

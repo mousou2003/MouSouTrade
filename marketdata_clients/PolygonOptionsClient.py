@@ -22,18 +22,6 @@ class PolygonOptionsClient(PolygonClient):
                 raise
         return PolygonOptionsClient.instance
 
-    def get_grouped_option_daily_bars(self, date):
-        self.wait_for_no_throttle()
-        try:
-            response = self.client.get_grouped_daily_bars(date)
-            if 'results' not in response or not response['results']:
-                raise KeyError()
-            return response['results']
-        except KeyError as err:
-            raise MarketDataStrikeNotFoundException(f"No results found for date {date}")
-        except Exception as err:
-            raise MarketDataException(f"Failed to get grouped option daily bars for {date}", err)
-
     def get_option_previous_close(self, ticker):
         self.wait_for_no_throttle()
         try:

@@ -1,12 +1,12 @@
-from marketdata_clients.PolygonStocksClient import PolygonStocksClient
-from marketdata_clients.MarketDataClient import MarketDataStrikeNotFoundException, MarketDataException
 from engine.data_model import *
 from engine.Options import Options, TradeStrategy  # Import TradeStrategy
 import logging
-import datetime
+from datetime import datetime, timedelta
 import operator
 from typing import ClassVar, Optional
 from decimal import Decimal
+
+from marketdata_clients.BaseMarketDataClient import IMarketDataClient, MarketDataException
 
 logger = logging.getLogger(__name__)
 
@@ -16,18 +16,22 @@ class VerticalSpread(SpreadDataModel):
     MIN_DELTA: ClassVar[Decimal] = Decimal(0.26)  # Minimum absolute delta for a contract to be considered
     SHORT_PREMIUM_MULTIPLIER: ClassVar[Decimal] = Decimal(0.95)  # Multiplier for short premium
     LONG_PREMIUM_MULTIPLIER: ClassVar[Decimal] = Decimal(1.05)  # Multiplier for long premium
-    def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
-        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy)
+
+    market_data_client: ClassVar[IMarketDataClient] = None
+
+    def __init__(self, market_data_client: IMarketDataClient, underlying_ticker, direction, strategy, previous_close=None):
+        super().__init__()
         
         """Initializes VerticalSpread with market data."""
         logger.info("Processing %s", underlying_ticker)
+        self.market_data_client = market_data_client
         self.underlying_ticker = underlying_ticker
-        self.previous_close = previous_close if previous_close is not None else PolygonStocksClient().get_previous_stock_close(self.underlying_ticker)
+        self.previous_close = previous_close if previous_close is not None else self.market_data_client.get_previous_close(self.underlying_ticker)
         logger.info("%s last close price :%.5f", self.underlying_ticker, self.previous_close)
         self.contract_type = SPREAD_TYPE[strategy][direction]
         self.direction = direction
         self.strategy = strategy
-        self.update_date = datetime.datetime.now().date()
+        self.update_date = datetime.now().date()
 
     def get_order(self, strategy, direction):
         """Returns the order (ASC/DESC) based on strategy and direction."""
@@ -45,15 +49,14 @@ class VerticalSpread(SpreadDataModel):
         self.expiration_date = date
 
         try:
-            days_to_expiration = (self.expiration_date - datetime.date.today()).days
-            options = Options(
+            days_to_expiration = (self.expiration_date - datetime.today().date()).days
+            self.contracts = self.market_data_client.get_option_contracts(
                 underlying_ticker=self.underlying_ticker,
                 expiration_date_gte=self.expiration_date,
                 expiration_date_lte=self.expiration_date,
                 contract_type=self.contract_type,
                 order=self.get_order(strategy=self.strategy, direction=self.direction)
             )
-            self.contracts = options.get_option_contracts()
 
             # First loop to search for the first_leg_contract
             first_leg_contract_position = -1
@@ -65,7 +68,8 @@ class VerticalSpread(SpreadDataModel):
                     try:
                         if self.get_order(strategy=self.strategy,direction=BEARISH) == DESC:
                             contract = self.contracts[first_leg_contract_position - 1]
-                        self.first_leg_snapshot = options.get_snapshot(option_symbol=contract['ticker'])
+                        self.first_leg_snapshot = self.market_data_client.get_option_snapshot(underlying_ticker=self.underlying_ticker,
+                                                                                              option_symbol=contract['ticker'])
                         delta_range = Options.get_delta_range(TradeStrategy.DIRECTIONAL)
                         if not (delta_range[0] <= abs(Decimal(self.first_leg_snapshot["greeks"]["delta"])) <= delta_range[1]):
                             logger.debug(f'Delta is out of range, skipping')
@@ -105,7 +109,8 @@ class VerticalSpread(SpreadDataModel):
                 self.second_leg_depth += 1
                 self.distance_between_strikes = abs(Decimal(contract['strike_price']) - first_leg_strike_price)
                 try:
-                    self.second_leg_snapshot = options.get_snapshot(option_symbol=contract['ticker'])
+                    self.second_leg_snapshot = self.market_data_client.get_option_snapshot(underlying_ticker=self.underlying_ticker,
+                                                                                           option_symbol=contract['ticker'])
                     logger.debug(f"Snapshot for {contract['ticker']}")
                     if Options.calculate_standard_deviation(current_price=self.previous_close,
                                                             iv=Decimal(self.second_leg_snapshot['implied_volatility']),
@@ -200,7 +205,7 @@ class VerticalSpread(SpreadDataModel):
         return self.expiration_date
 
     def get_exit_date(self):
-        return self.get_expiration_date() - datetime.timedelta(days=21)
+        return self.get_expiration_date() - timedelta(days=21)
 
     def get_short(self):
         return self.short_contract
@@ -235,8 +240,8 @@ class CreditSpread(VerticalSpread):
 
     ideal_expiration: ClassVar[int] = 45
 
-    def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
-        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, previous_close=previous_close)
+    def __init__(self, market_data_client: IMarketDataClient, underlying_ticker, direction, strategy, previous_close=None):
+        super().__init__(market_data_client, underlying_ticker, direction, strategy, previous_close)
 
     def get_max_reward(self):
         return self.get_net_premium()*100
@@ -259,8 +264,8 @@ class CreditSpread(VerticalSpread):
 class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
-    def __init__(self, underlying_ticker, direction, strategy, previous_close=None):
-        super().__init__(underlying_ticker=underlying_ticker, direction=direction, strategy=strategy, previous_close=previous_close)
+    def __init__(self, market_data_client: IMarketDataClient, underlying_ticker, direction, strategy, previous_close=None):
+        super().__init__(market_data_client, underlying_ticker, direction, strategy, previous_close)
 
     def get_max_reward(self):
         return (self.distance_between_strikes - self.long_premium)*100

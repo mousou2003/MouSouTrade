@@ -1,12 +1,11 @@
 import calendar
-import datetime
+from datetime import datetime, timedelta
 import logging
-import time
-from marketdata_clients.PolygonOptionsClient import PolygonOptionsClient
 import numpy as np
 from scipy.stats import norm
 from decimal import Decimal
 from enum import Enum  # Import Enum
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -17,24 +16,10 @@ class TradeStrategy(Enum):
 
 class Options:
     """Helper class for calculating option expiration dates and fetching option contracts."""
-    def __init__(self, underlying_ticker, expiration_date_gte: datetime.date, expiration_date_lte: datetime.date, contract_type, order, r=0.05, sigma=0.2):
-        self.client = PolygonOptionsClient()
-        self.underlying_ticker = underlying_ticker
-        self.expiration_date_gte = expiration_date_gte
-        self.expiration_date_lte = expiration_date_lte
-        self.contract_type = contract_type
-        self.order = order
+    def __init__(self, r=0.05, sigma=0.2):
         self.r = r  # Risk-free interest rate (5%)
         self.sigma = sigma  # Implied volatility (20%)
 
-
-
-    def estimate_premium(self, option_symbol: str = None):
-        return self.client.estimate_premium(
-            underlying_symbol=self.underlying_ticker,
-            option_symbol=option_symbol
-        )
-    
     @staticmethod
     def get_third_friday_of_month(year, month):
         """Calculates the date of the third Friday of a given month and year."""
@@ -51,13 +36,13 @@ class Options:
         days_ahead = 4 - date.weekday()  # Friday is the 4th day of the week (0-indexed)
         if days_ahead <= 0:  # Target day already passed this week
             days_ahead += 7
-        next_friday = date + datetime.timedelta(days=days_ahead)
+        next_friday = date + timedelta(days=days_ahead)
         return next_friday
 
     @staticmethod
     def get_third_friday_of_current_month():
         """Calculates the date of the third Friday of the current month."""
-        today = datetime.datetime.today().date()
+        today = datetime.today().date()
         year = today.year
         month = today.month
         return Options.get_third_friday_of_month(year, month)
@@ -65,12 +50,11 @@ class Options:
     @staticmethod
     def get_following_third_friday():
         """Calculates the date of the third Friday of the next month."""
-        today = datetime.datetime.today().date()
+        today = datetime.today().date()
         year = today.year
         month = today.month + 1
         return Options.get_third_friday_of_month(year, month)
     
-    @staticmethod
     def black_scholes_call(self, S, K, T):
         """
         Calculate the Black-Scholes call option price.
@@ -88,8 +72,7 @@ class Options:
         call_price = S * norm.cdf(d1) - K * np.exp(-self.r * T) * norm.cdf(d2)
         return call_price
 
-    @staticmethod
-    def black_scholes_put(self, S, K, T):
+    def black_scholes_put(self, S, K, T,):
         """
         Calculate the Black-Scholes put option price.
         
@@ -166,4 +149,4 @@ class Options:
         Returns:
         Decimal : Standard deviation of the underlying asset
         """
-        return current_price * iv * Decimal(np.sqrt(Decimal(days_to_expiration/365)))
+        return Decimal(current_price * iv * Decimal(np.sqrt(Decimal(days_to_expiration/365))))
