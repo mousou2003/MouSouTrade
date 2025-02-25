@@ -91,7 +91,7 @@ class SpreadDataModel(BaseModel):
 
     def to_dict(self, exclude=None):
         if exclude is None:
-            exclude = ['market_data_client']
+            exclude = ['market_data_client','contracts']
         
         # Collect initial attributes
         attributes = {
