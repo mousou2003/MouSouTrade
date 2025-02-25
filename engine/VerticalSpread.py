@@ -17,10 +17,15 @@ class VerticalSpread(SpreadDataModel):
     SHORT_PREMIUM_MULTIPLIER: ClassVar[Decimal] = Decimal(0.95)  # Multiplier for short premium
     LONG_PREMIUM_MULTIPLIER: ClassVar[Decimal] = Decimal(1.05)  # Multiplier for long premium
 
-    market_data_client: ClassVar[IMarketDataClient] = None
+    market_data_client: IMarketDataClient = None
 
     def __init__(self, market_data_client: IMarketDataClient, underlying_ticker, direction, strategy, previous_close=None):
-        super().__init__()
+        super().__init__(
+            strategy=strategy,
+            underlying_ticker=underlying_ticker,
+            direction=direction,
+            previous_close=previous_close
+        )
         
         """Initializes VerticalSpread with market data."""
         logger.info("Processing %s", underlying_ticker)

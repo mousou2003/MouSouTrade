@@ -1,9 +1,11 @@
-# from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field
 from decimal import Decimal, ROUND_HALF_UP
 import json
 from typing import Optional, Dict, Any, List
 import datetime
 from datetime import date
+
+from marketdata_clients.BaseMarketDataClient import IMarketDataClient
 
 ASC = 'asc'
 BEARISH = 'bearish'
@@ -16,7 +18,7 @@ SPREAD_TYPE = {
     DEBIT: {BULLISH: 'call', BEARISH: 'put'}
 }
 
-class SpreadDataModel:
+class SpreadDataModel(BaseModel):
     datetime: Optional[date] = None
     strategy: Optional[str]
     underlying_ticker: Optional[str]
@@ -46,6 +48,12 @@ class SpreadDataModel:
     first_leg_snapshot: Optional[Dict[str, Any]] = None
     second_leg_snapshot: Optional[Dict[str, Any]] = None
     update_date: Optional[date] = None
+
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {
+            IMarketDataClient: lambda v: None
+        }
 
     @classmethod
     def from_dynamodb(cls, record: Dict[str, Any]):
