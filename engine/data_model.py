@@ -17,7 +17,38 @@ SPREAD_TYPE = {
     DEBIT: {BULLISH: 'call', BEARISH: 'put'}
 }
 
-class Contract(BaseModel):
+class DataModelBase(BaseModel):
+    def to_json(self, exclude=None):
+        return json.dumps(self.to_dict(exclude=exclude))
+
+    def to_dict(self, exclude=None):
+        if exclude is None:
+            exclude = ['market_data_client','contracts']
+        
+        # Collect initial attributes
+        attributes = {
+            key: ( self._process_value(value))
+            for key, value in self.__dict__.items()
+            if key not in exclude and value is not None  # Exclude specified attributes
+        }
+
+        return attributes
+
+    def _process_value(self, value):
+        return value.strftime('%Y-%m-%d') if isinstance(value, date) else \
+            self._round_decimal(value) if isinstance(value, (Decimal, float)) else \
+            self._process_nested_dict(value.__dict__) if isinstance(value, (BaseModel)) else \
+            self._process_nested_dict(value) if isinstance(value, (dict)) else \
+            value
+    
+    def _process_nested_dict(self, item):
+        return {key: self._process_value(value) for key, value in item.items()}
+
+    def _round_decimal(self, value):
+        """Converts to Decimal and rounds it to five decimal places, then converts to string."""
+        return str(Decimal(value).quantize(Decimal('0.00000'), rounding=ROUND_HALF_UP))
+
+class Contract(DataModelBase):
     cfi: str
     contract_type: str
     exercise_style: str
@@ -46,24 +77,10 @@ class Contract(BaseModel):
         return cls(data)
 
     def to_dict(self, exclude=None):
-        if exclude is None:
-            exclude = []
-        
-        # Collect initial attributes
-        attributes = {
-            key: (
-                value.strftime('%Y-%m-%d') if isinstance(value, date) else
-                Exception(f"Unsupported type: {type(value)}") if isinstance(value, (float)) else 
-                value
-            )
-            for key, value in self.__dict__.items()
-            if key not in exclude and value is not None  # Exclude specified attributes
-        }
-
+        attributes = super().to_dict(exclude)
         return attributes
 
-
-class SpreadDataModel(BaseModel):
+class SpreadDataModel(DataModelBase):
     datetime: Optional[date] = None
     strategy: Optional[str]
     underlying_ticker: Optional[str]
@@ -135,21 +152,11 @@ class SpreadDataModel(BaseModel):
         )
 
     def to_dict(self, exclude=None):
-        if exclude is None:
+        return super().to_dict(exclude)
+"""         if exclude is None:
             exclude = ['market_data_client','contracts']
         
-        # Collect initial attributes
-        attributes = {
-            key: (
-                value.strftime('%Y-%m-%d') if isinstance(value, date) else
-                self.round_decimal(value) if isinstance(value, (Decimal)) else
-                Exception(f"Unsupported type: {type(value)}") if isinstance(value, (float)) else 
-                value
-            )
-            for key, value in self.__dict__.items()
-            if key not in exclude and value is not None  # Exclude specified attributes
-        }
-
+        # Collect additional attributes specific to SpreadDataModel
         if self.long_contract is not None:
             attributes['long_contract'] = self.long_contract.to_dict()
 
@@ -157,32 +164,9 @@ class SpreadDataModel(BaseModel):
             attributes['short_contract'] = self.short_contract.to_dict()
 
         if self.first_leg_snapshot is not None:
-            self.round_nested_dict(self.first_leg_snapshot)
+            self._round_nested_dict(self.first_leg_snapshot)
             attributes['first_leg_snapshot'] = self.first_leg_snapshot
 
         if self.second_leg_snapshot is not None:
-            self.round_nested_dict(self.second_leg_snapshot)
-            attributes['second_leg_snapshot'] = self.second_leg_snapshot
-
-        return attributes
-
-    def round_nested_dict(self, d):
-        """Recursively rounds decimals in a nested dictionary."""
-        for key, value in d.items():
-            if isinstance(value, dict):
-                self.round_nested_dict(value)
-            elif isinstance(value, (Decimal,float)):
-                try:
-                    d[key] = self.round_decimal(value)
-                except Inexact:
-                    raise Exception(f"Error rounding: {key}={value}")
-
-    def round_decimal(self, value):
-        """Converts to Decimal and rounds it to five decimal places, then converts to string."""
-        try:
-            return str(Decimal(value).quantize(Decimal('0.00000'), rounding=ROUND_HALF_UP))
-        except Inexact:
-            raise Exception(f"Error rounding: {key}={value}")
-
-    def to_json(self, exclude=None):
-        return json.dumps(self.to_dict(exclude=exclude))
+            self._round_nested_dict(self.second_leg_snapshot)
+            attributes['second_leg_snapshot'] = self.second_leg_snapshot """
