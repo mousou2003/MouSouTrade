@@ -6,3 +6,4 @@ config/SecurityKeys.json
 docker/
 marketdata_clients/EtradePythonClient/venv/
 marketdata_clients/EtradePythonClient/etrade_python_client/python_client.log
+python_client.log

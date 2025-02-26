@@ -63,7 +63,7 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
     if not ticker:
         raise KeyError('Ticker')
     
-    ideal_expiration = datetime.datetime.today() + datetime.timedelta(weeks=5)    
+    ideal_expiration = datetime.today() + timedelta(weeks=5)    
     target_expiration_date = Options.get_next_friday(ideal_expiration).date()
 
     for direction in [BULLISH, BEARISH]:
@@ -75,7 +75,7 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
             logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
             matched = spread.match_option(date=target_expiration_date)
             key = {
-                "ticker": f"{spread.underlying_ticker}-{spread.expiration_date.strftime('%Y-%m-%d')}-{spread.update_date.strftime('%Y-%m-%d')}",
+                "ticker": f"{spread.underlying_ticker};{spread.expiration_date.strftime('%Y-%m-%d')};{spread.update_date.strftime('%Y-%m-%d')}",
                 "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), 
                                       "direction": direction, 
                                       "strategy": strategy}, default=str)
@@ -91,7 +91,8 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
             response = dynamodb.get_item(key=key)
             if 'Item' in response:
                 logger.info("Match %sfound, and stored in %s" % (("", key) if matched else ("not ", key)))
-                logger.debug("Saved in table: %s" % response)
+                validated_records = SpreadDataModel.from_dynamodb(response['Item']).to_dict()
+                logger.debug(f'Saved in table:\n{validated_records}')
             else:
                 raise MarketDataStrikeNotFoundException(f"No item found for ticker {ticker}")
 

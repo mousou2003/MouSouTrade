@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError
 import os
 import signal
 import sys
-from engine.data_model import SpreadDataModel  # Import the data model
+from engine.data_model import SpreadDataModel, Contract  # Correct the import statement
 
 app = Flask(__name__)
 

@@ -4,6 +4,7 @@ import time
 
 from marketdata_clients.BaseMarketDataClient import BaseMarketDataClient, IMarketDataClient, MarketDataException, MarketDataStrikeNotFoundException
 from marketdata_clients.PolygonClient import *
+from engine.data_model import Contract  # Correct the import statement
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class MarketDataClient(BaseMarketDataClient):
 
     def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
         try:
-            return self._exponential_backoff(
+            contracts = self._exponential_backoff(
                 self.client.get_option_contracts,
                 underlying_ticker=underlying_ticker,
                 expiration_date_gte=expiration_date_gte,
@@ -52,6 +53,7 @@ class MarketDataClient(BaseMarketDataClient):
                 contract_type=contract_type,
                 order=order
             )
+            return [Contract.from_dict(contract) for contract in contracts]
         except Exception as err:
             raise MarketDataException(f"Failed to get option contracts for {underlying_ticker}", err)
 

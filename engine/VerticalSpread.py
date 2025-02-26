@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 import operator
 from typing import ClassVar, Optional
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, Inexact, getcontext
 
 from marketdata_clients.BaseMarketDataClient import IMarketDataClient, MarketDataException
 
@@ -69,28 +69,33 @@ class VerticalSpread(SpreadDataModel):
             premium: Optional[Decimal] = None
             for contract in self.contracts:
                 first_leg_contract_position += 1
-                if self.get_search_op(self.strategy, self.direction)(Decimal(contract['strike_price']), self.previous_close):
+                if self.get_search_op(self.strategy, self.direction)(Decimal(contract.strike_price), self.previous_close):
                     try:
                         if self.get_order(strategy=self.strategy,direction=BEARISH) == DESC:
                             contract = self.contracts[first_leg_contract_position - 1]
                         self.first_leg_snapshot = self.market_data_client.get_option_snapshot(underlying_ticker=self.underlying_ticker,
-                                                                                              option_symbol=contract['ticker'])
+                                                                                              option_symbol=contract.ticker)
                         delta_range = Options.get_delta_range(TradeStrategy.DIRECTIONAL)
-                        if not (delta_range[0] <= abs(Decimal(self.first_leg_snapshot["greeks"]["delta"])) <= delta_range[1]):
-                            logger.debug(f'Delta is out of range, skipping')
+                        try:
+                            delta = Decimal(abs(self.first_leg_snapshot["greeks"]["delta"]))
+                            if not (delta_range[0] <= delta <= delta_range[1]):
+                                logger.debug(f'Delta is out of range, skipping')
+                                continue
+                        except (InvalidOperation, Inexact):
+                            logger.warning(f"Invalid delta value for contract {contract.ticker}, skipping")
                             continue
                         premium = Decimal(self.first_leg_snapshot['day']['close'])
                         first_leg_contract = contract
                         first_leg_premium = premium
-                        first_leg_strike_price = Decimal(contract['strike_price'])  # Store first leg strike price
-                        logger.info("Staging FIRST LEG contract: %s for a premium of %.5f, for previous close of %.5f", first_leg_contract['ticker'],
+                        first_leg_strike_price = Decimal(contract.strike_price)  # Store first leg strike price
+                        logger.info("Staging FIRST LEG contract: %s for a premium of %.5f, for previous close of %.5f", first_leg_contract.ticker,
                                      first_leg_premium, self.previous_close)
                         break
                     except MarketDataException as e:
-                        logger.warning(f"Error getting previous close for first leg contract {contract['ticker']}:\n{e.with_traceback(None)}")
+                        logger.warning(f"Error getting previous close for first leg contract {contract.ticker}:\n{e.with_traceback(None)}")
                         continue
                     except KeyError as e:
-                        logger.warning(f"KeyError accessing 'day' or 'close' in snapshot for {contract['ticker']}: {e}")
+                        logger.warning(f"KeyError accessing 'day' or 'close' in snapshot for {contract.ticker}: {e}")
                         continue
                     
             if not first_leg_contract:
@@ -99,12 +104,20 @@ class VerticalSpread(SpreadDataModel):
 
 
             if self.strategy == CREDIT:
-                self.short_contract = first_leg_contract
-                self.short_premium = first_leg_premium * self.SHORT_PREMIUM_MULTIPLIER
+                try:
+                    self.short_contract = first_leg_contract
+                    self.short_premium = first_leg_premium * self.SHORT_PREMIUM_MULTIPLIER
+                except Inexact:
+                    logger.error("Inexact value encountered in short premium calculation")
+                    raise
 
             elif self.strategy == DEBIT:
-                self.long_premium = first_leg_premium * self.LONG_PREMIUM_MULTIPLIER
-                self.long_contract = first_leg_contract
+                try:
+                    self.long_premium = first_leg_premium * self.LONG_PREMIUM_MULTIPLIER
+                    self.long_contract = first_leg_contract
+                except Inexact:
+                    logger.error("Inexact value encountered in long premium calculation")
+                    raise
 
             start = first_leg_contract_position - self.MAX_STRIKES
             stop = first_leg_contract_position
@@ -112,11 +125,11 @@ class VerticalSpread(SpreadDataModel):
             # Second loop to search for the matching contract
             for contract in self.contracts[start:stop]:
                 self.second_leg_depth += 1
-                self.distance_between_strikes = abs(Decimal(contract['strike_price']) - first_leg_strike_price)
+                self.distance_between_strikes = abs(Decimal(contract.strike_price) - first_leg_strike_price)
                 try:
                     self.second_leg_snapshot = self.market_data_client.get_option_snapshot(underlying_ticker=self.underlying_ticker,
-                                                                                           option_symbol=contract['ticker'])
-                    logger.debug(f"Snapshot for {contract['ticker']}")
+                                                                                           option_symbol=contract.ticker)
+                    logger.debug(f"Snapshot for {contract.ticker}")
                     if Options.calculate_standard_deviation(current_price=self.previous_close,
                                                             iv=Decimal(self.second_leg_snapshot['implied_volatility']),
                                                             days_to_expiration=days_to_expiration) <= Decimal(1):
@@ -124,18 +137,22 @@ class VerticalSpread(SpreadDataModel):
                         continue
                     premium = Decimal(self.second_leg_snapshot['day']['close'])
                 except MarketDataException as e:
-                    logger.warning(f"Error getting previous close for second leg contract {contract['ticker']}:\n{e}")
+                    logger.warning(f"Error getting previous close for second leg contract {contract.ticker}:\n{e}")
                     continue
                 except KeyError as e:
-                    logger.warning(f"KeyError accessing 'day' or 'close' in snapshot for {contract['ticker']}: {e}")
+                    logger.warning(f"KeyError accessing 'day' or 'close' in snapshot for {contract.ticker}: {e}")
                     continue
 
-                if first_leg_contract['expiration_date'] != contract['expiration_date']:
+                if first_leg_contract.expiration_date != contract.expiration_date:
                     logger.error("Exit as we are going asymmetrical")
                     break
 
                 premium_delta = first_leg_premium - premium
-                relative_delta = abs(premium_delta / self.distance_between_strikes)
+                try:
+                    relative_delta = abs(premium_delta / self.distance_between_strikes)
+                except InvalidOperation:
+                    logger.warning("Division by zero encountered in relative_delta calculation, skipping")
+                    continue
 
                 logger.debug('distance_between_strikes %.5f, premium_delta %.5f', self.distance_between_strikes, premium_delta)
                 if relative_delta == Decimal(0):
@@ -144,15 +161,28 @@ class VerticalSpread(SpreadDataModel):
                 if relative_delta >= self.MIN_DELTA:
                     # Check validity and assign based on direction and strategy
                     delta_range = Options.get_delta_range(TradeStrategy.HIGH_PROBABILITY)
-                    if not (delta_range[0] <= abs(Decimal(self.second_leg_snapshot["greeks"]["delta"])) <= delta_range[1]):
-                        logger.debug(f'Delta is out of range, skipping')
+                    try:
+                        delta = Decimal(self.second_leg_snapshot["greeks"]["delta"])
+                        if not (delta_range[0] <= abs(delta) <= delta_range[1]):
+                            logger.debug(f'Delta is out of range, skipping')
+                            continue
+                    except (InvalidOperation, Inexact):
+                        logger.warning(f"Invalid delta value for contract {contract.ticker}, skipping")
                         continue
                     if self.strategy == CREDIT:
-                        self.long_premium = premium * self.LONG_PREMIUM_MULTIPLIER
-                        self.long_contract = contract
+                        try:
+                            self.long_premium = premium * self.LONG_PREMIUM_MULTIPLIER
+                            self.long_contract = contract
+                        except Inexact:
+                            logger.warning("Inexact value encountered in long premium calculation, skipping")
+                            continue
                     elif self.strategy == DEBIT:
-                        self.short_contract = contract
-                        self.short_premium = premium * self.SHORT_PREMIUM_MULTIPLIER
+                        try:
+                            self.short_contract = contract
+                            self.short_premium = premium * self.SHORT_PREMIUM_MULTIPLIER
+                        except Inexact:
+                            logger.warning("Inexact value encountered in short premium calculation, skipping")
+                            continue
 
                     if self.second_leg_snapshot["open_interest"] < 100:
                         logger.warning('Open Interest is less than 100, careful!')
@@ -161,7 +191,7 @@ class VerticalSpread(SpreadDataModel):
                     
 
                     logger.info("Assigned LONG contract: %s for a premium of %.5f",
-                                self.long_contract['ticker'], self.long_premium)
+                                self.long_contract.ticker, self.long_premium)
                     
                     self.net_premium = self.short_premium - self.long_premium 
                     
@@ -182,13 +212,13 @@ class VerticalSpread(SpreadDataModel):
                         implied_volatility=Decimal(self.second_leg_snapshot['implied_volatility'])
                     )
 
-                    self.description = f"Sell {self.short_contract['strike_price']} {self.short_contract['contract_type']}, "\
-                        f"buy {self.long_contract['strike_price']} {self.long_contract['contract_type']}; " \
+                    self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type}, "\
+                        f"buy {self.long_contract.strike_price} {self.long_contract.contract_type}; " \
                         f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
                         f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
                         f"stop loss at {self.stop_price:.2f} and before {self.exit_date}"
                     
-                    logger.info(f'Found a match! {contract["ticker"]} with delta {self.second_leg_snapshot["greeks"]["delta"]}')
+                    logger.info(f'Found a match! {contract.ticker} with delta {self.second_leg_snapshot["greeks"]["delta"]}')
 
                     break
 
@@ -256,7 +286,7 @@ class CreditSpread(VerticalSpread):
 
     def get_breakeven_price(self):
         net_premium = self.get_net_premium()
-        return Decimal(self.short_contract['strike_price']) + (-net_premium if self.direction == BULLISH else net_premium)
+        return Decimal(self.short_contract.strike_price) + (-net_premium if self.direction == BULLISH else net_premium)
 
     def get_target_price(self):
         target_reward = (self.get_net_premium() * Decimal(0.8))
@@ -280,7 +310,7 @@ class DebitSpread(VerticalSpread):
 
     def get_breakeven_price(self):
         net_premium = self.get_net_premium()
-        return Decimal(self.long_contract['strike_price']) + (-net_premium if self.direction == BULLISH else net_premium)
+        return Decimal(self.long_contract.strike_price) + (-net_premium if self.direction == BULLISH else net_premium)
 
     def get_target_price(self):
         target_reward = (self.get_net_premium() * Decimal(0.8))
