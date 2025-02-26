@@ -4,9 +4,13 @@ from botocore.exceptions import ClientError
 import os
 import signal
 import sys
+import logging
 from engine.data_model import SpreadDataModel, Contract  # Correct the import statement
 
 app = Flask(__name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 # Check for required environment variables
 required_env_vars = [
@@ -16,12 +20,12 @@ required_env_vars = [
 missing_env_vars = [var for var in required_env_vars if not os.getenv(var)]
 
 if missing_env_vars:
-    print(f"Error: Missing required environment variables: {', '.join(missing_env_vars)}")
+    logging.error(f"Error: Missing required environment variables: {', '.join(missing_env_vars)}")
     sys.exit(1)
 
 # Print the values of the environment variables
 for var in required_env_vars:
-    print(f"{var}: {os.getenv(var)}")
+    logging.info(f"{var}: {os.getenv(var)}")
 
 # Configure DynamoDB connection
 dynamodb_endpoint = os.getenv('DYNAMODB_ENDPOINT_URL')
@@ -36,7 +40,7 @@ table_name = os.getenv('MOUSOUTRADE_STAGE')
 table = dynamodb.Table(table_name)
 
 def get_all_items():
-    print("Fetching all items from the DynamoDB table.")
+    logging.info("Fetching all items from the DynamoDB table.")
     try:
         response = table.scan()
         items = response['Items']
@@ -47,14 +51,14 @@ def get_all_items():
                 item['expiration_date'] = target_expiration_date
                 item['update_date'] = update_date
             except ValueError:
-                print(f"Warning: Skipping record with old format: {item['ticker']}")
+                logging.warning(f"Warning: Skipping record with old format: {item['ticker']}")
                 continue
         return items
     except ClientError as e:
-        print(f"Unable to scan the DynamoDB table: {e.response['Error']['Message']}")
+        logging.error(f"Unable to scan the DynamoDB table: {e.response['Error']['Message']}")
         return []
     except ConnectionRefusedError as e:
-        print(f"Connection refused: {e}")
+        logging.error(f"Connection refused: {e}")
         return []
 
 @app.route('/')
@@ -69,15 +73,15 @@ def get_data():
         validated_records = [SpreadDataModel.from_dynamodb(record).to_dict() for record in records]
         return jsonify(validated_records)
     except Exception as e:
-        print(f"Error converting records: {e}")
+        logging.error(f"Error converting records: {e}")
         return jsonify([])
 
 def signal_handler(sig, frame):
-    print('Gracefully shutting down...')
+    logging.info('Gracefully shutting down...')
     sys.exit(0)
 
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     website_port = int(os.getenv('WEBSITE_PORT'))
-    print(f"Website is running at http://localhost:{website_port}")
+    logging.info(f"Website is running at http://localhost:{website_port}")
     app.run(host='0.0.0.0', port=website_port)
