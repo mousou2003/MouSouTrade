@@ -1,10 +1,11 @@
-from pydantic import BaseModel, Field
-from decimal import Decimal, ROUND_HALF_UP, Inexact
+from pydantic import BaseModel
+from decimal import Decimal, ROUND_HALF_UP
 import json
 from typing import Optional, Dict, Any, List
 from datetime import date, datetime
 
 from marketdata_clients.BaseMarketDataClient import IMarketDataClient
+from typing import ClassVar
 
 ASC = 'asc'
 BEARISH = 'bearish'
@@ -18,16 +19,19 @@ SPREAD_TYPE = {
 }
 
 class DataModelBase(BaseModel):
+    EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client', 'contracts']
+    DATE_FORMAT: ClassVar[str] = '%Y-%m-%d'
+
     def to_json(self, exclude=None):
         return json.dumps(self.to_dict(exclude=exclude))
 
     def to_dict(self, exclude=None):
         if exclude is None:
-            exclude = ['market_data_client','contracts']
+            exclude = self.EXCLUDE_FIELDS
         
         # Collect initial attributes
         attributes = {
-            key: ( self._process_value(value))
+            key: self._process_value(value)
             for key, value in self.__dict__.items()
             if key not in exclude and value is not None  # Exclude specified attributes
         }
@@ -35,7 +39,7 @@ class DataModelBase(BaseModel):
         return attributes
 
     def _process_value(self, value):
-        return value.strftime('%Y-%m-%d') if isinstance(value, date) else \
+        return value.strftime(self.DATE_FORMAT) if isinstance(value, date) else \
             self._round_decimal(value) if isinstance(value, (Decimal, float)) else \
             self._process_nested_dict(value.__dict__) if isinstance(value, (BaseModel)) else \
             self._process_nested_dict(value) if isinstance(value, (dict)) else \
@@ -47,6 +51,25 @@ class DataModelBase(BaseModel):
     def _round_decimal(self, value):
         """Converts to Decimal and rounds it to five decimal places, then converts to string."""
         return str(Decimal(value).quantize(Decimal('0.00000'), rounding=ROUND_HALF_UP))
+    
+    @classmethod
+    def _convert_field_to_model(cls, field: str) -> Any:
+        """Convert a single field value to match the model field type."""
+        field_type = cls.__annotations__.get(field)
+        if field_type == Optional[date]:
+            return lambda value: datetime.strptime(value, cls.DATE_FORMAT).date() if value else None
+        elif field_type == Optional[Decimal]:
+            return lambda value: Decimal(value) if value else Decimal('0')
+        elif field_type == Optional[int]:
+            return lambda value: int(value) if value else 0
+        elif field_type == Optional[str]:
+            return lambda value: value if value else ''
+        elif field_type == Optional[List[Dict[str, Any]]]:
+            return lambda value: value if value else []
+        elif field_type == Optional[Contract]:
+            return lambda value: Contract.from_dict(value) if value else None
+        else:
+            return lambda value: value
 
 class Contract(DataModelBase):
     cfi: str
@@ -64,7 +87,7 @@ class Contract(DataModelBase):
             cfi=data['cfi'],
             contract_type=data['contract_type'],
             exercise_style=data['exercise_style'],
-            expiration_date=datetime.strptime(data['expiration_date'], '%Y-%m-%d').date(),
+            expiration_date=datetime.strptime(data['expiration_date'], self.DATE_FORMAT).date(),
             primary_exchange=data['primary_exchange'],
             shares_per_contract=int(data['shares_per_contract']),
             strike_price=Decimal(data['strike_price']),
@@ -121,7 +144,7 @@ class SpreadDataModel(DataModelBase):
     def from_dynamodb(cls, record: Dict[str, Any]):
         """Convert types of the record to match SpreadDataModel."""
         return cls(
-            datetime=datetime.strptime(record.get('datetime'), '%Y-%m-%d').date() if record.get('datetime') else None,
+            datetime=datetime.strptime(record.get('datetime'), cls.DATE_FORMAT).date() if record.get('datetime') else None,
             strategy=record.get('strategy', ''),
             underlying_ticker=record.get('underlying_ticker', ''),
             previous_close=Decimal(record.get('previous_close', '0')),
@@ -141,32 +164,15 @@ class SpreadDataModel(DataModelBase):
             entry_price=Decimal(record.get('entry_price', '0')),
             target_price=Decimal(record.get('target_price', '0')),
             stop_price=Decimal(record.get('stop_price', '0')),
-            expiration_date=datetime.strptime(record.get('expiration_date'), '%Y-%m-%d').date() if record.get('expiration_date') else None,
+            expiration_date=datetime.strptime(record.get('expiration_date'), cls.DATE_FORMAT).date() if record.get('expiration_date') else None,
             second_leg_depth=int(record.get('second_leg_depth', 0)),
-            exit_date=datetime.strptime(record.get('exit_date'), '%Y-%m-%d').date() if record.get('exit_date') else None,
+            exit_date=datetime.strptime(record.get('exit_date'), cls.DATE_FORMAT).date() if record.get('exit_date') else None,
             description=record.get('description', ''),
             probability_of_profit=Decimal(record.get('probability_of_profit', '0')),
             first_leg_snapshot=record.get('first_leg_snapshot', {}),
             second_leg_snapshot=record.get('second_leg_snapshot', {}),
-            update_date=datetime.strptime(record.get('update_date'), '%Y-%m-%d').date() if record.get('update_date') else None
+            update_date=datetime.strptime(record.get('update_date'), cls.DATE_FORMAT).date() if record.get('update_date') else None
         )
 
     def to_dict(self, exclude=None):
         return super().to_dict(exclude)
-"""         if exclude is None:
-            exclude = ['market_data_client','contracts']
-        
-        # Collect additional attributes specific to SpreadDataModel
-        if self.long_contract is not None:
-            attributes['long_contract'] = self.long_contract.to_dict()
-
-        if self.short_contract is not None:
-            attributes['short_contract'] = self.short_contract.to_dict()
-
-        if self.first_leg_snapshot is not None:
-            self._round_nested_dict(self.first_leg_snapshot)
-            attributes['first_leg_snapshot'] = self.first_leg_snapshot
-
-        if self.second_leg_snapshot is not None:
-            self._round_nested_dict(self.second_leg_snapshot)
-            attributes['second_leg_snapshot'] = self.second_leg_snapshot """

@@ -75,8 +75,8 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
             logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
             matched = spread.match_option(date=target_expiration_date)
             key = {
-                "ticker": f"{spread.underlying_ticker};{spread.expiration_date.strftime('%Y-%m-%d')};{spread.update_date.strftime('%Y-%m-%d')}",
-                "option": json.dumps({"date": target_expiration_date.strftime('%Y-%m-%d'), 
+                "ticker": f"{spread.underlying_ticker};{spread.expiration_date.strftime(DataModelBase.DATE_FORMAT)};{spread.update_date.strftime(DataModelBase.DATE_FORMAT)}",
+                "option": json.dumps({"date": target_expiration_date.strftime(DataModelBase.DATE_FORMAT), 
                                       "direction": direction, 
                                       "strategy": strategy}, default=str)
             }

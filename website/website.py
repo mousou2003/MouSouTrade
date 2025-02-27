@@ -5,7 +5,7 @@ import os
 import signal
 import sys
 import logging
-from engine.data_model import SpreadDataModel, Contract  # Correct the import statement
+from engine.data_model import DataModelBase, SpreadDataModel, Contract  # Correct the import statement
 
 app = Flask(__name__)
 
