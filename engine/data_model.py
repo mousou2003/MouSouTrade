@@ -1,10 +1,8 @@
 from pydantic import BaseModel
 from decimal import Decimal, ROUND_HALF_UP
-import json
+
 from typing import Optional, Dict, Any, List, Union, ClassVar
 from datetime import date, datetime
-
-from marketdata_clients.BaseMarketDataClient import IMarketDataClient
 
 ASC = 'asc'
 BEARISH = 'bearish'
@@ -39,23 +37,26 @@ class DataModelBase(BaseModel):
         }
         return attributes
 
-    def _process_value(self, value: Any) -> Any:
+    @classmethod
+    def _process_value(cls, value: Any) -> Any:
         if isinstance(value, date):
-            return value.strftime(self.DATE_FORMAT)
+            return value.strftime(cls.DATE_FORMAT)
         elif isinstance(value, (Decimal, float)):
-            return self._format_decimal(value)
+            return cls._format_decimal(value)
         elif isinstance(value, BaseModel):
-            return self._process_nested_dict(value.__dict__)
+            return cls._process_nested_dict(value.__dict__)
         elif isinstance(value, dict):
-            return self._process_nested_dict(value)
+            return cls._process_nested_dict(value)
         elif isinstance(value, list):
-            return [self._process_value(item) for item in value]
+            return [cls._process_value(item) for item in value]
         return value
     
-    def _process_nested_dict(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        return {key: self._process_value(value) for key, value in item.items()}
+    @classmethod
+    def _process_nested_dict(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        return {key: cls._process_value(value) for key, value in item.items()}
 
-    def _format_decimal(self, value: Union[Decimal, float]) -> str:
+    @classmethod
+    def _format_decimal(cls, value: Union[Decimal, float]) -> str:
         return str(Decimal(value).quantize(Decimal('0.00000'), rounding=ROUND_HALF_UP))
     
     @classmethod
@@ -92,18 +93,75 @@ class Contract(DataModelBase):
         ticker (str): The ticker symbol of the contract.
         underlying_ticker (str): The ticker symbol of the underlying asset.
     """
-    cfi: str
-    contract_type: str
-    exercise_style: str
-    expiration_date: date
-    primary_exchange: str
-    shares_per_contract: int
-    strike_price: Decimal
-    ticker: str
-    underlying_ticker: str
+    cfi: Optional[str] = ''
+    contract_type: Optional[str] = ''
+    exercise_style: Optional[str] = ''
+    expiration_date: Optional[date] = None
+    primary_exchange: Optional[str] = ''
+    shares_per_contract: Optional[int] = 0
+    strike_price: Optional[Decimal] = Decimal('0')
+    ticker: Optional[str] = ''
+    underlying_ticker: Optional[str] = ''
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Contract':
+        return cls(**data)
+
+class Greeks(BaseModel):
+    delta: Optional[Decimal] = Decimal('0')
+    gamma: Optional[Decimal] = Decimal('0')
+    theta: Optional[Decimal] = Decimal('0')
+    vega: Optional[Decimal] = Decimal('0')
+    rho: Optional[Decimal] = Decimal('0')
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Greeks':
+        return cls(**data)
+
+class DayData(BaseModel):
+    """
+    Represents daily market data with various attributes such as
+    timestamp, open price, high price, low price, close price, and volume.
+
+    Attributes:
+        timestamp (datetime): The timestamp of the data.
+        open (Decimal): The opening price at the timestamp.
+        high (Decimal): The highest price at the timestamp.
+        low (Decimal): The lowest price at the timestamp.
+        close (Decimal): The closing price at the timestamp.
+        volume (int): The trading volume at the timestamp.
+    """
+    timestamp: Optional[datetime] = None
+    open: Optional[Decimal] = Decimal('0')
+    high: Optional[Decimal] = Decimal('0')
+    low: Optional[Decimal] = Decimal('0')
+    close: Optional[Decimal] = Decimal('0')
+    volume: Optional[int] = 0
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'DayData':
+        return cls(**data)
+
+class Snapshot(DataModelBase):
+    """
+    Represents a snapshot of market data with various attributes such as
+    day data, contract details, greeks, implied volatility, and open interest.
+
+    Attributes:
+        day (DayData): The daily market data.
+        details (Contract): The contract details.
+        greeks (Greeks): The greeks data.
+        implied_volatility (Decimal): The implied volatility.
+        open_interest (int): The open interest.
+    """
+    day: Optional[DayData] = None
+    details: Optional[Contract] = None
+    greeks: Optional[Greeks] = None
+    implied_volatility: Optional[Decimal] = Decimal('0')
+    open_interest: Optional[int] = 0
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Snapshot':
         return cls(**data)
 
 class SpreadDataModel(DataModelBase):

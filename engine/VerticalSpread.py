@@ -60,18 +60,20 @@ class VerticalSpread(SpreadDataModel):
                     try:
                         if self.get_order(strategy=self.strategy,direction=BEARISH) == DESC:
                             contract = self.contracts[first_leg_contract_position - 1]
-                        self.first_leg_snapshot = self.market_data_client.get_option_snapshot(underlying_ticker=self.underlying_ticker,
-                                                                                              option_symbol=contract.ticker)
+                        self.first_leg_snapshot = Snapshot.from_dict(
+                            self.market_data_client.get_option_snapshot(underlying_ticker=self.underlying_ticker,
+                                                                        option_symbol=contract.ticker)
+                        )
                         delta_range = Options.get_delta_range(TradeStrategy.DIRECTIONAL)
                         try:
-                            delta = Decimal(abs(self.first_leg_snapshot["greeks"]["delta"]))
+                            delta = Decimal(abs(self.first_leg_snapshot.greeks.delta))
                             if not (delta_range[0] <= delta <= delta_range[1]):
                                 logger.debug(f'Delta is out of range, skipping')
                                 continue
                         except (InvalidOperation, Inexact):
                             logger.warning(f"Invalid delta value for contract {contract.ticker}, skipping")
                             continue
-                        premium = Decimal(self.first_leg_snapshot['day']['close'])
+                        premium = Decimal(self.first_leg_snapshot.day.close)
                         first_leg_contract = contract
                         first_leg_premium = premium
                         first_leg_strike_price = Decimal(contract.strike_price)  # Store first leg strike price
@@ -114,15 +116,17 @@ class VerticalSpread(SpreadDataModel):
                 self.second_leg_depth += 1
                 self.distance_between_strikes = abs(Decimal(contract.strike_price) - first_leg_strike_price)
                 try:
-                    self.second_leg_snapshot = self.market_data_client.get_option_snapshot(underlying_ticker=self.underlying_ticker,
-                                                                                           option_symbol=contract.ticker)
+                    self.second_leg_snapshot = Snapshot.from_dict(
+                        self.market_data_client.get_option_snapshot(underlying_ticker=self.underlying_ticker,
+                                                                    option_symbol=contract.ticker)
+                    )
                     logger.debug(f"Snapshot for {contract.ticker}")
                     if Options.calculate_standard_deviation(current_price=self.previous_close,
-                                                            iv=Decimal(self.second_leg_snapshot['implied_volatility']),
+                                                            iv=Decimal(self.second_leg_snapshot.implied_volatility),
                                                             days_to_expiration=days_to_expiration) <= Decimal(1):
                         logger.debug(f'Standard deviation is too low, skipping')
                         continue
-                    premium = Decimal(self.second_leg_snapshot['day']['close'])
+                    premium = Decimal(self.second_leg_snapshot.day.close)
                 except MarketDataException as e:
                     logger.warning(f"Error getting previous close for second leg contract {contract.ticker}:\n{e}")
                     continue
@@ -149,7 +153,7 @@ class VerticalSpread(SpreadDataModel):
                     # Check validity and assign based on direction and strategy
                     delta_range = Options.get_delta_range(TradeStrategy.HIGH_PROBABILITY)
                     try:
-                        delta = Decimal(self.second_leg_snapshot["greeks"]["delta"])
+                        delta = Decimal(self.second_leg_snapshot.greeks.delta)
                         if not (delta_range[0] <= abs(delta) <= delta_range[1]):
                             logger.debug(f'Delta is out of range, skipping')
                             continue
@@ -171,11 +175,10 @@ class VerticalSpread(SpreadDataModel):
                             logger.warning("Inexact value encountered in short premium calculation, skipping")
                             continue
 
-                    if self.second_leg_snapshot["open_interest"] < 100:
+                    if self.second_leg_snapshot.open_interest < 100:
                         logger.warning('Open Interest is less than 100, careful!')
-                    if self.second_leg_snapshot['day']["volume"] < 100:
+                    if self.second_leg_snapshot.day.volume < 100:
                         logger.warning('Volume is less than 100, careful!')
-                    
 
                     logger.info("Assigned LONG contract: %s for a premium of %.5f",
                                 self.long_contract.ticker, self.long_premium)
@@ -196,7 +199,7 @@ class VerticalSpread(SpreadDataModel):
                         current_price=Decimal(self.previous_close),
                         breakeven_price=Decimal(self.breakeven),
                         days_to_expiration=days_to_expiration,
-                        implied_volatility=Decimal(self.second_leg_snapshot['implied_volatility'])
+                        implied_volatility=Decimal(self.second_leg_snapshot.implied_volatility)
                     )
 
                     self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type}, "\
@@ -205,7 +208,7 @@ class VerticalSpread(SpreadDataModel):
                         f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
                         f"stop loss at {self.stop_price:.2f} and before {self.exit_date}"
                     
-                    logger.info(f'Found a match! {contract.ticker} with delta {self.second_leg_snapshot["greeks"]["delta"]}')
+                    logger.info(f'Found a match! {contract.ticker} with delta {self.second_leg_snapshot.greeks.delta}')
 
                     break
 
