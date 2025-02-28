@@ -1,11 +1,10 @@
 from pydantic import BaseModel
 from decimal import Decimal, ROUND_HALF_UP
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union, ClassVar
 from datetime import date, datetime
 
 from marketdata_clients.BaseMarketDataClient import IMarketDataClient
-from typing import ClassVar
 
 ASC = 'asc'
 BEARISH = 'bearish'
@@ -19,42 +18,48 @@ SPREAD_TYPE = {
 }
 
 class DataModelBase(BaseModel):
-    EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client', 'contracts']
+    EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client']
     DATE_FORMAT: ClassVar[str] = '%Y-%m-%d'
 
-    def to_json(self, exclude=None):
-        return json.dumps(self.to_dict(exclude=exclude))
-
-    def to_dict(self, exclude=None):
+    def __init__(self, **data: Any):
+        converted_data = {
+            key: self._convert_field_to_model(key)(value)
+            for key, value in data.items()
+        }
+        super().__init__(**converted_data)
+    
+    def to_dict(self, exclude: Optional[List[str]] = None) -> Dict[str, Any]:
         if exclude is None:
             exclude = self.EXCLUDE_FIELDS
         
-        # Collect initial attributes
         attributes = {
             key: self._process_value(value)
             for key, value in self.__dict__.items()
-            if key not in exclude and value is not None  # Exclude specified attributes
+            if key not in exclude and value is not None
         }
-
         return attributes
 
-    def _process_value(self, value):
-        return value.strftime(self.DATE_FORMAT) if isinstance(value, date) else \
-            self._round_decimal(value) if isinstance(value, (Decimal, float)) else \
-            self._process_nested_dict(value.__dict__) if isinstance(value, (BaseModel)) else \
-            self._process_nested_dict(value) if isinstance(value, (dict)) else \
-            value
+    def _process_value(self, value: Any) -> Any:
+        if isinstance(value, date):
+            return value.strftime(self.DATE_FORMAT)
+        elif isinstance(value, (Decimal, float)):
+            return self._format_decimal(value)
+        elif isinstance(value, BaseModel):
+            return self._process_nested_dict(value.__dict__)
+        elif isinstance(value, dict):
+            return self._process_nested_dict(value)
+        elif isinstance(value, list):
+            return [self._process_value(item) for item in value]
+        return value
     
-    def _process_nested_dict(self, item):
+    def _process_nested_dict(self, item: Dict[str, Any]) -> Dict[str, Any]:
         return {key: self._process_value(value) for key, value in item.items()}
 
-    def _round_decimal(self, value):
-        """Converts to Decimal and rounds it to five decimal places, then converts to string."""
+    def _format_decimal(self, value: Union[Decimal, float]) -> str:
         return str(Decimal(value).quantize(Decimal('0.00000'), rounding=ROUND_HALF_UP))
     
     @classmethod
     def _convert_field_to_model(cls, field: str) -> Any:
-        """Convert a single field value to match the model field type."""
         field_type = cls.__annotations__.get(field)
         if field_type == Optional[date]:
             return lambda value: datetime.strptime(value, cls.DATE_FORMAT).date() if value else None
@@ -72,6 +77,21 @@ class DataModelBase(BaseModel):
             return lambda value: value
 
 class Contract(DataModelBase):
+    """
+    Represents a financial contract with various attributes such as
+    contract type, exercise style, expiration date, and more.
+
+    Attributes:
+        cfi (str): The CFI code of the contract.
+        contract_type (str): The type of the contract.
+        exercise_style (str): The exercise style of the contract.
+        expiration_date (date): The expiration date of the contract.
+        primary_exchange (str): The primary exchange where the contract is traded.
+        shares_per_contract (int): The number of shares per contract.
+        strike_price (Decimal): The strike price of the contract.
+        ticker (str): The ticker symbol of the contract.
+        underlying_ticker (str): The ticker symbol of the underlying asset.
+    """
     cfi: str
     contract_type: str
     exercise_style: str
@@ -82,34 +102,19 @@ class Contract(DataModelBase):
     ticker: str
     underlying_ticker: str
 
-    def __init__(self, data: Dict[str, Any]):
-        super().__init__(
-            cfi=data['cfi'],
-            contract_type=data['contract_type'],
-            exercise_style=data['exercise_style'],
-            expiration_date=datetime.strptime(data['expiration_date'], self.DATE_FORMAT).date(),
-            primary_exchange=data['primary_exchange'],
-            shares_per_contract=int(data['shares_per_contract']),
-            strike_price=Decimal(data['strike_price']),
-            ticker=data['ticker'],
-            underlying_ticker=data['underlying_ticker']
-        )
-
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Contract':
-        return cls(data)
-
-    def to_dict(self, exclude=None):
-        attributes = super().to_dict(exclude)
-        return attributes
+        return cls(**data)
 
 class SpreadDataModel(DataModelBase):
+    class Config:
+        arbitrary_types_allowed = True
     datetime: Optional[date] = None
-    strategy: Optional[str]
-    underlying_ticker: Optional[str]
+    strategy: Optional[str] = None
+    underlying_ticker: Optional[str] =None
     previous_close: Optional[Decimal] = None
     contract_type: Optional[str] = None
-    direction: Optional[str]
+    direction: Optional[str] = None
     distance_between_strikes: Optional[Decimal] = None
     short_contract: Optional[Contract] = None
     long_contract: Optional[Contract] = None
@@ -134,45 +139,6 @@ class SpreadDataModel(DataModelBase):
     second_leg_snapshot: Optional[Dict[str, Any]] = None
     update_date: Optional[date] = None
 
-    class Config:
-        arbitrary_types_allowed = True
-        json_encoders = {
-            IMarketDataClient: lambda v: None
-        }
-
     @classmethod
-    def from_dynamodb(cls, record: Dict[str, Any]):
-        """Convert types of the record to match SpreadDataModel."""
-        return cls(
-            datetime=datetime.strptime(record.get('datetime'), cls.DATE_FORMAT).date() if record.get('datetime') else None,
-            strategy=record.get('strategy', ''),
-            underlying_ticker=record.get('underlying_ticker', ''),
-            previous_close=Decimal(record.get('previous_close', '0')),
-            contract_type=record.get('contract_type', ''),
-            direction=record.get('direction', ''),
-            distance_between_strikes=Decimal(record.get('distance_between_strikes', '0')),
-            short_contract=Contract.from_dict(record.get('short_contract', {})) if record.get('short_contract') else None,
-            long_contract=Contract.from_dict(record.get('long_contract', {})) if record.get('long_contract') else None,
-            contracts=record.get('contracts', []),
-            daily_bars=record.get('daily_bars', []),
-            client=record.get('client', ''),
-            long_premium=Decimal(record.get('long_premium', '0')),
-            short_premium=Decimal(record.get('short_premium', '0')),
-            max_risk=Decimal(record.get('max_risk', '0')),
-            max_reward=Decimal(record.get('max_reward', '0')),
-            breakeven=Decimal(record.get('breakeven', '0')),
-            entry_price=Decimal(record.get('entry_price', '0')),
-            target_price=Decimal(record.get('target_price', '0')),
-            stop_price=Decimal(record.get('stop_price', '0')),
-            expiration_date=datetime.strptime(record.get('expiration_date'), cls.DATE_FORMAT).date() if record.get('expiration_date') else None,
-            second_leg_depth=int(record.get('second_leg_depth', 0)),
-            exit_date=datetime.strptime(record.get('exit_date'), cls.DATE_FORMAT).date() if record.get('exit_date') else None,
-            description=record.get('description', ''),
-            probability_of_profit=Decimal(record.get('probability_of_profit', '0')),
-            first_leg_snapshot=record.get('first_leg_snapshot', {}),
-            second_leg_snapshot=record.get('second_leg_snapshot', {}),
-            update_date=datetime.strptime(record.get('update_date'), cls.DATE_FORMAT).date() if record.get('update_date') else None
-        )
-
-    def to_dict(self, exclude=None):
-        return super().to_dict(exclude)
+    def from_dict(cls, data: Dict[str, Any]) -> 'SpreadDataModel':
+        return SpreadDataModel(**data)

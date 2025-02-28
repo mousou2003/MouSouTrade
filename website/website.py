@@ -56,10 +56,10 @@ def get_all_items():
         return items
     except ClientError as e:
         logging.error(f"Unable to scan the DynamoDB table: {e.response['Error']['Message']}")
-        return []
+        raise
     except ConnectionRefusedError as e:
         logging.error(f"Connection refused: {e}")
-        return []
+        raise
 
 @app.route('/')
 def index():
@@ -70,11 +70,11 @@ def get_data():
     records = get_all_items()
     try:
         # Ensure data structure matches SpreadDataModel and provide default values
-        validated_records = [SpreadDataModel.from_dynamodb(record).to_dict() for record in records]
+        validated_records: list[dict] = [SpreadDataModel.from_dict(record).to_dict() for record in records]
         return jsonify(validated_records)
     except Exception as e:
         logging.error(f"Error converting records: {e}")
-        return jsonify([])
+        raise
 
 def signal_handler(sig, frame):
     logging.info('Gracefully shutting down...')

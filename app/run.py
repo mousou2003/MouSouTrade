@@ -6,7 +6,7 @@ import os
 import time
 import socket
 from requests import ReadTimeout
-from colorama import Fore
+from colorama import Fore, Style
 from decimal import Decimal
 
 from marketdata_clients.BaseMarketDataClient import MarketDataException, MarketDataStrikeNotFoundException
@@ -26,6 +26,17 @@ if debug_mode and debug_mode.lower() == "true":
 else:
     loglevel = logging.INFO
 logging.basicConfig(level=loglevel)
+class ColorFormatter(logging.Formatter):
+    def format(self, record):
+        if record.levelno == logging.WARNING:
+            record.msg = f"{Fore.YELLOW}{record.msg}{Style.RESET_ALL}"
+        elif record.levelno == logging.ERROR:
+            record.msg = f"{Fore.RED}{record.msg}{Style.RESET_ALL}"
+        return super().format(record)
+
+handler = logging.StreamHandler()
+handler.setFormatter(ColorFormatter())
+logger.addHandler(handler)
 
 # Set the logging level to WARNING to suppress DEBUG messages
 logging.getLogger('botocore').setLevel(logging.WARNING)
@@ -33,6 +44,7 @@ logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
 logging.getLogger('engine.VerticalSpread').setLevel(loglevel)
+logging.getLogger('engine.VerticalSpread').addHandler(handler)
 
 class MissingEnvironmentVariableException(Exception):
     pass
@@ -69,11 +81,11 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
     for direction in [BULLISH, BEARISH]:
         for strategy in [CREDIT, DEBIT]:
             spread_class = DebitSpread if strategy == DEBIT else CreditSpread
-            spread = spread_class(market_data_client= market_data_client, underlying_ticker=ticker, 
-                                  direction=direction, strategy=strategy,previous_close=stock['close'])
+            spread = spread_class()
 
             logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
-            matched = spread.match_option(date=target_expiration_date)
+            matched = spread.match_option(market_data_client=market_data_client, underlying_ticker=ticker, 
+                                          direction=direction, strategy=strategy, previous_close=stock['close'], date=target_expiration_date)
             key = {
                 "ticker": f"{spread.underlying_ticker};{spread.expiration_date.strftime(DataModelBase.DATE_FORMAT)};{spread.update_date.strftime(DataModelBase.DATE_FORMAT)}",
                 "option": json.dumps({"date": target_expiration_date.strftime(DataModelBase.DATE_FORMAT), 
@@ -91,7 +103,7 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
             response = dynamodb.get_item(key=key)
             if 'Item' in response:
                 logger.info("Match %sfound, and stored in %s" % (("", key) if matched else ("not ", key)))
-                validated_records = SpreadDataModel.from_dynamodb(response['Item']).to_dict()
+                validated_records = spread.from_dict(response['Item']).to_dict()
                 logger.debug(f'Saved in table:\n{validated_records}')
             else:
                 raise MarketDataStrikeNotFoundException(f"No item found for ticker {ticker}")

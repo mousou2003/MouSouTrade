@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 class IMarketDataClient(ABC):
+
     @abstractmethod
     def get_previous_close(self, ticker):
         pass

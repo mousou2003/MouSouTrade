@@ -19,25 +19,6 @@ class VerticalSpread(SpreadDataModel):
 
     market_data_client: IMarketDataClient = None
 
-    def __init__(self, market_data_client: IMarketDataClient, underlying_ticker, direction, strategy, previous_close=None):
-        super().__init__(
-            strategy=strategy,
-            underlying_ticker=underlying_ticker,
-            direction=direction,
-            previous_close=previous_close
-        )
-        
-        """Initializes VerticalSpread with market data."""
-        logger.info("Processing %s", underlying_ticker)
-        self.market_data_client = market_data_client
-        self.underlying_ticker = underlying_ticker
-        self.previous_close = previous_close if previous_close is not None else self.market_data_client.get_previous_close(self.underlying_ticker)
-        logger.info("%s last close price :%.5f", self.underlying_ticker, self.previous_close)
-        self.contract_type = SPREAD_TYPE[strategy][direction]
-        self.direction = direction
-        self.strategy = strategy
-        self.update_date = datetime.now().date()
-
     def get_order(self, strategy, direction):
         """Returns the order (ASC/DESC) based on strategy and direction."""
         return {CREDIT: {BULLISH: ASC, BEARISH: DESC}, DEBIT: {BULLISH: DESC, BEARISH: ASC}}[strategy][direction]
@@ -46,15 +27,21 @@ class VerticalSpread(SpreadDataModel):
         """Returns the search operator (operator.ge or operator.le) based on strategy and direction.""" 
         return {CREDIT: {BULLISH: operator.ge, BEARISH: operator.le}, DEBIT: {BULLISH: operator.le, BEARISH: operator.ge}}[strategy][direction]
 
-    def match_option(self, date: datetime.date):
-        """Finds suitable short and long options for a vertical spread."""
+    def match_option(self, market_data_client: IMarketDataClient, underlying_ticker: str, 
+                     direction: str, strategy: str, previous_close: Decimal, date: datetime) -> bool:
+        self.market_data_client = market_data_client
+        self.underlying_ticker = underlying_ticker
+        self.direction = direction
+        self.strategy = strategy
+        self.previous_close = previous_close
+        self.expiration_date = date
         self.second_leg_depth = 0
+        self.update_date = datetime.today().date()
         first_leg_contract = None
         first_leg_premium: Optional[Decimal] = None
-        self.expiration_date = date
 
         try:
-            days_to_expiration = (self.expiration_date - datetime.today().date()).days
+            days_to_expiration = (self.expiration_date - self.update_date).days
             self.contracts = self.market_data_client.get_option_contracts(
                 underlying_ticker=self.underlying_ticker,
                 expiration_date_gte=self.expiration_date,
@@ -249,7 +236,7 @@ class VerticalSpread(SpreadDataModel):
         return self.long_contract
 
     def to_dict(self):
-        """Override to_dict to ensure only serializable data from the parent SpreadDataModel is included."""
+        """Override to_dict to ensure only serializable data from the parent SpreadDataModel is included.""" 
         data = super().to_dict()
         return data
 
@@ -275,8 +262,9 @@ class CreditSpread(VerticalSpread):
 
     ideal_expiration: ClassVar[int] = 45
 
-    def __init__(self, market_data_client: IMarketDataClient, underlying_ticker, direction, strategy, previous_close=None):
-        super().__init__(market_data_client, underlying_ticker, direction, strategy, previous_close)
+    def match_option(self, market_data_client: IMarketDataClient, underlying_ticker: str, direction: str, strategy: str, previous_close: Decimal, date: datetime) -> bool:
+        super().match_option(market_data_client, underlying_ticker, direction, strategy, previous_close, date)
+        return True
 
     def get_max_reward(self):
         return self.get_net_premium()*100
@@ -299,8 +287,9 @@ class CreditSpread(VerticalSpread):
 class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
-    def __init__(self, market_data_client: IMarketDataClient, underlying_ticker, direction, strategy, previous_close=None):
-        super().__init__(market_data_client, underlying_ticker, direction, strategy, previous_close)
+    def match_option(self, market_data_client: IMarketDataClient, underlying_ticker: str, direction: str, strategy: str, previous_close: Decimal, date: datetime) -> bool:
+        super().match_option(market_data_client, underlying_ticker, direction, strategy, previous_close, date)
+        return True
 
     def get_max_reward(self):
         return (self.distance_between_strikes - self.long_premium)*100
