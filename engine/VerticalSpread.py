@@ -139,11 +139,10 @@ class VerticalSpread(SpreadDataModel):
                     break
 
                 premium_delta = first_leg_premium - premium
-                try:
-                    relative_delta = abs(premium_delta / self.distance_between_strikes)
-                except InvalidOperation:
-                    logger.warning("Division by zero encountered in relative_delta calculation, skipping")
-                    continue
+                if self.distance_between_strikes == 0:
+                    raise ZeroDivisionError("Distance between strikes is zero")
+
+                relative_delta = abs(premium_delta / self.distance_between_strikes)
 
                 logger.debug('distance_between_strikes %.5f, premium_delta %.5f', self.distance_between_strikes, premium_delta)
                 if relative_delta == Decimal(0):
