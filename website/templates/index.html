@@ -119,11 +119,16 @@
                     type: 'GET',
                     dataType: 'json',
                     success: function(data) {
-                        previousData = data;
-                        renderData(data);
+                        if (data.error) {
+                            $('#main-data-container tbody').html(`<tr><td colspan="6">${data.error}</td></tr>`);
+                        } else {
+                            previousData = data;
+                            renderData(data);
+                        }
                     },
                     error: function(error) {
                         console.error("Error loading data:", error);
+                        $('#main-data-container tbody').html('<tr><td colspan="6">An error occurred while fetching data. Please try again later.</td></tr>');
                     }
                 });
             }

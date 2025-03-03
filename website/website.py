@@ -67,14 +67,14 @@ def index():
 
 @app.route('/data')
 def get_data():
-    records = get_all_items()
     try:
+        records = get_all_items()
         # Ensure data structure matches SpreadDataModel and provide default values
         validated_records: list[dict] = [SpreadDataModel.from_dict(record).to_dict() for record in records]
         return jsonify(validated_records)
     except Exception as e:
         logging.error(f"Error converting records: {e}")
-        raise
+        return jsonify({"error": "An error occurred while fetching data. Please try again later."}), 500
 
 def signal_handler(sig, frame):
     logging.info('Gracefully shutting down...')
