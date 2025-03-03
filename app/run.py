@@ -24,7 +24,7 @@ debug_mode = os.getenv("DEBUG_MODE")
 if debug_mode and debug_mode.lower() == "true":
     loglevel = logging.DEBUG
 else:
-    loglevel = logging.WARNING
+    loglevel = logging.INFO
 logging.basicConfig(level=loglevel)
 class ColorFormatter(logging.Formatter):
     def format(self, record):
@@ -107,7 +107,11 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
             }
             merged_json = {**key, **{"description": spread.get_description() if matched else f"No match for {ticker}"}, 
                            **spread.to_dict()}
-            print(f"Match {'found' if matched else 'NOT found'}, and stored in {key}")
+            if matched:
+                print(f"Match found for {ticker} {strategy} {direction} spread for target date {target_expiration_date}")
+            else:
+                print(f"No match found for {ticker} {strategy} {direction} spread for target date {target_expiration_date}")
+
             logger.debug(merged_json)
             dynamodb.put_item(item=merged_json)
             response = dynamodb.get_item(key=key)

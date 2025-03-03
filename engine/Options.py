@@ -220,18 +220,17 @@ class Options:
                     market_data_client.get_option_snapshot(underlying_ticker=underlying_ticker, option_symbol=contract.ticker)
                 )
                 if not snapshot.day.timestamp:
-                    logger.info("Snapshot is not up-to-date. Option may not be traded yet.")
-                    continue
+                    logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
                 if not all([snapshot.day.close, snapshot.implied_volatility, snapshot.greeks.delta]):
-                    logger.info(f"Missing key data for {contract.ticker}. Skipping.")
+                    logger.debug(f"Missing key data for {contract.ticker}. Skipping.")
                     continue
-
                 strike_price_type = Options.identify_strike_price_type(snapshot.greeks.delta, trade_strategy)
                 if (strategy == StrategyType.CREDIT and strike_price_type == StrikePriceType.OTM) or \
                    (strategy == StrategyType.DEBIT and strike_price_type == StrikePriceType.ATM):
+                    logger.info(f"Selected contract {contract.ticker} with delta {snapshot.greeks.delta} and strike price type {strike_price_type.value}.")
                     return contract, position, snapshot
             except (MarketDataException, KeyError, TypeError) as e:
                 logger.warning(f"Error processing contract {contract.ticker}: {type(e).__name__} - {e}")
                 continue
 
-        logger.info(f"No suitable contract found for {underlying_ticker}: {strategy}, direction: {direction}, and trade strategy: {trade_strategy}.")
+        logger.info(f"No suitable contract found for {underlying_ticker}: {strategy.value}, direction: {direction.value}, and trade strategy: {trade_strategy.value}.")

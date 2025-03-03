@@ -77,7 +77,7 @@ class VerticalSpread(SpreadDataModel):
             days_to_expiration = (self.expiration_date - self.update_date).days
 
             if not self.find_first_leg_contract():
-                logger.info("No suitable short contract found.")
+                logger.info("No suitable first leg contract found.")
                 return False
 
             logger.info("Staging FIRST LEG contract: %s for previous close of %.5f", self.first_leg_contract.ticker, previous_close)
@@ -97,8 +97,8 @@ class VerticalSpread(SpreadDataModel):
                 except Inexact:
                     logger.error("Inexact value encountered in long premium calculation")
                     raise
-
-            start = self.first_leg_contract_position - self.MAX_STRIKES
+            
+            start = max(self.first_leg_contract_position - self.MAX_STRIKES, 0)
             stop = self.first_leg_contract_position
 
             # Second loop to search for the matching contract
@@ -133,13 +133,8 @@ class VerticalSpread(SpreadDataModel):
                             logger.warning("Inexact value encountered in short premium calculation, skipping")
                             return False
 
-                    if self.second_leg_snapshot.open_interest < 100:
-                        logger.info('Open Interest is less than 100, careful!')
-                    if self.second_leg_snapshot.day.volume < 100:
-                        logger.info('Volume is less than 100, careful!')
-
-                    logger.info("Assigned LONG contract: %s for a premium of %.5f",
-                                self.long_contract.ticker, self.long_premium)
+                    self.description = self.get_description()
+                    logger.info(f'Found a match! {self.second_leg_contract.ticker} with delta {self.second_leg_snapshot.greeks.delta}')
 
                     # Calculate and assign other parameters
                     self.net_premium = self.short_premium - self.long_premium
@@ -160,18 +155,22 @@ class VerticalSpread(SpreadDataModel):
                         implied_volatility=Decimal(self.second_leg_snapshot.implied_volatility)
                     )
 
-                    self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type}, "\
-                        f"buy {self.long_contract.strike_price} {self.long_contract.contract_type}; " \
+                    self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type.value}, "\
+                        f"buy {self.long_contract.strike_price} {self.long_contract.contract_type.value}; " \
                         f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
                         f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
-                        f"stop loss at {self.stop_price:.2f} and before {self.exit_date}"
+                        f"stop loss at {self.stop_price:.2f} and before {self.exit_date}."
+                    if self.second_leg_snapshot.open_interest < 100:
+                        self.description += f"\nOpen Interest is less than 100, careful!"
+                    if self.second_leg_snapshot.day.volume < 100:
+                        self.description += f"\nVolume is less than 100, careful!"
 
                     logger.info(f'Found a match! {self.second_leg_contract.ticker} with delta {self.second_leg_snapshot.greeks.delta}')
 
                     return True
 
-            if self.long_contract is None:
-                logger.info("No suitable long contract found.")
+            if self.second_leg_contract is None:
+                logger.info("No suitable second leg found.")
 
             return False
 
@@ -225,8 +224,7 @@ class CreditSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
     def match_option(self, market_data_client: IMarketDataClient, underlying_ticker: str, direction: DirectionType, strategy: StrategyType, previous_close: Decimal, date: datetime, contracts) -> bool:
-        super().match_option(market_data_client, underlying_ticker, direction, strategy, previous_close, date, contracts)
-        return True
+        return super().match_option(market_data_client, underlying_ticker, direction, strategy, previous_close, date, contracts)
 
     def get_max_reward(self):
         return self.get_net_premium()*100
@@ -250,8 +248,7 @@ class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
     def match_option(self, market_data_client: IMarketDataClient, underlying_ticker: str, direction: DirectionType, strategy: StrategyType, previous_close: Decimal, date: datetime, contracts) -> bool:
-        super().match_option(market_data_client, underlying_ticker, direction, strategy, previous_close, date, contracts)
-        return True
+        return super().match_option(market_data_client, underlying_ticker, direction, strategy, previous_close, date, contracts)
 
     def get_max_reward(self):
         return (self.distance_between_strikes - self.long_premium)*100
