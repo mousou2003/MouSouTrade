@@ -1,11 +1,15 @@
 import calendar
 from datetime import datetime, timedelta
 import logging
+from typing import Tuple
 import numpy as np
 from scipy.stats import norm
-from decimal import Decimal
+from decimal import Decimal, Inexact, InvalidOperation
 from enum import Enum  # Import Enum
 from datetime import datetime, timedelta
+from marketdata_clients.BaseMarketDataClient import MarketDataException, IMarketDataClient
+from engine.data_model import *
+import operator
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +18,10 @@ class TradeStrategy(Enum):
     BALANCED = 'balanced'
     DIRECTIONAL = 'directional'
 
+class ContractType(Enum):
+    CALL = 'call'
+    PUT = 'put'
+    
 class Options:
     """Helper class for calculating option expiration dates and fetching option contracts."""
     def __init__(self, r=0.05, sigma=0.2):
@@ -36,7 +44,7 @@ class Options:
         days_ahead = 4 - date.weekday()  # Friday is the 4th day of the week (0-indexed)
         if days_ahead <= 0:  # Target day already passed this week
             days_ahead += 7
-        next_friday = date + timedelta(days=days_ahead)
+        next_friday = date + timedelta(days_ahead)
         return next_friday
 
     @staticmethod
@@ -150,3 +158,80 @@ class Options:
         Decimal : Standard deviation of the underlying asset
         """
         return Decimal(current_price * iv * Decimal(np.sqrt(Decimal(days_to_expiration/365))))
+
+    @staticmethod
+    def identify_strike_price_type(delta: Decimal, trade_strategy: TradeStrategy) -> StrikePriceType:
+        """
+        Identifies if the contract is ITM, ATM, or OTM based on the delta value and trade strategy.
+
+        Parameters:
+        delta : Decimal : The delta value of the option
+        trade_strategy : TradeStrategy : The trading strategy
+
+        Returns:
+        StrikePriceType : The type of the contract (ITM, ATM, or OTM)
+        """
+        lower_bound, upper_bound = Options.get_delta_range(trade_strategy)
+        if lower_bound <= abs(delta) <= upper_bound:
+            return StrikePriceType.ATM
+        elif abs(delta) > upper_bound:
+            return StrikePriceType.ITM
+        else:
+            return StrikePriceType.OTM
+
+    @staticmethod
+    def get_order(strategy: StrategyType, direction: DirectionType) -> OrderType:
+        """Returns the order (ASC/DESC) based on strategy and direction."""
+        return {StrategyType.CREDIT: {DirectionType.BULLISH: ASC, DirectionType.BEARISH: DESC}, 
+                StrategyType.DEBIT: {DirectionType.BULLISH: DESC, DirectionType.BEARISH: ASC}}[strategy][direction]
+
+    @staticmethod
+    def get_search_op(strategy, direction):
+        """Returns the search operator (operator.ge or operator.le) based on strategy and direction.""" 
+        return {StrategyType.CREDIT: {DirectionType.BULLISH: operator.ge, DirectionType.BEARISH: operator.le}, 
+                StrategyType.DEBIT: {DirectionType.BULLISH: operator.le, DirectionType.BEARISH: operator.ge}}[strategy][direction]
+
+    @staticmethod
+    def select_contract(
+        contracts: List[Contract], 
+        strategy: StrategyType, 
+        direction: DirectionType, 
+        market_data_client: IMarketDataClient, 
+        underlying_ticker: str,
+        trade_strategy: TradeStrategy
+    ) -> Tuple[Contract, int, Snapshot]:
+        """
+        Selects the contract for the first leg of a vertical spread based on the strategy, direction, and delta value.
+
+        underlying_ticker : str : The ticker symbol of the underlying asset
+        trade_strategy : TradeStrategy : The trading strategy (HIGH_PROBABILITY, BALANCED, or DIRECTIONAL)
+        contracts : list : List of option contracts
+        strategy : StrategyType : The trading strategy (CREDIT or DEBIT)
+        direction : DirectionType : The market direction (BULLISH or BEARISH)
+        market_data_client : IMarketDataClient : The market data client
+        underlying_ticker : str : The ticker symbol of the underlying asset
+
+        Returns:
+        tuple : The selected contract, its position in the list, and the snapshot
+        """
+        for position, contract in enumerate(contracts):
+            try:
+                snapshot: Snapshot = Snapshot.from_dict(
+                    market_data_client.get_option_snapshot(underlying_ticker=underlying_ticker, option_symbol=contract.ticker)
+                )
+                if not snapshot.day.timestamp:
+                    logger.info("Snapshot is not up-to-date. Option may not be traded yet.")
+                    continue
+                if not all([snapshot.day.close, snapshot.implied_volatility, snapshot.greeks.delta]):
+                    logger.info(f"Missing key data for {contract.ticker}. Skipping.")
+                    continue
+
+                strike_price_type = Options.identify_strike_price_type(snapshot.greeks.delta, trade_strategy)
+                if (strategy == StrategyType.CREDIT and strike_price_type == StrikePriceType.OTM) or \
+                   (strategy == StrategyType.DEBIT and strike_price_type == StrikePriceType.ATM):
+                    return contract, position, snapshot
+            except (MarketDataException, KeyError, TypeError) as e:
+                logger.warning(f"Error processing contract {contract.ticker}: {type(e).__name__} - {e}")
+                continue
+
+        logger.info(f"No suitable contract found for {underlying_ticker}: {strategy}, direction: {direction}, and trade strategy: {trade_strategy}.")

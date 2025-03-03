@@ -1,19 +1,36 @@
+import logging
 from pydantic import BaseModel
 from decimal import Decimal, ROUND_HALF_UP
-
-from typing import Optional, Dict, Any, List, Union, ClassVar
+from enum import Enum
+from typing import Optional, Dict, Any, List, Union, ClassVar, Literal
 from datetime import date, datetime
+logger = logging.getLogger(__name__)
 
-ASC = 'asc'
-BEARISH = 'bearish'
-BULLISH = 'bullish'
-CREDIT = 'credit'
-DEBIT = 'debit'
-DESC = 'desc'
+OrderType = Literal['asc', 'desc']
+ASC: OrderType = 'asc'
+DESC: OrderType = 'desc'
+
+class DirectionType(Enum):
+    BEARISH = 'bearish'
+    BULLISH = 'bullish'
+
+class StrategyType(Enum):
+    CREDIT = 'credit'
+    DEBIT = 'debit'
+
 SPREAD_TYPE = {
-    CREDIT: {BULLISH: 'put', BEARISH: 'call'},
-    DEBIT: {BULLISH: 'call', BEARISH: 'put'}
+    StrategyType.CREDIT: {DirectionType.BULLISH: 'put', DirectionType.BEARISH: 'call'},
+    StrategyType.DEBIT: {DirectionType.BULLISH: 'call', DirectionType.BEARISH: 'put'}
 }
+
+class ContractType(Enum):
+    CALL = 'call'
+    PUT = 'put'
+
+class StrikePriceType(Enum):
+    ITM = 'ITM'
+    ATM = 'ATM'
+    OTM = 'OTM'
 
 class DataModelBase(BaseModel):
     EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client']
@@ -28,13 +45,13 @@ class DataModelBase(BaseModel):
     
     def to_dict(self, exclude: Optional[List[str]] = None) -> Dict[str, Any]:
         if exclude is None:
-            exclude = self.EXCLUDE_FIELDS
-        
-        attributes = {
-            key: self._process_value(value)
-            for key, value in self.__dict__.items()
-            if key not in exclude and value is not None
-        }
+            exclude = self.EXCLUDE_FIELDS    
+        attributes = {}
+        for key, value in self.__dict__.items():
+            if key not in exclude:
+                if value is None:
+                    logger.debug(f"The value for '{key}' is None")
+                attributes[key] = self._process_value(value)
         return attributes
 
     @classmethod
@@ -49,6 +66,8 @@ class DataModelBase(BaseModel):
             return cls._process_nested_dict(value)
         elif isinstance(value, list):
             return [cls._process_value(item) for item in value]
+        elif isinstance(value, (ContractType, DirectionType, StrategyType)):
+            return value.value
         return value
     
     @classmethod
@@ -64,8 +83,10 @@ class DataModelBase(BaseModel):
         field_type = cls.__annotations__.get(field)
         if field_type == Optional[date]:
             return lambda value: datetime.strptime(value, cls.DATE_FORMAT).date() if value else None
+        elif field_type == Optional[datetime]:
+            return lambda value: datetime.strptime(value) if value else None
         elif field_type == Optional[Decimal]:
-            return lambda value: Decimal(value) if value else Decimal('0')
+            return lambda value: Decimal(value) if value else None
         elif field_type == Optional[int]:
             return lambda value: int(value) if value else 0
         elif field_type == Optional[str]:
@@ -84,7 +105,7 @@ class Contract(DataModelBase):
 
     Attributes:
         cfi (str): The CFI code of the contract.
-        contract_type (str): The type of the contract.
+        contract_type (ContractType): The type of the contract.
         exercise_style (str): The exercise style of the contract.
         expiration_date (date): The expiration date of the contract.
         primary_exchange (str): The primary exchange where the contract is traded.
@@ -94,12 +115,12 @@ class Contract(DataModelBase):
         underlying_ticker (str): The ticker symbol of the underlying asset.
     """
     cfi: Optional[str] = ''
-    contract_type: Optional[str] = ''
+    contract_type: Optional[ContractType] = None
     exercise_style: Optional[str] = ''
     expiration_date: Optional[date] = None
     primary_exchange: Optional[str] = ''
     shares_per_contract: Optional[int] = 0
-    strike_price: Optional[Decimal] = Decimal('0')
+    strike_price: Optional[Decimal] = None
     ticker: Optional[str] = ''
     underlying_ticker: Optional[str] = ''
 
@@ -108,11 +129,11 @@ class Contract(DataModelBase):
         return cls(**data)
 
 class Greeks(BaseModel):
-    delta: Optional[Decimal] = Decimal('0')
-    gamma: Optional[Decimal] = Decimal('0')
-    theta: Optional[Decimal] = Decimal('0')
-    vega: Optional[Decimal] = Decimal('0')
-    rho: Optional[Decimal] = Decimal('0')
+    delta: Optional[Decimal] = None
+    gamma: Optional[Decimal] = None
+    theta: Optional[Decimal] = None
+    vega: Optional[Decimal] = None
+    rho: Optional[Decimal] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Greeks':
@@ -132,10 +153,10 @@ class DayData(BaseModel):
         volume (int): The trading volume at the timestamp.
     """
     timestamp: Optional[datetime] = None
-    open: Optional[Decimal] = Decimal('0')
-    high: Optional[Decimal] = Decimal('0')
-    low: Optional[Decimal] = Decimal('0')
-    close: Optional[Decimal] = Decimal('0')
+    open: Optional[Decimal] = None
+    high: Optional[Decimal] = None
+    low: Optional[Decimal] = None
+    close: Optional[Decimal] = None
     volume: Optional[int] = 0
 
     @classmethod
@@ -157,7 +178,7 @@ class Snapshot(DataModelBase):
     day: Optional[DayData] = None
     details: Optional[Contract] = None
     greeks: Optional[Greeks] = None
-    implied_volatility: Optional[Decimal] = Decimal('0')
+    implied_volatility: Optional[Decimal] = None
     open_interest: Optional[int] = 0
 
     @classmethod
@@ -167,36 +188,40 @@ class Snapshot(DataModelBase):
 class SpreadDataModel(DataModelBase):
     class Config:
         arbitrary_types_allowed = True
-    datetime: Optional[date] = None
-    strategy: Optional[str] = None
-    underlying_ticker: Optional[str] =None
-    previous_close: Optional[Decimal] = None
-    contract_type: Optional[str] = None
-    direction: Optional[str] = None
-    distance_between_strikes: Optional[Decimal] = None
-    short_contract: Optional[Contract] = None
-    long_contract: Optional[Contract] = None
-    contracts: Optional[List[Dict[str, Any]]] = None
-    daily_bars: Optional[List[Dict[str, Any]]] = None
-    client: Optional[str] = None
-    long_premium: Optional[Decimal] = None
-    short_premium: Optional[Decimal] = None
-    max_risk: Optional[Decimal] = None
-    max_reward: Optional[Decimal] = None
+
     breakeven: Optional[Decimal] = None
-    entry_price: Optional[Decimal] = None
-    target_price: Optional[Decimal] = None
-    stop_price: Optional[Decimal] = None
-    expiration_date: Optional[date] = None
-    second_leg_depth: Optional[int] = None
-    exit_date: Optional[date] = None
+    client: Optional[str] = None
+    contract_type: Optional[ContractType] = None
+    daily_bars: Optional[List[DayData]] = None
+    datetime: Optional[date] = None
     description: Optional[str] = None
+    direction: Optional[DirectionType] = None
+    distance_between_strikes: Optional[Decimal] = None
+    entry_price: Optional[Decimal] = None
+    exit_date: Optional[date] = None
+    expiration_date: Optional[date] = None
+    first_leg_contract: Optional[Contract] = None
+    first_leg_contract_position: Optional[int] = None
+    first_leg_snapshot: Optional[Snapshot] = None
+    long_contract: Optional[Contract] = None
+    long_premium: Optional[Decimal] = None
+    max_reward: Optional[Decimal] = None
+    max_risk: Optional[Decimal] = None
     net_premium: Optional[Decimal] = None
+    previous_close: Optional[Decimal] = None
     probability_of_profit: Optional[Decimal] = None
-    first_leg_snapshot: Optional[Dict[str, Any]] = None
-    second_leg_snapshot: Optional[Dict[str, Any]] = None
+    second_leg_contract: Optional[Contract] = None
+    second_leg_contract_position: Optional[int] = None
+    second_leg_depth: Optional[int] = None
+    second_leg_snapshot: Optional[Snapshot] = None
+    short_contract: Optional[Contract] = None
+    short_premium: Optional[Decimal] = None
+    stop_price: Optional[Decimal] = None
+    strategy: Optional[StrategyType] = None
+    target_price: Optional[Decimal] = None
+    underlying_ticker: Optional[str] = None
     update_date: Optional[date] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SpreadDataModel':
-        return SpreadDataModel(**data)
+        return cls(**data)

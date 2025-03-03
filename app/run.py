@@ -24,7 +24,7 @@ debug_mode = os.getenv("DEBUG_MODE")
 if debug_mode and debug_mode.lower() == "true":
     loglevel = logging.DEBUG
 else:
-    loglevel = logging.INFO
+    loglevel = logging.WARNING
 logging.basicConfig(level=loglevel)
 class ColorFormatter(logging.Formatter):
     def format(self, record):
@@ -75,36 +75,45 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
     if not ticker:
         raise KeyError('Ticker')
     
-    ideal_expiration = datetime.today() + timedelta(weeks=5)    
+    ideal_expiration = datetime.today() + timedelta(weeks=3)    
     target_expiration_date = Options.get_next_friday(ideal_expiration).date()
 
-    for direction in [BULLISH, BEARISH]:
-        for strategy in [CREDIT, DEBIT]:
-            spread_class = DebitSpread if strategy == DEBIT else CreditSpread
+    for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
+        for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
+            spread_class = DebitSpread if strategy == StrategyType.DEBIT else CreditSpread
             spread = spread_class()
 
             logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
+            
+            contracts = market_data_client.get_option_contracts(
+                underlying_ticker=ticker,
+                expiration_date_gte=target_expiration_date,
+                expiration_date_lte=target_expiration_date,
+                contract_type=spread.contract_type,
+                order=Options.get_order(strategy=strategy, direction=direction)
+            )
+            if contracts == []:
+                logger.info(f"No contracts found for {ticker} on {target_expiration_date}")
+                continue
+
             matched = spread.match_option(market_data_client=market_data_client, underlying_ticker=ticker, 
-                                          direction=direction, strategy=strategy, previous_close=stock['close'], date=target_expiration_date)
+                                          direction=direction, strategy=strategy, previous_close=stock['close'], 
+                                          date=target_expiration_date, contracts=contracts)
             key = {
                 "ticker": f"{spread.underlying_ticker};{spread.expiration_date.strftime(DataModelBase.DATE_FORMAT)};{spread.update_date.strftime(DataModelBase.DATE_FORMAT)}",
                 "option": json.dumps({"date": target_expiration_date.strftime(DataModelBase.DATE_FORMAT), 
                                       "direction": direction, 
                                       "strategy": strategy}, default=str)
             }
-            if matched:
-                merged_json = {**key, **{"description": spread.get_description(), **spread.to_dict()}}
-                logger.debug(merged_json)
-            else:
-                merged_json = {**key, **{"description": f"No match for {ticker}"}, **spread.to_dict()}
-                logger.debug(merged_json)
-
+            merged_json = {**key, **{"description": spread.get_description() if matched else f"No match for {ticker}"}, 
+                           **spread.to_dict()}
+            print(f"Match {'found' if matched else 'NOT found'}, and stored in {key}")
+            logger.debug(merged_json)
             dynamodb.put_item(item=merged_json)
             response = dynamodb.get_item(key=key)
             if 'Item' in response:
-                logger.info("Match %sfound, and stored in %s" % (("", key) if matched else ("not ", key)))
                 validated_records = spread.from_dict(response['Item']).to_dict()
-                logger.debug(f'Saved in table:\n{validated_records}')
+                logger.debug(f'Item saved in table:\n{validated_records}')
             else:
                 raise MarketDataStrikeNotFoundException(f"No item found for ticker {ticker}")
 
