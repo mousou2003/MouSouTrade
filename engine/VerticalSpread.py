@@ -19,48 +19,6 @@ class VerticalSpread(SpreadDataModel):
     market_data_client: IMarketDataClient = None
     contracts: List[Contract] = []
 
-    def find_first_leg_contract(self) -> bool:
-        """
-        Finds the first leg contract for a vertical spread based on the strategy and direction.
-
-        Returns:
-        bool : True if a suitable first leg contract is found, False otherwise
-        """
-        try:
-            result = Options.select_contract(
-                self.contracts, self.market_data_client, self.underlying_ticker, 
-                TradeStrategy.DIRECTIONAL)
-            if result is None:
-                return False
-            self.first_leg_contract, self.first_leg_contract_position, self.first_leg_snapshot = result
-            return True
-        except ValueError as e:
-            logger.error(f"Error finding first leg contract: {e}")
-            return False
-
-    def find_second_leg_contract(self, start: int, stop: int) -> bool:
-        """
-        Finds the second leg contract for a vertical spread based on the strategy and direction.
-
-        Parameters:
-        start : int : Starting index for the search
-        stop : int : Stopping index for the search
-
-        Returns:
-        bool : True if a suitable second leg contract is found, False otherwise
-        """
-        try:
-            result = Options.select_contract(
-                self.contracts, self.market_data_client, self.underlying_ticker, 
-                TradeStrategy.HIGH_PROBABILITY)
-            if result is None:
-                return False
-            self.second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = result
-            return True
-        except ValueError as e:
-            logger.error(f"Error finding second leg contract: {e}")
-            return False
-
     def match_option(self, market_data_client: IMarketDataClient, underlying_ticker: str, 
                      direction: DirectionType, strategy: StrategyType, previous_close: Decimal, date: datetime, contracts) -> bool:
         self.market_data_client = market_data_client
