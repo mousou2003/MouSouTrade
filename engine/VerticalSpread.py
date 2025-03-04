@@ -51,7 +51,7 @@ class VerticalSpread(SpreadDataModel):
         """
         try:
             result = Options.select_contract(
-                self.contracts[start:stop], self.strategy, self.direction, self.market_data_client, self.underlying_ticker, 
+                self.contracts, self.strategy, self.direction, self.market_data_client, self.underlying_ticker, 
                 TradeStrategy.HIGH_PROBABILITY)
             if result is None:
                 return False

@@ -138,9 +138,9 @@ class Options:
         if trade_strategy == TradeStrategy.HIGH_PROBABILITY:
             return (Decimal('0.10'), Decimal('0.30'))
         elif trade_strategy == TradeStrategy.BALANCED:
-            return (Decimal('0.30'), Decimal('0.50'))
+            return (Decimal('0.30'), Decimal('0.40'))
         elif trade_strategy == TradeStrategy.DIRECTIONAL:
-            return (Decimal('0.50'), Decimal('0.70'))
+            return (Decimal('0.45'), Decimal('0.55'))
         else:
             raise ValueError("Invalid trade strategy. Choose from TradeStrategy.HIGH_PROBABILITY, TradeStrategy.BALANCED, or TradeStrategy.DIRECTIONAL.")
 
@@ -182,14 +182,33 @@ class Options:
     @staticmethod
     def get_order(strategy: StrategyType, direction: DirectionType) -> OrderType:
         """Returns the order (ASC/DESC) based on strategy and direction."""
-        return {StrategyType.CREDIT: {DirectionType.BULLISH: ASC, DirectionType.BEARISH: DESC}, 
-                StrategyType.DEBIT: {DirectionType.BULLISH: DESC, DirectionType.BEARISH: ASC}}[strategy][direction]
+        return {StrategyType.CREDIT: {DirectionType.BULLISH: DESC, DirectionType.BEARISH: ASC}, 
+                StrategyType.DEBIT: {DirectionType.BULLISH: ASC, DirectionType.BEARISH: DESC}}[strategy][direction]
 
     @staticmethod
     def get_search_op(strategy, direction):
         """Returns the search operator (operator.ge or operator.le) based on strategy and direction.""" 
         return {StrategyType.CREDIT: {DirectionType.BULLISH: operator.ge, DirectionType.BEARISH: operator.le}, 
                 StrategyType.DEBIT: {DirectionType.BULLISH: operator.le, DirectionType.BEARISH: operator.ge}}[strategy][direction]
+
+    @staticmethod
+    def get_contract_type(strategy: StrategyType, direction: DirectionType) -> ContractType:
+        """
+        Returns the contract type (CALL or PUT) based on the strategy and direction.
+
+        Parameters:
+        strategy : StrategyType : The trading strategy (CREDIT or DEBIT)
+        direction : DirectionType : The market direction (BULLISH or BEARISH)
+
+        Returns:
+        ContractType : The type of the contract (CALL or PUT)
+        """
+        if strategy == StrategyType.CREDIT:
+            return ContractType.CALL if direction == DirectionType.BEARISH else ContractType.PUT
+        elif strategy == StrategyType.DEBIT:
+            return ContractType.PUT if direction == DirectionType.BEARISH else ContractType.CALL
+        else:
+            raise ValueError("Invalid strategy or direction.")
 
     @staticmethod
     def select_contract(
@@ -225,12 +244,14 @@ class Options:
                     logger.debug(f"Missing key data for {contract.ticker}. Skipping.")
                     continue
                 strike_price_type = Options.identify_strike_price_type(snapshot.greeks.delta, trade_strategy)
-                if (strategy == StrategyType.CREDIT and strike_price_type == StrikePriceType.OTM) or \
-                   (strategy == StrategyType.DEBIT and strike_price_type == StrikePriceType.ATM):
+                if (((trade_strategy == TradeStrategy.DIRECTIONAL) 
+                     and (strike_price_type == StrikePriceType.ATM))
+                     or (trade_strategy == TradeStrategy.HIGH_PROBABILITY
+                     and (strike_price_type == StrikePriceType.OTM))): 
                     logger.info(f"Selected contract {contract.ticker} with delta {snapshot.greeks.delta} and strike price type {strike_price_type.value}.")
                     return contract, position, snapshot
             except (MarketDataException, KeyError, TypeError) as e:
                 logger.warning(f"Error processing contract {contract.ticker}: {type(e).__name__} - {e}")
                 continue
 
-        logger.info(f"No suitable contract found for {underlying_ticker}: {strategy.value}, direction: {direction.value}, and trade strategy: {trade_strategy.value}.")
+        logger.info(f"No suitable contract found for {underlying_ticker}: trade strategy: {trade_strategy.value}.")

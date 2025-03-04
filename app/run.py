@@ -24,7 +24,7 @@ debug_mode = os.getenv("DEBUG_MODE")
 if debug_mode and debug_mode.lower() == "true":
     loglevel = logging.DEBUG
 else:
-    loglevel = logging.INFO
+    loglevel = logging.WARNING
 logging.basicConfig(level=loglevel)
 class ColorFormatter(logging.Formatter):
     def format(self, record):
@@ -33,18 +33,18 @@ class ColorFormatter(logging.Formatter):
         elif record.levelno == logging.ERROR:
             record.msg = f"{Fore.RED}{record.msg}{Style.RESET_ALL}"
         return super().format(record)
-
 handler = logging.StreamHandler()
 handler.setFormatter(ColorFormatter())
 logger.addHandler(handler)
 
 # Set the logging level to WARNING to suppress DEBUG messages
-logging.getLogger('botocore').setLevel(logging.WARNING)
+""" logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
-logging.getLogger('asyncio').setLevel(logging.WARNING)
+logging.getLogger('asyncio').setLevel(logging.WARNING) """
 logging.getLogger('engine.VerticalSpread').setLevel(loglevel)
 logging.getLogger('engine.VerticalSpread').addHandler(handler)
+logging.getLogger('engine.VerticalSpread').setLevel(loglevel)
 
 class MissingEnvironmentVariableException(Exception):
     pass
@@ -75,7 +75,7 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
     if not ticker:
         raise KeyError('Ticker')
     
-    ideal_expiration = datetime.today() + timedelta(weeks=3)    
+    ideal_expiration = datetime.today() + timedelta(weeks=4)    
     target_expiration_date = Options.get_next_friday(ideal_expiration).date()
 
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
@@ -83,13 +83,13 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
             spread_class = DebitSpread if strategy == StrategyType.DEBIT else CreditSpread
             spread = spread_class()
 
-            logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy} {direction} spread for {ticker} for target date {target_expiration_date}")
+            logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {ticker} for target date {target_expiration_date}")
             
             contracts = market_data_client.get_option_contracts(
                 underlying_ticker=ticker,
                 expiration_date_gte=target_expiration_date,
                 expiration_date_lte=target_expiration_date,
-                contract_type=spread.contract_type,
+                contract_type=Options.get_contract_type(strategy, direction),
                 order=Options.get_order(strategy=strategy, direction=direction)
             )
             if contracts == []:
@@ -102,16 +102,12 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
             key = {
                 "ticker": f"{spread.underlying_ticker};{spread.expiration_date.strftime(DataModelBase.DATE_FORMAT)};{spread.update_date.strftime(DataModelBase.DATE_FORMAT)}",
                 "option": json.dumps({"date": target_expiration_date.strftime(DataModelBase.DATE_FORMAT), 
-                                      "direction": direction, 
-                                      "strategy": strategy}, default=str)
+                                      "direction": direction.value, 
+                                      "strategy": strategy.value}, default=str)
             }
             merged_json = {**key, **{"description": spread.get_description() if matched else f"No match for {ticker}"}, 
                            **spread.to_dict()}
-            if matched:
-                print(f"Match found for {ticker} {strategy} {direction} spread for target date {target_expiration_date}")
-            else:
-                print(f"No match found for {ticker} {strategy} {direction} spread for target date {target_expiration_date}")
-
+            print(f"Match {'found' if matched else 'NOT found'}, and stored in {key}")
             logger.debug(merged_json)
             dynamodb.put_item(item=merged_json)
             response = dynamodb.get_item(key=key)
@@ -175,9 +171,9 @@ def main():
                     logger.exception(f"Error processing stock {stock_number}/{number_of_stocks} ({ticker}): {e}")
             else:
                 logger.warning(f"Stock {stock_number}/{number_of_stocks} ({ticker}) not found in market")
-        logger.info(f"Number of stocks in initial config file: {number_of_stocks}")
-        logger.info(f"Number of stocks found in marketdata_stocks: {len(marketdata_stocks.stocks_data)}")
-        logger.info(f"Processed {number_of_stocks} stocks")
+        print(f"Number of stocks in initial config file: {number_of_stocks}")
+        print(f"Number of stocks found in marketdata_stocks: {len(marketdata_stocks.stocks_data)}")
+        print(f"Processed {number_of_stocks} stocks")
         return 0
     except FileNotFoundError:
         logger.error("Input file not found.")
