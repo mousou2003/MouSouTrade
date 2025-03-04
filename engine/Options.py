@@ -136,11 +136,11 @@ class Options:
         tuple : A tuple containing the lower and upper bounds of the delta range
         """
         if trade_strategy == TradeStrategy.HIGH_PROBABILITY:
-            return (Decimal('0.10'), Decimal('0.30'))
+            return (Decimal('0.10'), Decimal('0.25'))
         elif trade_strategy == TradeStrategy.BALANCED:
-            return (Decimal('0.30'), Decimal('0.40'))
+            return (Decimal('0.30'), Decimal('0.45'))
         elif trade_strategy == TradeStrategy.DIRECTIONAL:
-            return (Decimal('0.45'), Decimal('0.55'))
+            return (Decimal('0.50'), Decimal('0.60'))
         else:
             raise ValueError("Invalid trade strategy. Choose from TradeStrategy.HIGH_PROBABILITY, TradeStrategy.BALANCED, or TradeStrategy.DIRECTIONAL.")
 

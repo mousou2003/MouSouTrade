@@ -41,9 +41,13 @@ table = dynamodb.Table(table_name)
 
 def get_all_items():
     logging.info("Fetching all items from the DynamoDB table.")
+    items = []
     try:
         response = table.scan()
-        items = response['Items']
+        items.extend(response['Items'])
+        while 'LastEvaluatedKey' in response:
+            response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+            items.extend(response['Items'])
         for item in items:
             try:
                 ticker, target_expiration_date, update_date = item['ticker'].split(';')
