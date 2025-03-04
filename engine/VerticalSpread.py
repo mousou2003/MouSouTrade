@@ -73,110 +73,99 @@ class VerticalSpread(SpreadDataModel):
         self.update_date = datetime.today().date()
         self.contracts = contracts
 
-        try:
-            days_to_expiration = (self.expiration_date - self.update_date).days
+        days_to_expiration = (self.expiration_date - self.update_date).days
 
-            if not self.find_first_leg_contract():
-                logger.info("No suitable first leg contract found.")
-                return False
+        first_leg_candidates = Options.select_contract(
+            self.contracts, self.market_data_client, self.underlying_ticker, 
+            TradeStrategy.DIRECTIONAL)
+        if not first_leg_candidates:
+            logger.info("No suitable first leg contract found.")
+            return False
+        logger.debug(f"Number of first leg candidates: {len(first_leg_candidates)}")
 
-            logger.info("Staging FIRST LEG contract: %s for previous close of %.5f", self.first_leg_contract.ticker, previous_close)
+        second_leg_candidates = Options.select_contract(
+            self.contracts, self.market_data_client, self.underlying_ticker, 
+            TradeStrategy.HIGH_PROBABILITY)
+        if not second_leg_candidates:
+            logger.info("No suitable second leg contract found.")
+            return False
+        logger.debug(f"Number of second leg candidates: {len(second_leg_candidates)}")
+        
+        best_spread = None
+        best_pop = Decimal(0)
+
+        for first_leg in first_leg_candidates:
+            self.first_leg_contract, self.first_leg_contract_position, self.first_leg_snapshot = first_leg
 
             if self.strategy == StrategyType.CREDIT:
-                try:
-                    self.short_contract = self.first_leg_contract
-                    self.short_premium = self.first_leg_snapshot.day.close * self.SHORT_PREMIUM_MULTIPLIER
-                except Inexact:
-                    logger.error("Inexact value encountered in short premium calculation")
-                    raise
-
+                self.short_contract = self.first_leg_contract
+                self.short_premium = self.first_leg_snapshot.day.close * self.SHORT_PREMIUM_MULTIPLIER
             elif self.strategy == StrategyType.DEBIT:
-                try:
-                    self.long_premium = self.first_leg_snapshot.day.close * self.LONG_PREMIUM_MULTIPLIER
-                    self.long_contract = self.first_leg_contract
-                except Inexact:
-                    logger.error("Inexact value encountered in long premium calculation")
-                    raise
-            
+                self.long_premium = self.first_leg_snapshot.day.close * self.LONG_PREMIUM_MULTIPLIER
+                self.long_contract = self.first_leg_contract
+
             start = max(self.first_leg_contract_position - self.MAX_STRIKES, 0)
             stop = self.first_leg_contract_position
 
-            # Second loop to search for the matching contract
-            if self.find_second_leg_contract(start, stop):
+            for second_leg in second_leg_candidates:
+                self.second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = second_leg
+
                 premium_delta = self.first_leg_snapshot.day.close - self.second_leg_snapshot.day.close
                 if premium_delta == 0:
-                    raise Exception("Premium delta is zero")
+                    raise ValueError("Skipping second leg candidate due to zero premium delta.")
+                
                 self.distance_between_strikes = abs(self.first_leg_contract.strike_price - self.second_leg_contract.strike_price)
                 if self.distance_between_strikes == 0:
-                    raise ZeroDivisionError("Distance between strikes is zero")
+                    raise ValueError("Zero distance between strikes is not allowed.")
 
                 relative_delta = abs(premium_delta / self.distance_between_strikes)
+                if relative_delta == Decimal(0) or relative_delta < self.MIN_DELTA:
+                    logger.debug(f"Skipping second leg candidate due to relative delta {relative_delta} being less than minimum delta {self.MIN_DELTA}.")
+                    continue
 
-                logger.debug('distance_between_strikes %.5f, premium_delta %.5f', self.distance_between_strikes, premium_delta)
+                if self.strategy == StrategyType.CREDIT:
+                    self.long_premium = self.second_leg_snapshot.day.close * self.LONG_PREMIUM_MULTIPLIER
+                    self.long_contract = self.second_leg_contract
+                elif self.strategy == StrategyType.DEBIT:
+                    self.short_contract = self.second_leg_contract
+                    self.short_premium = self.second_leg_snapshot.day.close * self.SHORT_PREMIUM_MULTIPLIER
 
-                if relative_delta == Decimal(0):
-                    logger.error("Delta is zero, skipping")
-                    raise Exception("Delta is zero")
-                if relative_delta >= self.MIN_DELTA:
-                    if self.strategy == StrategyType.CREDIT:
-                        try:
-                            self.long_premium = self.second_leg_snapshot.day.close * self.LONG_PREMIUM_MULTIPLIER
-                            self.long_contract = self.second_leg_contract
-                        except Inexact:
-                            logger.warning("Inexact value encountered in long premium calculation, skipping")
-                            return False
-                    elif self.strategy == StrategyType.DEBIT:
-                        try:
-                            self.short_contract = self.second_leg_contract
-                            self.short_premium = self.second_leg_snapshot.day.close * self.SHORT_PREMIUM_MULTIPLIER
-                        except Inexact:
-                            logger.warning("Inexact value encountered in short premium calculation, skipping")
-                            return False
+                self.net_premium = self.short_premium - self.long_premium
+                self.max_risk = self.get_max_risk()
+                self.max_reward = self.get_max_reward()
+                self.breakeven = self.get_breakeven_price()
+                self.entry_price = self.get_close_price()
+                self.target_price = self.get_target_price()
+                self.stop_price = self.get_stop_price()
+                self.exit_date = self.get_exit_date()
 
-                    self.description = self.get_description()
-                    logger.info(f'Found a match! {self.second_leg_contract.ticker} with delta {self.second_leg_snapshot.greeks.delta}')
+                self.probability_of_profit = Options.calculate_probability_of_profit(
+                    current_price=Decimal(self.previous_close),
+                    breakeven_price=Decimal(self.breakeven),
+                    days_to_expiration=days_to_expiration,
+                    implied_volatility=Decimal(self.second_leg_snapshot.implied_volatility)
+                )
 
-                    # Calculate and assign other parameters
-                    self.net_premium = self.short_premium - self.long_premium
-                    self.max_risk = self.get_max_risk()
-                    self.max_reward = self.get_max_reward()
-                    self.breakeven = self.get_breakeven_price()
-                    self.entry_price = self.get_close_price()
-                    self.target_price = self.get_target_price()
-                    self.stop_price = self.get_stop_price()
-                    self.exit_date = self.get_exit_date()
-                    self.description = self.get_description()
+                self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type.value}, "\
+                                        f"buy {self.long_contract.strike_price} {self.long_contract.contract_type.value}; " \
+                                        f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
+                                        f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
+                                        f"stop loss at {self.stop_price:.2f} and before {self.exit_date}."
+                if self.second_leg_snapshot.open_interest < 10:
+                    self.description += f"\nOpen Interest is less than 10, careful!"
+                if self.second_leg_snapshot.day.volume < 10:
+                    self.description += f"\nVolume is less than 10, careful!"
 
-                    # Calculate Probability of Profit (POP)
-                    self.probability_of_profit = Options.calculate_probability_of_profit(
-                        current_price=Decimal(self.previous_close),
-                        breakeven_price=Decimal(self.breakeven),
-                        days_to_expiration=days_to_expiration,
-                        implied_volatility=Decimal(self.second_leg_snapshot.implied_volatility)
-                    )
+                if self.probability_of_profit > best_pop:
+                    best_pop = self.probability_of_profit
+                    best_spread = self.to_dict()
 
-                    self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type.value}, "\
-                        f"buy {self.long_contract.strike_price} {self.long_contract.contract_type.value}; " \
-                        f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
-                        f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
-                        f"stop loss at {self.stop_price:.2f} and before {self.exit_date}."
-                    if self.second_leg_snapshot.open_interest < 100:
-                        self.description += f"\nOpen Interest is less than 100, careful!"
-                    if self.second_leg_snapshot.day.volume < 100:
-                        self.description += f"\nVolume is less than 100, careful!"
+        if best_spread:
+            self.from_dict(best_spread)
+            logger.info(f'Found a match! {self.second_leg_contract.ticker} with delta {self.second_leg_snapshot.greeks.delta}')
+            return True
 
-                    logger.info(f'Found a match! {self.second_leg_contract.ticker} with delta {self.second_leg_snapshot.greeks.delta}')
-
-                    return True
-
-            if self.second_leg_contract is None:
-                logger.info("No suitable second leg found.")
-
-            return False
-
-        except Exception as e:
-            logger.exception(f"An unexpected error occurred in match_option: {e}")
-            raise
+        return False
 
     def get_net_premium(self):
         return Decimal(self.net_premium)

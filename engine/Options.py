@@ -136,11 +136,11 @@ class Options:
         tuple : A tuple containing the lower and upper bounds of the delta range
         """
         if trade_strategy == TradeStrategy.HIGH_PROBABILITY:
-            return (Decimal('0.10'), Decimal('0.25'))
+            return (Decimal('0.10'), Decimal('0.30'))
         elif trade_strategy == TradeStrategy.BALANCED:
-            return (Decimal('0.30'), Decimal('0.45'))
+            return (Decimal('0.30'), Decimal('0.50'))
         elif trade_strategy == TradeStrategy.DIRECTIONAL:
-            return (Decimal('0.50'), Decimal('0.60'))
+            return (Decimal('0.50'), Decimal('0.70'))
         else:
             raise ValueError("Invalid trade strategy. Choose from TradeStrategy.HIGH_PROBABILITY, TradeStrategy.BALANCED, or TradeStrategy.DIRECTIONAL.")
 
@@ -216,9 +216,9 @@ class Options:
         market_data_client: IMarketDataClient, 
         underlying_ticker: str,
         trade_strategy: TradeStrategy
-    ) -> Tuple[Contract, int, Snapshot]:
+    ) -> List[Tuple[Contract, int, Snapshot]]:
         """
-        Selects the contract for the first leg of a vertical spread based on the strategy, direction, and delta value.
+        Selects the contracts for the first leg of a vertical spread based on the strategy, direction, and delta value.
 
         underlying_ticker : str : The ticker symbol of the underlying asset
         trade_strategy : TradeStrategy : The trading strategy (HIGH_PROBABILITY, BALANCED, or DIRECTIONAL)
@@ -229,8 +229,9 @@ class Options:
         underlying_ticker : str : The ticker symbol of the underlying asset
 
         Returns:
-        tuple : The selected contract, its position in the list, and the snapshot
+        list : A list of tuples containing the selected contract, its position in the list, and the snapshot
         """
+        matching_contracts = []
         for position, contract in enumerate(contracts):
             try:
                 snapshot: Snapshot = Snapshot.from_dict(
@@ -247,9 +248,9 @@ class Options:
                      or (trade_strategy == TradeStrategy.HIGH_PROBABILITY
                      and (strike_price_type == StrikePriceType.OTM))): 
                     logger.info(f"Selected contract {contract.ticker} with delta {snapshot.greeks.delta} and strike price type {strike_price_type.value}.")
-                    return contract, position, snapshot
+                    matching_contracts.append((contract, position, snapshot))
             except (MarketDataException, KeyError, TypeError) as e:
                 logger.warning(f"Error processing contract {contract.ticker}: {type(e).__name__} - {e}")
                 continue
 
-        logger.info(f"No suitable contract found for {underlying_ticker}: trade strategy: {trade_strategy.value}.")
+        return matching_contracts

@@ -42,9 +42,9 @@ logger.addHandler(handler)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING) """
-logging.getLogger('engine.VerticalSpread').setLevel(loglevel)
+logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
 logging.getLogger('engine.VerticalSpread').addHandler(handler)
-logging.getLogger('engine.VerticalSpread').setLevel(loglevel)
+
 
 class MissingEnvironmentVariableException(Exception):
     pass
