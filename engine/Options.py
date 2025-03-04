@@ -111,16 +111,25 @@ class Options:
         Returns:
         Decimal : Probability of Profit (POP) as a percentage
         """
+        logger.debug(f"Calculating POP with current_price={current_price}, breakeven_price={breakeven_price}, days_to_expiration={days_to_expiration}, implied_volatility={implied_volatility}")
+        
         # Calculate standard deviation for the underlying asset price
         annualized_sd = implied_volatility * current_price
+        logger.debug(f"Annualized standard deviation: {annualized_sd}")
+        
         daily_sd = annualized_sd / Decimal(np.sqrt(252))  # 252 trading days in a year
+        logger.debug(f"Daily standard deviation: {daily_sd}")
+        
         price_movement_sd = daily_sd * Decimal(np.sqrt(days_to_expiration))
+        logger.debug(f"Price movement standard deviation over {days_to_expiration} days: {price_movement_sd}")
 
         # Calculate Z-Score for Breakeven
         z_score = (breakeven_price - current_price) / price_movement_sd
+        logger.debug(f"Z-Score for breakeven price: {z_score}")
 
         # Calculate Probability of Profit (POP)
         probability_of_profit = Decimal(norm.cdf(float(z_score)))
+        logger.debug(f"Probability of Profit (POP): {probability_of_profit * Decimal(100)}%")
 
         return probability_of_profit * Decimal(100)
 
@@ -138,9 +147,9 @@ class Options:
         if trade_strategy == TradeStrategy.HIGH_PROBABILITY:
             return (Decimal('0.10'), Decimal('0.30'))
         elif trade_strategy == TradeStrategy.BALANCED:
-            return (Decimal('0.30'), Decimal('0.50'))
+            return (Decimal('0.30'), Decimal('0.45'))
         elif trade_strategy == TradeStrategy.DIRECTIONAL:
-            return (Decimal('0.50'), Decimal('0.70'))
+            return (Decimal('0.45'), Decimal('0.70'))
         else:
             raise ValueError("Invalid trade strategy. Choose from TradeStrategy.HIGH_PROBABILITY, TradeStrategy.BALANCED, or TradeStrategy.DIRECTIONAL.")
 
@@ -231,12 +240,23 @@ class Options:
         Returns:
         list : A list of tuples containing the selected contract, its position in the list, and the snapshot
         """
-        matching_contracts = []
-        for position, contract in enumerate(contracts):
+        snapshots = {}
+        for contract in contracts:
             try:
-                snapshot: Snapshot = Snapshot.from_dict(
+                snapshot = Snapshot.from_dict(
                     market_data_client.get_option_snapshot(underlying_ticker=underlying_ticker, option_symbol=contract.ticker)
                 )
+                snapshots[contract.ticker] = snapshot
+            except (MarketDataException, KeyError, TypeError) as e:
+                logger.warning(f"Error fetching snapshot for contract {contract.ticker}: {type(e).__name__} - {e}")
+                continue
+
+        matching_contracts = []
+        for position, contract in enumerate(contracts):
+            snapshot = snapshots.get(contract.ticker)
+            if not snapshot:
+                continue
+            try:
                 if not snapshot.day.timestamp:
                     logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
                 if not all([snapshot.day.close, snapshot.implied_volatility, snapshot.greeks.delta]):

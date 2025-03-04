@@ -70,7 +70,7 @@ class VerticalSpread(SpreadDataModel):
 
                 premium_delta = self.first_leg_snapshot.day.close - self.second_leg_snapshot.day.close
                 if premium_delta == 0:
-                    raise ValueError("Skipping second leg candidate due to zero premium delta.")
+                    raise ValueError("Second leg candidate due to zero premium delta indicate an error in the selection.")
                 
                 self.distance_between_strikes = abs(self.first_leg_contract.strike_price - self.second_leg_contract.strike_price)
                 if self.distance_between_strikes == 0:
@@ -89,6 +89,7 @@ class VerticalSpread(SpreadDataModel):
                     self.short_premium = self.second_leg_snapshot.day.close * self.SHORT_PREMIUM_MULTIPLIER
 
                 self.net_premium = self.short_premium - self.long_premium
+                max_profit_percent = (self.distance_between_strikes - self.long_premium / abs(self.net_premium)) * 100
                 self.max_risk = self.get_max_risk()
                 self.max_reward = self.get_max_reward()
                 self.breakeven = self.get_breakeven_price()
@@ -104,11 +105,14 @@ class VerticalSpread(SpreadDataModel):
                     implied_volatility=Decimal(self.second_leg_snapshot.implied_volatility)
                 )
 
-                self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type.value}, "\
-                                        f"buy {self.long_contract.strike_price} {self.long_contract.contract_type.value}; " \
-                                        f"max risk {self.max_risk:.2f}, max reward {self.max_reward:.2f}, breakeven {self.breakeven:.2f}, " \
-                                        f"enter at {self.entry_price:.2f}, target exit at {self.target_price:.2f}, " \
-                                        f"stop loss at {self.stop_price:.2f} and before {self.exit_date}."
+                if self.strategy == StrategyType.CREDIT:
+                    self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type.value}, \n"\
+                                        f"buy {self.long_contract.strike_price} {self.long_contract.contract_type.value}; \n" \
+                                        f"max profit as fraction of the distance between strikes {relative_delta*100:.2f}%."
+                elif self.strategy == StrategyType.DEBIT:
+                    self.description = f"Buy {self.long_contract.strike_price} {self.long_contract.contract_type.value}, \n"\
+                                        f"sell {self.short_contract.strike_price} {self.short_contract.contract_type.value}; \n" \
+                                        f"max profit as percent of the debit {max_profit_percent:.2f}%."
                 if self.second_leg_snapshot.open_interest < 10:
                     self.description += f"\nOpen Interest is less than 10, careful!"
                 if self.second_leg_snapshot.day.volume < 10:
