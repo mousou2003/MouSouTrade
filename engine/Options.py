@@ -212,9 +212,7 @@ class Options:
 
     @staticmethod
     def select_contract(
-        contracts: List[Contract], 
-        strategy: StrategyType, 
-        direction: DirectionType, 
+        contracts: List[Contract],  
         market_data_client: IMarketDataClient, 
         underlying_ticker: str,
         trade_strategy: TradeStrategy
