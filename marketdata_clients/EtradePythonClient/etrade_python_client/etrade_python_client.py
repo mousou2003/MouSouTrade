@@ -15,53 +15,26 @@ from market.market import Market
 config = configparser.ConfigParser()
 config.read(r'C:\Users\mouso\Documents\GitHub\MouSouTrade\marketdata_clients\EtradePythonClient\etrade_python_client\config.ini', encoding='utf-8')
 print (config.sections())
-print(config.get('DEFAULT', 'CONSUMER_KEY'))
-print(config.get('DEFAULT', 'CONSUMER_SECRET'))
-print(config.get('DEFAULT', 'SANDBOX_BASE_URL'))
-print(config.get('DEFAULT', 'PROD_BASE_URL'))
+print(config.get('PROD', 'CONSUMER_KEY'))
+print(config.get('PROD', 'CONSUMER_SECRET'))
+print(config.get('PROD', 'BASE_URL'))
 
 
 # logger settings
 logger = logging.getLogger('my_logger')
-logger.setLevel(logging.DEBUG)
-handler = RotatingFileHandler("python_client.log", maxBytes=5*1024*1024, backupCount=3)
-FORMAT = "%(asctime)-15s %(message)s"
-fmt = logging.Formatter(FORMAT, datefmt='%m/%d/%Y %I:%M:%S %p')
-handler.setFormatter(fmt)
-logger.addHandler(handler)
-
+logging.basicConfig(level=logging.INFO)
 
 def oauth():
     """Allows user authorization for the sample application with OAuth 1"""
+    base_url=config["PROD"]["BASE_URL"]
     etrade = OAuth1Service(
         name="etrade",
-        consumer_key=config["DEFAULT"]["CONSUMER_KEY"],
-        consumer_secret=config["DEFAULT"]["CONSUMER_SECRET"],
+        consumer_key=config["PROD"]["CONSUMER_KEY"],
+        consumer_secret=config["PROD"]["CONSUMER_SECRET"],
         request_token_url="https://api.etrade.com/oauth/request_token",
         access_token_url="https://api.etrade.com/oauth/access_token",
         authorize_url="https://us.etrade.com/e/t/etws/authorize?key={}&token={}",
-        base_url="https://api.etrade.com")
-
-    menu_items = {"1": "Sandbox Consumer Key",
-                  "2": "Live Consumer Key",
-                  "3": "Exit"}
-    while True:
-        print("")
-        options = menu_items.keys()
-        for entry in options:
-            print(entry + ")\t" + menu_items[entry])
-        selection = input("Please select Consumer Key Type: ")
-        if selection == "1":
-            base_url = config["DEFAULT"]["SANDBOX_BASE_URL"]
-            break
-        elif selection == "2":
-            base_url = config["DEFAULT"]["PROD_BASE_URL"]
-            break
-        elif selection == "3":
-            break
-        else:
-            print("Unknown Option Selected!")
-    print("")
+        base_url=base_url)
 
     try:
         # Step 1: Get OAuth 1 request token and secret
@@ -94,10 +67,10 @@ def main_menu(session, base_url):
 
     :param session: authenticated session
     """
-
     menu_items = {"1": "Market Quotes",
                   "2": "Account List",
-                  "3": "Exit"}
+                  "3": "Option Chain",
+                  "4": "Exit"}
 
     while True:
         print("")
@@ -112,6 +85,10 @@ def main_menu(session, base_url):
             accounts = Accounts(session, base_url)
             accounts.account_list()
         elif selection == "3":
+            symbol = input("Please enter the stock symbol for the option chain: ")
+            market = Market(session, base_url)
+            market.option_chain(symbol)
+        elif selection == "4":
             break
         else:
             print("Unknown Option Selected!")

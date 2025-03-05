@@ -1,16 +1,10 @@
 import json
 import logging
+import xml.etree.ElementTree as ET
 from logging.handlers import RotatingFileHandler
 
 # logger settings
 logger = logging.getLogger('my_logger')
-logger.setLevel(logging.DEBUG)
-handler = RotatingFileHandler("python_client.log", maxBytes=5 * 1024 * 1024, backupCount=3)
-FORMAT = "%(asctime)-15s %(message)s"
-fmt = logging.Formatter(FORMAT, datefmt='%m/%d/%Y %I:%M:%S %p')
-handler.setFormatter(fmt)
-logger.addHandler(handler)
-
 
 class Market:
     def __init__(self, session, base_url):
@@ -23,10 +17,10 @@ class Market:
 
         :param self: Passes authenticated session in parameter
         """
-        symbols = input("\nPlease enter Stock Symbol: ")
+        symbols = input("\nOne or more (comma-separated) symbols for equities or options, up to a maximum of 25. Symbols for equities are simple, for example, GOOG. Symbols for options are more complex, consisting of six elements separated by colons, in this format: underlier:year:month:day:optionType:strikePrice. Please enter Stock Symbol: ")
 
         # URL for the API endpoint
-        url = self.base_url + "/v1/market/quote/" + symbols + ".json"
+        url = self.base_url + "/v1/market/quote/" + symbols
 
         # Make API call for GET request
         response = self.session.get(url)
@@ -34,49 +28,100 @@ class Market:
 
         if response is not None and response.status_code == 200:
 
-            parsed = json.loads(response.text)
-            logger.debug("Response Body: %s", json.dumps(parsed, indent=4, sort_keys=True))
+            logger.debug("Response Body: %s", response.text)
+
+            # Parse XML response
+            root = ET.fromstring(response.text)
 
             # Handle and parse response
-            print("")
-            data = response.json()
-            if data is not None and "QuoteResponse" in data and "QuoteData" in data["QuoteResponse"]:
-                for quote in data["QuoteResponse"]["QuoteData"]:
-                    if quote is not None and "dateTime" in quote:
-                        print("Date Time: " + quote["dateTime"])
-                    if quote is not None and "Product" in quote and "symbol" in quote["Product"]:
-                        print("Symbol: " + quote["Product"]["symbol"])
-                    if quote is not None and "Product" in quote and "securityType" in quote["Product"]:
-                        print("Security Type: " + quote["Product"]["securityType"])
-                    if quote is not None and "All" in quote and "lastTrade" in quote["All"]:
-                        print("Last Price: " + str(quote["All"]["lastTrade"]))
-                    if quote is not None and "All" in quote and "changeClose" in quote["All"] \
-                        and "changeClosePercentage" in quote["All"]:
-                        print("Today's Change: " + str('{:,.3f}'.format(quote["All"]["changeClose"])) + " (" +
-                              str(quote["All"]["changeClosePercentage"]) + "%)")
-                    if quote is not None and "All" in quote and "lastTrade" in quote["All"]:
-                        print("Open: " + str('{:,.2f}'.format(quote["All"]["lastTrade"])))
-                    if quote is not None and "All" in quote and "previousClose" in quote["All"]:
-                        print("Previous Close: " + str('{:,.2f}'.format(quote["All"]["previousClose"])))
-                    if quote is not None and "All" in quote and "bid" in quote["All"] and "bidSize" in quote["All"]:
-                        print("Bid (Size): " + str('{:,.2f}'.format(quote["All"]["bid"])) + "x" + str(
-                            quote["All"]["bidSize"]))
-                    if quote is not None and "All" in quote and "ask" in quote["All"] and "askSize" in quote["All"]:
-                        print("Ask (Size): " + str('{:,.2f}'.format(quote["All"]["ask"])) + "x" + str(
-                            quote["All"]["askSize"]))
-                    if quote is not None and "All" in quote and "low" in quote["All"] and "high" in quote["All"]:
-                        print("Day's Range: " + str(quote["All"]["low"]) + "-" + str(quote["All"]["high"]))
-                    if quote is not None and "All" in quote and "totalVolume" in quote["All"]:
-                        print("Volume: " + str('{:,}'.format(quote["All"]["totalVolume"])))
-            else:
-                # Handle errors
-                if data is not None and 'QuoteResponse' in data and 'Messages' in data["QuoteResponse"] \
-                        and 'Message' in data["QuoteResponse"]["Messages"] \
-                        and data["QuoteResponse"]["Messages"]["Message"] is not None:
-                    for error_message in data["QuoteResponse"]["Messages"]["Message"]:
-                        print("Error: " + error_message["description"])
-                else:
-                    print("Error: Quote API service error")
+            for quote_data in root.findall('QuoteData'):
+                dateTime = quote_data.find('dateTime').text if quote_data.find('dateTime') is not None else "N/A"
+                logger.info("Date Time: " + dateTime)
+                
+                product = quote_data.find('Product')
+                if product is not None:
+                    symbol = product.find('symbol').text if product.find('symbol') is not None else "N/A"
+                    securityType = product.find('securityType').text if product.find('securityType') is not None else "N/A"
+                    logger.info("Symbol: " + symbol)
+                    logger.info("Security Type: " + securityType)
+                
+                all_data = quote_data.find('All')
+                if all_data is not None:
+                    for elem in all_data:
+                        logger.info(f"{elem.tag}: {elem.text}")
+
+                    # Query next Friday option at strike price ATM
+                    from datetime import datetime, timedelta
+
+                    today = datetime.today()
+                    next_friday = today + timedelta((4 - today.weekday()) % 7)
+                    strike_price = round(float(all_data.find('lastTrade').text if all_data.find('lastTrade') is not None else 0))
+                    option_symbol = f"{symbol}:{next_friday.year}:{next_friday.month}:{next_friday.day}:C:{strike_price}"
+
+                    option_url = self.base_url + "/v1/market/quote/" + option_symbol
+                    option_response = self.session.get(option_url)
+                    logger.debug("Option Request Header: %s", option_response.request.headers)
+
+                    if option_response is not None and option_response.status_code == 200:
+                        logger.debug("Option Response Body: %s", option_response.text) 
+                        option_root = ET.fromstring(option_response.text)
+                        option_data = option_root.find('QuoteData')
+                        if option_data is not None:
+                            option_all_data = option_data.find('All')
+                            if option_all_data is not None:
+                                for elem in option_all_data:
+                                    logger.info(f"{elem.tag}: {elem.text}")
+                    else:
+                        logger.error("Error: Option API service error")
+
         else:
             logger.debug("Response Body: %s", response)
-            print("Error: Quote API service error")
+            logger.error("Error: Quote API service error")
+
+    def option_chain(self, symbol):
+        """
+        Calls option chains API to provide option chain details for a given symbol.
+
+        :param symbol: The ticker symbol for which to retrieve the option chain
+        """
+        # URL for the API endpoint
+        url = self.base_url + f"/v1/market/optionchains?symbol={symbol}"
+
+        # Make API call for GET request
+        response = self.session.get(url)
+        logger.debug("Request Header: %s", response.request.headers)
+
+        if response is not None and response.status_code == 200:
+            logger.debug("Response Body: %s", response.text)
+
+            # Parse XML response
+            root = ET.fromstring(response.text)
+
+            # Handle and parse response
+            for option_pair in root.findall('OptionPair'):
+                call_option = option_pair.find('Call')
+                put_option = option_pair.find('Put')
+
+                if call_option is not None:
+                    logger.info("Call Option:")
+                    logger.info(f"  Symbol: {call_option.find('symbol').text}")
+                    logger.info(f"  Strike Price: {call_option.find('strikePrice').text}")
+                    logger.info(f"  Expiration Date: {call_option.find('expirationDate').text}")
+                    logger.info(f"  Bid: {call_option.find('bid').text}")
+                    logger.info(f"  Ask: {call_option.find('ask').text}")
+
+                if put_option is not None:
+                    logger.info("Put Option:")
+                    logger.info(f"  Symbol: {put_option.find('symbol').text}")
+                    logger.info(f"  Strike Price: {put_option.find('strikePrice').text}")
+                    logger.info(f"  Expiration Date: {put_option.find('expirationDate').text}")
+                    logger.info(f"  Bid: {put_option.find('bid').text}")
+                    logger.info(f"  Ask: {put_option.find('ask').text}")
+
+            # Handle errors
+            if root.find('Messages') is not None:
+                for error_message in root.find('Messages').findall('Message'):
+                    logger.error("Error: " + error_message.find('description').text)
+        else:
+            logger.debug("Response Body: %s", response)
+            logger.error("Error: Option Chain API service error")
