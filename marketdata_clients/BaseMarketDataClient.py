@@ -1,7 +1,7 @@
 import logging
 import json
 import time
-import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from abc import ABC, abstractmethod
@@ -47,7 +47,7 @@ class BaseMarketDataClient(IMarketDataClient, ABC):
         date = date if date else datetime.now().date()
         days_checked = 0
         while days_checked < 7:
-            date -= datetime.timedelta(days=1)
+            date -= timedelta(days=1)
             days_checked += 1
             if date.weekday() < 5:  # Monday to Friday are considered market open days
                 return date
