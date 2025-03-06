@@ -25,22 +25,28 @@ class PolygonClient(BaseMarketDataClient):
     def get_previous_close(self, ticker):
         self._wait_for_no_throttle(self.DEFAULT_THROTTLE_LIMIT)
         response = self.client.get_previous_close(ticker)
+        logger.debug(f"get_previous_close response: {response}")
         return Decimal(response['results'][0]['c'])
 
-    def get_grouped_daily_bars(self, date):
+    def get_grouped_daily_bars(self, date=None):
         self._wait_for_no_throttle(self.DEFAULT_THROTTLE_LIMIT)
+        if date is None:
+            date = self.get_previous_market_open_day()
         response = self.client.get_grouped_daily_bars(date=date)
+        logger.debug(f"get_grouped_daily_bars response: {response}")
         self._populate_daily_bars(response['results'])
         return self.stocks_data
 
     def get_snapshot(self, symbol):
         self._wait_for_no_throttle(self.DEFAULT_THROTTLE_LIMIT)
         response = self.client.get_snapshot(symbol)
+        logger.debug(f"get_snapshot response: {response}")
         return response['results']
 
     def get_option_previous_close(self, ticker):
         self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
         response = self.options_client.get_previous_close(ticker)
+        logger.debug(f"get_option_previous_close response: {response}")
         return Decimal(response['results'][0]['c'])
 
     async def _async_get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
@@ -54,18 +60,16 @@ class PolygonClient(BaseMarketDataClient):
             sort='strike_price',
             all_pages=True
         )
+        logger.debug(f"_async_get_option_contracts response: {contracts}")
         return contracts
 
     def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
         self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
         return asyncio.run(self._async_get_option_contracts(underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order))
 
-    def get_option_snapshot(
-        self,
-        underlying_symbol: str,
-        option_symbol: str = None):
+    def get_option_snapshot(self, underlying_symbol: str, option_symbol: str = None):
         self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
-        response =  self.options_client.get_snapshot(
+        response = self.options_client.get_snapshot(
             underlying_symbol=underlying_symbol,
             option_symbol=option_symbol,
             all_pages=False,
@@ -75,6 +79,7 @@ class PolygonClient(BaseMarketDataClient):
             raw_page_responses=False,
             raw_response=False,
         )
+        logger.debug(f"get_option_snapshot response: {response}")
         return response['results']
         
     def _populate_daily_bars(self, grouped_daily_bars):

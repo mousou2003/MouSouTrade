@@ -1,0 +1,37 @@
+{
+    "results": {
+        "day": {
+            "change": 0,
+            "change_percent": 0,
+            "close": 0.01,
+            "high": 0.01,
+            "last_updated": 1740776400000000000,
+            "low": 0.01,
+            "open": 0.01,
+            "previous_close": 0.01,
+            "volume": 586,
+            "vwap": 0.01
+        },
+        "details": {
+            "contract_type": "put",
+            "exercise_style": "american",
+            "expiration_date": "2025-03-07",
+            "shares_per_contract": 100,
+            "strike_price": 150,
+            "ticker": "O:AAPL250307P00150000"
+        },
+        "greeks": {
+            "delta": -0.0013321822335600451,
+            "gamma": 0.00011788177152693597,
+            "theta": -0.06423216000153759,
+            "vega": 0.0008602937923137562
+        },
+        "implied_volatility": 2.6936197115048572,
+        "open_interest": 731,
+        "underlying_asset": {
+            "ticker": "AAPL"
+        }
+    },
+    "status": "OK",
+    "request_id": "e655eb549c060fefd99095b0e8080ac1"
+}
