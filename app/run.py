@@ -38,11 +38,11 @@ handler.setFormatter(ColorFormatter())
 logger.addHandler(handler)
 
 # Set the logging level to WARNING to suppress DEBUG messages
-""" logging.getLogger('botocore').setLevel(logging.WARNING)
+logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
-logging.getLogger('asyncio').setLevel(logging.WARNING) """
-logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
+logging.getLogger('asyncio').setLevel(logging.WARNING)
+logging.getLogger('engine.VerticalSpread').setLevel(logging.INFO)
 logging.getLogger('engine.VerticalSpread').addHandler(handler)
 
 

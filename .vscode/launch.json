@@ -5,17 +5,30 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
+            "name": "Current File with Arguments",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            // "args": ["config\\limited.json"],
+            "args": ["config\\limited.json"],
             "env": {
                 "PYTHONPATH": "${workspaceFolder}",
                 "DYNAMODB_ENDPOINT_URL":"http://localhost:8000",
                 "MOUSOUTRADE_STAGE":"Alpha",
-            //    "DEBUG_MODE":"True"
+                "DEBUG_MODE":"False"
+            },
+            "autoReload": { "enable": true }
+        },
+        {
+            "name": "Unit Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "MOUSOUTRADE_STAGE": "Alpha",
+                "DEBUG_MODE":"True"
             },
             "autoReload": { "enable": true }
         }
