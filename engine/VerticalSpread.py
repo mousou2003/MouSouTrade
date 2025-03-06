@@ -68,13 +68,14 @@ class VerticalSpread(SpreadDataModel):
             for second_leg in second_leg_candidates:
                 self.second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = second_leg
 
-                premium_delta = self.first_leg_snapshot.day.close - self.second_leg_snapshot.day.close
-                if premium_delta == 0:
-                    raise ValueError("Second leg candidate due to zero premium delta indicate an error in the selection.")
-                
                 self.distance_between_strikes = abs(self.first_leg_contract.strike_price - self.second_leg_contract.strike_price)
                 if self.distance_between_strikes == 0:
                     raise ValueError("Zero distance between strikes is not allowed.")
+                
+                premium_delta = self.first_leg_snapshot.day.close - self.second_leg_snapshot.day.close
+                if premium_delta == 0:
+                    logger.warning("Second leg candidate due to zero premium delta indicate a potential error in the selection.")
+                    continue
 
                 relative_delta = abs(premium_delta / self.distance_between_strikes)
                 if relative_delta == Decimal(0) or relative_delta < self.MIN_DELTA:
