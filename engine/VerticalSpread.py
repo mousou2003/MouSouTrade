@@ -1,11 +1,9 @@
 from engine.data_model import *
-from engine.Options import Options, TradeStrategy  # Import TradeStrategy
+from engine.Options import Options, TradeStrategy
 import logging
 from datetime import datetime, timedelta
 from typing import ClassVar, Optional, List, Tuple
-from decimal import Decimal, InvalidOperation, Inexact, getcontext
-
-from marketdata_clients.BaseMarketDataClient import IMarketDataClient, MarketDataException
+from decimal import Decimal, getcontext
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +14,6 @@ class VerticalSpread(SpreadDataModel):
     SHORT_PREMIUM_MULTIPLIER: ClassVar[Decimal] = Decimal(0.95)  # Multiplier for short premium
     LONG_PREMIUM_MULTIPLIER: ClassVar[Decimal] = Decimal(1.05)  # Multiplier for long premium
 
-    market_data_client: IMarketDataClient = None
     contracts: List[Contract] = []
 
     def match_option(self, options_snapshots, underlying_ticker, 

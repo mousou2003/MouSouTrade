@@ -17,11 +17,11 @@ from engine.Options import *
 from engine.Stocks import Stocks
 from engine.data_model import *
 from database.DynamoDB import DynamoDB
-from config.ConfigLoader import ClientKeys, ConfigLoader
+from config.ConfigLoader import ConfigLoader
 
 logger = logging.getLogger(__name__)
 debug_mode = os.getenv("DEBUG_MODE")
-if debug_mode and debug_mode.lower() == "true":
+if (debug_mode and debug_mode.lower() == "true"):
     loglevel = logging.DEBUG
 else:
     loglevel = logging.WARNING

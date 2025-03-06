@@ -7,7 +7,7 @@ from scipy.stats import norm
 from decimal import Decimal, Inexact, InvalidOperation
 from enum import Enum  # Import Enum
 from datetime import datetime, timedelta
-from marketdata_clients.BaseMarketDataClient import MarketDataException, IMarketDataClient
+from marketdata_clients.BaseMarketDataClient import MarketDataException
 from engine.data_model import *
 import operator
 
