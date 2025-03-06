@@ -76,16 +76,6 @@ class PolygonClient(BaseMarketDataClient):
             raw_response=False,
         )
         return response['results']
-
-    def get_previous_market_open_day(self, date=None):
-        date = date if date else datetime.now().date()
-        days_checked = 0
-        while days_checked < 7:
-            date -= timedelta(days=1)
-            days_checked += 1
-            if date.weekday() < 5:  # Monday to Friday are considered market open days
-                return date
-        raise IndexError("Failed to find a previous market open day within the last 7 days")
         
     def _populate_daily_bars(self, grouped_daily_bars):
         for bar in grouped_daily_bars:

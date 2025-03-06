@@ -10,7 +10,7 @@ class Stocks:
         self.market_data_client = market_data_client
         self.date = date if date else self.market_data_client.get_previous_market_open_day(date)
         self.stocks_data = {}
-        # explore the past 7 days to find the most recent data
+        # explore the past 7 days to find the latest data (latest day market was open)
         for _ in range(6):
             self.stocks_data = self.market_data_client.get_grouped_daily_bars(self.date)
             if self.stocks_data != {}:

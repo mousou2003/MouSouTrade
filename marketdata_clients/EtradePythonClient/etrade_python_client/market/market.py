@@ -85,8 +85,8 @@ class Market:
         :param symbol: The ticker symbol for which to retrieve the option chain
         """
         # URL for the API endpoint
-        url = self.base_url + f"/v1/market/optionchains?symbol={symbol}"
-
+        url = self.base_url + f"/v1/market/optionchains/{symbol}"
+        logger.debug(url)
         # Make API call for GET request
         response = self.session.get(url)
         logger.debug("Request Header: %s", response.request.headers)

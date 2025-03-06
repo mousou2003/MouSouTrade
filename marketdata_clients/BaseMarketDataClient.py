@@ -42,7 +42,17 @@ class BaseMarketDataClient(IMarketDataClient, ABC):
     client_name: str = None
     _my_key: str = None
     _my_secret: str = None
-
+    
+    def get_previous_market_open_day(self, date=None):
+        date = date if date else datetime.now().date()
+        days_checked = 0
+        while days_checked < 7:
+            date -= datetime.timedelta(days=1)
+            days_checked += 1
+            if date.weekday() < 5:  # Monday to Friday are considered market open days
+                return date
+        raise IndexError("Failed to find a previous market open day within the last 7 days")
+    
     def _load_key_secret(self, json_content, stage):
         clients = json_content
         logger.debug("load secrets")
