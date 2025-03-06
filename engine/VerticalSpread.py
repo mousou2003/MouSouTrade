@@ -33,7 +33,7 @@ class VerticalSpread(SpreadDataModel):
             self.contracts, options_snapshots, self.underlying_ticker, 
             TradeStrategy.DIRECTIONAL)
         if not first_leg_candidates:
-            logger.info("No suitable first leg contract found.")
+            logger.debug("No suitable first leg contract found.")
             return False
         logger.debug(f"Number of first leg candidates: {len(first_leg_candidates)}")
 
@@ -41,7 +41,7 @@ class VerticalSpread(SpreadDataModel):
             self.contracts, options_snapshots, self.underlying_ticker, 
             TradeStrategy.HIGH_PROBABILITY)
         if not second_leg_candidates:
-            logger.info("No suitable second leg contract found.")
+            logger.debug("No suitable second leg contract found.")
             return False
         logger.debug(f"Number of second leg candidates: {len(second_leg_candidates)}")
         
@@ -121,7 +121,7 @@ class VerticalSpread(SpreadDataModel):
 
         if best_spread:
             self.from_dict(best_spread)
-            logger.info(f'Found a match! {self.second_leg_contract.ticker} with delta {self.second_leg_snapshot.greeks.delta}')
+            logger.debug(f'Found a match! {self.second_leg_contract.ticker} with delta {self.second_leg_snapshot.greeks.delta}')
             return True
 
         return False
