@@ -221,54 +221,29 @@ class Options:
 
     @staticmethod
     def select_contract(
-        contracts: List[Contract],  
-        market_data_client: IMarketDataClient, 
-        underlying_ticker: str,
-        trade_strategy: TradeStrategy
+        contracts,  
+        options_snapshots, 
+        underlying_ticker,
+        trade_strategy
     ) -> List[Tuple[Contract, int, Snapshot]]:
-        """
-        Selects the contracts for the first leg of a vertical spread based on the strategy, direction, and delta value.
-
-        underlying_ticker : str : The ticker symbol of the underlying asset
-        trade_strategy : TradeStrategy : The trading strategy (HIGH_PROBABILITY, BALANCED, or DIRECTIONAL)
-        contracts : list : List of option contracts
-        strategy : StrategyType : The trading strategy (CREDIT or DEBIT)
-        direction : DirectionType : The market direction (BULLISH or BEARISH)
-        market_data_client : IMarketDataClient : The market data client
-        underlying_ticker : str : The ticker symbol of the underlying asset
-
-        Returns:
-        list : A list of tuples containing the selected contract, its position in the list, and the snapshot
-        """
-        snapshots = {}
-        for contract in contracts:
-            try:
-                snapshot = Snapshot.from_dict(
-                    market_data_client.get_option_snapshot(underlying_ticker=underlying_ticker, option_symbol=contract.ticker)
-                )
-                snapshots[contract.ticker] = snapshot
-            except (MarketDataException, KeyError, TypeError) as e:
-                logger.warning(f"Error fetching snapshot for contract {contract.ticker}: {type(e).__name__} - {e}")
-                continue
-
         matching_contracts = []
         for position, contract in enumerate(contracts):
-            snapshot = snapshots.get(contract.ticker)
-            if not snapshot:
+            options_snapshot = options_snapshots.get(contract.ticker)
+            if not options_snapshot:
                 continue
             try:
-                if not snapshot.day.timestamp:
+                if not options_snapshot.day.timestamp:
                     logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
-                if not all([snapshot.day.close, snapshot.implied_volatility, snapshot.greeks.delta]):
+                if not all([options_snapshot.day.close, options_snapshot.implied_volatility, options_snapshot.greeks.delta]):
                     logger.debug(f"Missing key data for {contract.ticker}. Skipping.")
                     continue
-                strike_price_type = Options.identify_strike_price_type(snapshot.greeks.delta, trade_strategy)
+                strike_price_type = Options.identify_strike_price_type(options_snapshot.greeks.delta, trade_strategy)
                 if (((trade_strategy == TradeStrategy.DIRECTIONAL) 
                      and (strike_price_type == StrikePriceType.ATM))
                      or (trade_strategy == TradeStrategy.HIGH_PROBABILITY
                      and (strike_price_type == StrikePriceType.OTM))): 
-                    logger.info(f"Selected contract {contract.ticker} with delta {snapshot.greeks.delta} and strike price type {strike_price_type.value}.")
-                    matching_contracts.append((contract, position, snapshot))
+                    logger.info(f"Selected contract {contract.ticker} with delta {options_snapshot.greeks.delta} and strike price type {strike_price_type.value}.")
+                    matching_contracts.append((contract, position, options_snapshot))
             except (MarketDataException, KeyError, TypeError) as e:
                 logger.warning(f"Error processing contract {contract.ticker}: {type(e).__name__} - {e}")
                 continue

@@ -70,6 +70,19 @@ def load_configuration_file(config_file):
         logger.error(f"Configuration file not found: {config_file}")
         raise
 
+def build_options_snapshots(market_data_client, contracts, underlying_ticker):
+    options_snapshots = {}
+    for contract in contracts:
+        try:
+            options_snapshot = Snapshot.from_dict(
+                market_data_client.get_option_snapshot(underlying_ticker=underlying_ticker, option_symbol=contract.ticker)
+            )
+            options_snapshots[contract.ticker] = options_snapshot
+        except (MarketDataException, KeyError, TypeError) as e:
+            logger.warning(f"Error fetching options_snapshot for contract {contract.ticker}: {type(e).__name__} - {e}")
+            continue
+    return options_snapshots
+
 def process_stock(market_data_client, stock, stock_number, number_of_stocks, dynamodb, stage):
     ticker = stock['Ticker']
     if not ticker:
@@ -80,11 +93,6 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
 
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
-            spread_class = DebitSpread if strategy == StrategyType.DEBIT else CreditSpread
-            spread = spread_class()
-
-            logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {ticker} for target date {target_expiration_date}")
-            
             contracts = market_data_client.get_option_contracts(
                 underlying_ticker=ticker,
                 expiration_date_gte=target_expiration_date,
@@ -92,11 +100,14 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
                 contract_type=Options.get_contract_type(strategy, direction),
                 order=Options.get_order(strategy=strategy, direction=direction)
             )
-            if contracts == []:
-                logger.info(f"No contracts found for {ticker} on {target_expiration_date}")
-                continue
+            options_snapshots = build_options_snapshots(market_data_client, contracts, ticker)
 
-            matched = spread.match_option(market_data_client=market_data_client, underlying_ticker=ticker, 
+            spread_class = DebitSpread if strategy == StrategyType.DEBIT else CreditSpread
+            spread = spread_class()
+
+            logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {ticker} for target date {target_expiration_date}")
+
+            matched = spread.match_option(options_snapshots=options_snapshots, underlying_ticker=ticker, 
                                           direction=direction, strategy=strategy, previous_close=stock['close'], 
                                           date=target_expiration_date, contracts=contracts)
             key = {
@@ -149,9 +160,9 @@ def main():
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
         config_loader = ConfigLoader('./config/SecurityKeys.json')
-        market_data_client=MarketDataClient(client_name=POLYGON_CLIENT_NAME, 
-                                                    json_content=config_loader.config, 
-                                                    stage=stage)
+        market_data_client = MarketDataClient(client_name=POLYGON_CLIENT_NAME, 
+                                              json_content=config_loader.config, 
+                                              stage=stage)
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 
         for stock_number, stock in enumerate(stocks, start=1):
