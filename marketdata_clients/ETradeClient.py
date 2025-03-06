@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 ETRADE_CLIENT_NAME: str = "etrade"
 
 class ETradeClient(BaseMarketDataClient):
-    DEFAULT_THROTTLE_LIMIT = 12
+    DEFAULT_THROTTLE_LIMIT = 0
     OPTION_THROTTLE_LIMIT = 0
     stocks_data = {}
 
@@ -78,7 +78,14 @@ class ETradeClient(BaseMarketDataClient):
         response = self.session.get(option_url)
         root = ET.fromstring(response.text)
         return self._parse_option_snapshot(root.find('.//QuoteData'))
-        
+
+    def get_option_previous_close(self, option_symbol: str):
+        self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
+        option_url = f"{self.etrade.base_url}/v1/market/quote/{option_symbol}"
+        response = self.session.get(option_url)
+        root = ET.fromstring(response.text)
+        return Decimal(root.find('.//previousClose').text)
+
     def _populate_daily_bars(self, grouped_daily_bars):
         for bar in grouped_daily_bars:
             ticker = bar.find('.//symbol').text

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<QuoteResponse>
+    <QuoteData>
+        <dateTime>07:36:18 EST 03-06-2025</dateTime>
+        <dateTimeUTC>1741264578</dateTimeUTC>
+        <quoteStatus>CLOSING</quoteStatus>
+        <ahFlag>true</ahFlag>
+        <hasMiniOptions>false</hasMiniOptions>
+        <All>
+            <adjustedFlag>false</adjustedFlag>
+            <ask>77.27</ask>
+            <askSize>1800</askSize>
+            <askTime>07:36:18 EST 03-06-2025</askTime>
+            <bid>77.03</bid>
+            <bidExchange></bidExchange>
+            <bidSize>10000</bidSize>
+            <bidTime>07:36:18 EST 03-06-2025</bidTime>
+            <changeClose>0.0</changeClose>
+            <changeClosePercentage>0.0</changeClosePercentage>
+            <companyName>NIKE INC CL B</companyName>
+            <daysToExpiration>0</daysToExpiration>
+            <dirLast>1</dirLast>
+            <dividend>0.4</dividend>
+            <eps>3.24</eps>
+            <estEarnings>2.085</estEarnings>
+            <exDividendDate>1741005608</exDividendDate>
+            <high>0.0</high>
+            <high52>102.49</high52>
+            <lastTrade>77.81</lastTrade>
+            <low>0.0</low>
+            <low52>68.62</low52>
+            <open>0.0</open>
+            <openInterest>0</openInterest>
+            <optionStyle></optionStyle>
+            <optionUnderlier></optionUnderlier>
+            <previousClose>77.81</previousClose>
+            <previousDayVolume>10032579</previousDayVolume>
+            <primaryExchange>NYSE</primaryExchange>
+            <symbolDescription>NIKE INC CL B</symbolDescription>
+            <totalVolume>18018</totalVolume>
+            <upc>0</upc>
+            <cashDeliverable>0</cashDeliverable>
+            <marketCap>115090794060.00</marketCap>
+            <sharesOutstanding>1479126000</sharesOutstanding>
+            <nextEarningDate></nextEarningDate>
+            <beta>0.12</beta>
+            <yield>2.0563</yield>
+            <declaredDividend>0.4</declaredDividend>
+            <dividendPayableDate>1743507608</dividendPayableDate>
+            <pe>24.036</pe>
+            <week52LowDate>1738932008</week52LowDate>
+            <week52HiDate>1710416408</week52HiDate>
+            <intrinsicValue>0.0</intrinsicValue>
+            <timePremium>0.0</timePremium>
+            <optionMultiplier>0.0</optionMultiplier>
+            <contractSize>0.0</contractSize>
+            <expirationDate>0</expirationDate>
+            <ExtendedHourQuoteDetail>
+                <ask>77.27</ask>
+                <askSize>1800</askSize>
+                <bid>77.03</bid>
+                <bidSize>10000</bidSize>
+                <change>-0.61</change>
+                <lastPrice>77.2</lastPrice>
+                <percentChange>-0.78</percentChange>
+                <quoteStatus>EH_REALTIME</quoteStatus>
+                <timeOfLastTrade>1741264578</timeOfLastTrade>
+                <timeZone>EST</timeZone>
+                <volume>18018</volume>
+            </ExtendedHourQuoteDetail>
+            <timeOfLastTrade>1741208400</timeOfLastTrade>
+            <averageVolume>13387800</averageVolume>
+        </All>
+        <Product>
+            <securityType>EQ</securityType>
+            <symbol>NKE</symbol>
+        </Product>
+    </QuoteData>
+</QuoteResponse>

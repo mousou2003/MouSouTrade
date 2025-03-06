@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<QuoteResponse>
+    <QuoteData>
+        <dateTime>09:00:01 EST 03-06-2025</dateTime>
+        <dateTimeUTC>1741269601</dateTimeUTC>
+        <quoteStatus>CLOSING</quoteStatus>
+        <ahFlag>true</ahFlag>
+        <All>
+            <adjustedFlag>false</adjustedFlag>
+            <ask>0.0</ask>
+            <askSize>0</askSize>
+            <askTime>09:00:01 EST 03-06-2025</askTime>
+            <bid>0.0</bid>
+            <bidExchange></bidExchange>
+            <bidSize>0</bidSize>
+            <bidTime>09:00:01 EST 03-06-2025</bidTime>
+            <changeClose>0.0</changeClose>
+            <changeClosePercentage>0.0</changeClosePercentage>
+            <companyName>NIKE INC CL B</companyName>
+            <daysToExpiration>2</daysToExpiration>
+            <dirLast></dirLast>
+            <dividend>0.0</dividend>
+            <eps>0.0</eps>
+            <estEarnings>0.0</estEarnings>
+            <exDividendDate>0</exDividendDate>
+            <high>0.99</high>
+            <high52>8.61</high52>
+            <lastTrade>0.99</lastTrade>
+            <low>0.99</low>
+            <low52>0.33</low52>
+            <open>0.0</open>
+            <openInterest>1635</openInterest>
+            <optionStyle>AMERICAN</optionStyle>
+            <optionUnderlier>NKE</optionUnderlier>
+            <optionUnderlierExchange>NYSE</optionUnderlierExchange>
+            <previousClose>0.99</previousClose>
+            <previousDayVolume>0</previousDayVolume>
+            <primaryExchange>CINC</primaryExchange>
+            <symbolDescription>NKE Mar 07 '25 $78 Put</symbolDescription>
+            <totalVolume>0</totalVolume>
+            <upc>0</upc>
+            <cashDeliverable>0</cashDeliverable>
+            <marketCap>0.00</marketCap>
+            <sharesOutstanding>0</sharesOutstanding>
+            <nextEarningDate></nextEarningDate>
+            <beta>0.0</beta>
+            <yield>0.0</yield>
+            <declaredDividend>0.0</declaredDividend>
+            <dividendPayableDate>0</dividendPayableDate>
+            <pe>0.0</pe>
+            <week52LowDate>0</week52LowDate>
+            <week52HiDate>0</week52HiDate>
+            <intrinsicValue>0.19</intrinsicValue>
+            <timePremium>0.0</timePremium>
+            <optionMultiplier>100.0</optionMultiplier>
+            <contractSize>100.0</contractSize>
+            <expirationDate>1741356431</expirationDate>
+            <optionPreviousBidPrice>0.91</optionPreviousBidPrice>
+            <optionPreviousAskPrice>0.98</optionPreviousAskPrice>
+            <osiKey>NKE---250307P00078000</osiKey>
+            <timeOfLastTrade>1741269601</timeOfLastTrade>
+            <averageVolume>1382</averageVolume>
+        </All>
+        <Product>
+            <callPut>PUT</callPut>
+            <expiryDay>7</expiryDay>
+            <expiryMonth>3</expiryMonth>
+            <expiryYear>2025</expiryYear>
+            <securityType>OPTN</securityType>
+            <strikePrice>78.00</strikePrice>
+            <symbol>NKE</symbol>
+        </Product>
+    </QuoteData>
+</QuoteResponse>
