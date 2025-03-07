@@ -19,19 +19,22 @@ class MarketDataClient(BaseMarketDataClient):
     def __init__(self, config_file: str, stage: str = "Sandbox", client_name: str = None):
         super().__init__(config_file, stage)
         logger.debug("create MarketDataClient")
-        self.client_name = client_name
-        self.etrade_client = ETradeClient(config_file, stage=stage)
-        self.polygon_client = PolygonClient(config_file, stage=stage)
-        if self.client_name == POLYGON_CLIENT_NAME:
+        if client_name is None:
+            self.client_name = f'{POLYGON_CLIENT_NAME};{ETRADE_CLIENT_NAME}'
+        else:
+            self.client_name = client_name
+        if POLYGON_CLIENT_NAME in self.client_name:
+            self.polygon_client = PolygonClient(config_file, stage=stage)
             self.client = self.polygon_client
-        elif self.client_name == ETRADE_CLIENT_NAME:
+        if ETRADE_CLIENT_NAME in self.client_name:
+            self.etrade_client = ETradeClient(config_file, stage=stage)
             self.client = self.etrade_client
 
     def get_previous_close(self, ticker):
         try:
             client = self.client
-            if self.client_name is None:
-                client = self.etrade_client  
+            if  client is None:
+                client = self.etrade_client
             return self._exponential_backoff(client.get_previous_close, ticker)
         except Exception as err:
             raise MarketDataException(f"Failed to get previous close for {ticker}", err)
@@ -39,8 +42,8 @@ class MarketDataClient(BaseMarketDataClient):
     def get_grouped_daily_bars(self, date):
         try:
             client = self.client
-            if self.client_name is None:
-                client = self.polygon_client  
+            if client is None:
+                client = self.polygon_client
             return self._exponential_backoff(client.get_grouped_daily_bars, date=date)
         except Exception as err:
             raise MarketDataException(f"Failed to get grouped daily bars for {date}", err)
@@ -48,7 +51,7 @@ class MarketDataClient(BaseMarketDataClient):
     def get_snapshot(self, symbol):
         try:
             client = self.client
-            if self.client_name is None:
+            if client is None:
                 client = self.etrade_client  
             return self._exponential_backoff(client.get_snapshot, symbol)
         except Exception as err:
@@ -57,7 +60,7 @@ class MarketDataClient(BaseMarketDataClient):
     def get_option_previous_close(self, ticker):
         try:
             client = self.client
-            if self.client_name is None:
+            if client is None:
                 client = self.etrade_client  
             return self._exponential_backoff(client.get_option_previous_close, ticker)
         except Exception as err:
@@ -66,7 +69,7 @@ class MarketDataClient(BaseMarketDataClient):
     def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
         try:
             client = self.client
-            if self.client_name is None:
+            if client is None:
                 client = self.polygon_client  
             contracts = self._exponential_backoff(client.get_option_contracts,
                 underlying_ticker=underlying_ticker,
@@ -82,15 +85,13 @@ class MarketDataClient(BaseMarketDataClient):
     def get_option_snapshot(self, underlying_ticker, option_symbol=None) -> Snapshot:
         try:
             client = self.client
-            if self.client_name is None:
+            if client is None:
                 client = self.etrade_client  
             snapshot_data_etrade = self._exponential_backoff(client.get_option_snapshot,
                 underlying_symbol=underlying_ticker,
                 option_symbol=option_symbol
             )
-            if self.client_name is None:
-                client = self.polygon_client  
-            snapshot_data_polygon = self._exponential_backoff(client.get_option_snapshot,
+            snapshot_data_polygon = self._exponential_backoff(self.polygon_client.get_option_snapshot,
                 underlying_symbol=underlying_ticker,
                 option_symbol=option_symbol
             )

@@ -42,18 +42,18 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-# logging.getLogger('engine.VerticalSpread').setLevel(logging.INFO)
+logging.getLogger('engine.VerticalSpread').setLevel(logging.INFO)
 # logging.getLogger('engine.VerticalSpread').addHandler(handler)
-# logging.getLogger('engine.Options').setLevel(logging.INFO)
+logging.getLogger('engine.Options').setLevel(logging.DEBUG)
 # logging.getLogger('engine.Options').addHandler(handler)
 # logging.getLogger('engine.Stocks').setLevel(logging.INFO)
 # logging.getLogger('engine.Stocks').addHandler(handler)
-# logging.getLogger('marketdata_clients.MarketDataClient').setLevel(logging.INFO)
+logging.getLogger('marketdata_clients.MarketDataClient').setLevel(logging.INFO)
 # logging.getLogger('marketdata_clients.MarketDataClient').addHandler(handler)
 # logging.getLogger('marketdata_clients.PolygonClient').setLevel(logging.INFO)
 # logging.getLogger('marketdata_clients.PolygonClient').addHandler(handler)
 logging.getLogger('marketdata_clients.ETradeClient').setLevel(logging.INFO)
-logging.getLogger('marketdata_clients.ETradeClient').addHandler(handler)
+# logging.getLogger('marketdata_clients.ETradeClient').addHandler(handler)
 
 
 class MissingEnvironmentVariableException(Exception):
@@ -80,7 +80,7 @@ def load_configuration_file(config_file):
         logger.error(f"Configuration file not found: {config_file}")
         raise
 
-def build_options_snapshots(market_data_client, contracts, underlying_ticker):
+def build_options_snapshots(market_data_client: IMarketDataClient, contracts: list[Contract], underlying_ticker:str) -> dict:
     options_snapshots = {}
     for contract in contracts:
         try:
@@ -168,7 +168,7 @@ def main():
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
         
-        market_data_client = MarketDataClient(config_file='./config/SecurityKeys.json', stage=stage)
+        market_data_client = MarketDataClient(config_file='./config/SecurityKeys.json', stage=stage, client_name=POLYGON_CLIENT_NAME)
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 
         for stock_number, stock in enumerate(stocks, start=1):

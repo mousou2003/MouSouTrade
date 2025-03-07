@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import logging
 import asyncio
+from xml.dom.minidom import Element
 from rauth import OAuth1Service
 from marketdata_clients.BaseMarketDataClient import BaseMarketDataClient
 import re
@@ -62,7 +63,7 @@ class ETradeClient(BaseMarketDataClient):
         except Exception as e:
             logger.warning(f"Failed to read input: {e}")
         while not self.verification_code:
-            self.reload_config()
+            self.config_loader.reload_config()
             self.verification_code = self.config.get("ETRADE_CODE")
             time.sleep(self.WAIT_TIME)
 
@@ -73,7 +74,13 @@ class ETradeClient(BaseMarketDataClient):
         self._wait_for_no_throttle(self.DEFAULT_THROTTLE_LIMIT)
         url = f"{self.etrade.base_url}/v1/market/quote/{date}"
         response = self.session.get(url)
+        if not response.text.strip():
+            logger.error("Empty or whitespace-only response for grouped daily bars")
+            raise ValueError("Empty or whitespace-only response")
         root = ET.fromstring(response.text)
+        if root is None or not root.findall('.//QuoteData'):
+            logger.error("Empty or invalid XML response for grouped daily bars")
+            raise ValueError("Empty or invalid XML response")
         self._populate_daily_bars(root.findall('.//QuoteData'))
         return self.stocks_data
 
@@ -81,7 +88,13 @@ class ETradeClient(BaseMarketDataClient):
         self._wait_for_no_throttle(self.DEFAULT_THROTTLE_LIMIT)
         url = f"{self.etrade.base_url}/v1/market/quote/{symbol}"
         response = self.session.get(url)
+        if not response.text.strip():
+            logger.error("Empty or whitespace-only response for snapshot")
+            raise ValueError("Empty or whitespace-only response")
         root = ET.fromstring(response.text)
+        if root is None or root.find('.//QuoteData') is None or not root.find('.//QuoteData').text.strip():
+            logger.error("Empty or invalid XML response for snapshot")
+            raise ValueError("Empty or invalid XML response")
         return self._parse_snapshot(root.find('.//QuoteData'))
 
     def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
@@ -98,7 +111,13 @@ class ETradeClient(BaseMarketDataClient):
         option_symbol = f"{underlying_symbol}:20{year}:{month}:{day}:{option_type}:{strike_price}"
         option_url = f"{self.etrade.base_url}/v1/market/quote/{option_symbol}"
         response = self.session.get(option_url)
-        root = ET.fromstring(response.text)
+        if not response.text.strip():
+            logger.error("Empty or whitespace-only response for option snapshot")
+            raise ValueError("Empty or whitespace-only response")
+        root: Element = ET.fromstring(response.text)
+        if root is None or root.find('.//QuoteData') is None :
+            logger.error("Empty or invalid XML response for option snapshot")
+            raise ValueError("Empty or invalid XML response")
         return self._parse_option_snapshot(root.find('.//QuoteData'))
 
     def get_option_previous_close(self, option_symbol: str):
@@ -137,7 +156,7 @@ class ETradeClient(BaseMarketDataClient):
         }
         return snapshot
 
-    def _parse_option_snapshot(self, quote_data):
+    def _parse_option_snapshot(self, quote_data: Element):
         option_snapshot = {
             "symbol": quote_data.find('.//symbol').text,
             "lastTrade": Decimal(quote_data.find('.//lastTrade').text),

@@ -35,6 +35,7 @@ class StrikePriceType(Enum):
 class DataModelBase(BaseModel):
     EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client']
     DATE_FORMAT: ClassVar[str] = '%Y-%m-%d'
+    confidence_level: Optional[float] = 1.0
 
     def __init__(self, **data: Any):
         converted_data = {

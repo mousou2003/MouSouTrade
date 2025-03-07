@@ -42,8 +42,7 @@ class TestETradeClient(unittest.TestCase):
         if missing_env_vars:
             raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_env_vars)}")
 
-        config_loader = ConfigLoader('./config/SecurityKeys.json')
-        self.client = ETradeClient(config_loader.config, env_vars['MOUSOUTRADE_STAGE'])
+        self.client = ETradeClient('./config/SecurityKeys.json', env_vars['MOUSOUTRADE_STAGE'])
 
     def load_response(self, filename):
         with open(os.path.join(os.path.dirname(__file__), 'data', filename), 'r') as file:

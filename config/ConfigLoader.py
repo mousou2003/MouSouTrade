@@ -11,6 +11,7 @@ class ClientKeys(Enum):
 class ConfigLoader:
     def __init__(self, json_file: str):
         self.config = self._load_config(json_file)
+        self.json_file = json_file
 
     def _load_config(self, json_file: str) -> dict:
         try:
@@ -25,6 +26,9 @@ class ConfigLoader:
         except FileNotFoundError as e:
             logger.error(f"Configuration file not found: {json_file}")
             raise
+
+    def reload_config(self):
+        self.config = self._load_config(self.json_file)
 
     def get_client_keys(self, client_name: ClientKeys, stage: str) -> dict:
         try:
