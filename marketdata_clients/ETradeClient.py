@@ -6,6 +6,9 @@ from rauth import OAuth1Service
 from marketdata_clients.BaseMarketDataClient import BaseMarketDataClient
 import re
 import xml.etree.ElementTree as ET
+import os
+import time
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -14,14 +17,16 @@ ETRADE_CLIENT_NAME: str = "etrade"
 class ETradeClient(BaseMarketDataClient):
     DEFAULT_THROTTLE_LIMIT = 0
     OPTION_THROTTLE_LIMIT = 0
+    WAIT_TIME = 20
     stocks_data = {}
 
-    def __init__(self, json_content: dict, stage: str, throttle_limit=DEFAULT_THROTTLE_LIMIT):
+    def __init__(self, config_file: str, stage: str, throttle_limit=DEFAULT_THROTTLE_LIMIT):
+        super().__init__(config_file, stage)
         self.client_name = ETRADE_CLIENT_NAME
-        self._load_key_secret(json_content, stage)
+        self._load_key_secret(self.config, stage)
         self.THROTTLE_LIMIT = throttle_limit
         # Initialize ETrade API client here
-        base_url = json_content["Clients"][self.client_name][stage]["BaseUrl"]
+        base_url = self.config["Clients"][self.client_name][stage]["BaseUrl"]
         self.etrade = OAuth1Service(
             name="etrade",
             consumer_key=self._my_key,
@@ -35,14 +40,31 @@ class ETradeClient(BaseMarketDataClient):
             params={"oauth_callback": "oob", "format": "json"}
         )
         authorize_url = self.etrade.authorize_url.format(self.etrade.consumer_key, request_token)
+        self.authorization_url = authorize_url
+        
+        # Start a separate thread to wait for the verification code
         print(f"Please go to the following URL and authorize the application: {authorize_url}")
-        text_code = input("Please enter the verification code: ")
+        self.verification_code = None
+        verification_thread = threading.Thread(target=self._wait_for_verification_code)
+        verification_thread.start()
+        verification_thread.join()
+        
         self.session = self.etrade.get_auth_session(
             request_token,
             request_token_secret,
-            params={"oauth_verifier": text_code}
+            params={"oauth_verifier": self.verification_code}
         )
         logger.debug("ETradeClient created")
+
+    def _wait_for_verification_code(self):
+        try:
+            self.verification_code = input("Please enter the verification code: ")
+        except Exception as e:
+            logger.warning(f"Failed to read input: {e}")
+        while not self.verification_code:
+            self.reload_config()
+            self.verification_code = self.config.get("ETRADE_CODE")
+            time.sleep(self.WAIT_TIME)
 
     def get_previous_close(self, ticker):
         return self.get_snapshot(ticker)["close"]

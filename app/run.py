@@ -42,8 +42,18 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-logging.getLogger('engine.VerticalSpread').setLevel(logging.INFO)
-logging.getLogger('engine.VerticalSpread').addHandler(handler)
+# logging.getLogger('engine.VerticalSpread').setLevel(logging.INFO)
+# logging.getLogger('engine.VerticalSpread').addHandler(handler)
+# logging.getLogger('engine.Options').setLevel(logging.INFO)
+# logging.getLogger('engine.Options').addHandler(handler)
+# logging.getLogger('engine.Stocks').setLevel(logging.INFO)
+# logging.getLogger('engine.Stocks').addHandler(handler)
+# logging.getLogger('marketdata_clients.MarketDataClient').setLevel(logging.INFO)
+# logging.getLogger('marketdata_clients.MarketDataClient').addHandler(handler)
+# logging.getLogger('marketdata_clients.PolygonClient').setLevel(logging.INFO)
+# logging.getLogger('marketdata_clients.PolygonClient').addHandler(handler)
+logging.getLogger('marketdata_clients.ETradeClient').setLevel(logging.INFO)
+logging.getLogger('marketdata_clients.ETradeClient').addHandler(handler)
 
 
 class MissingEnvironmentVariableException(Exception):
@@ -157,9 +167,8 @@ def main():
         dynamodb = DynamoDB(stage)
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
-        config_loader = ConfigLoader('./config/SecurityKeys.json')
-        market_data_client = MarketDataClient(json_content=config_loader.config, 
-                                              stage=stage)
+        
+        market_data_client = MarketDataClient(config_file='./config/SecurityKeys.json', stage=stage)
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 
         for stock_number, stock in enumerate(stocks, start=1):

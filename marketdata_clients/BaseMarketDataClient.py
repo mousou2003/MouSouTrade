@@ -3,8 +3,8 @@ import json
 import time
 from datetime import datetime, timedelta
 from decimal import Decimal
-
 from abc import ABC, abstractmethod
+from config.ConfigLoader import ConfigLoader
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,15 @@ class BaseMarketDataClient(IMarketDataClient, ABC):
     _my_key: str = None
     _my_secret: str = None
     
+    def __init__(self, config_file: str, stage: str):
+        self.config_loader = ConfigLoader(config_file)
+        self.stage = stage
+        self.config = self.config_loader.config
+
+    def reload_config(self):
+        self.config_loader.reload_config()
+        self.config = self.config_loader.config
+    
     def get_previous_market_open_day(self, date=None):
         date = date if date else datetime.now().date()
         days_checked = 0
@@ -53,11 +62,11 @@ class BaseMarketDataClient(IMarketDataClient, ABC):
                 return date
         raise IndexError("Failed to find a previous market open day within the last 7 days")
     
-    def _load_key_secret(self, json_content, stage):
-        clients = json_content
+    def _load_key_secret(self, config, stage):
+        clients = config["Clients"]
         logger.debug("load secrets")
-        self._my_key = clients["Clients"][self.client_name][stage]["Key"]
-        self._my_secret = clients["Clients"][self.client_name][stage]["Secret"]
+        self._my_key = clients[self.client_name][stage]["Key"]
+        self._my_secret = clients[self.client_name][stage]["Secret"]
 
     def _wait_for_no_throttle(self, wait_time=0):
         time.sleep(wait_time)

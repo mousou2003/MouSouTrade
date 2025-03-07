@@ -14,9 +14,10 @@ class PolygonClient(BaseMarketDataClient):
     OPTION_THROTTLE_LIMIT = 0
     stocks_data = {}
 
-    def __init__(self, json_content: dict, stage: str, throttle_limit=DEFAULT_THROTTLE_LIMIT):
+    def __init__(self, config_file: str, stage: str, throttle_limit=DEFAULT_THROTTLE_LIMIT):
+        super().__init__(config_file, stage)
         self.client_name = POLYGON_CLIENT_NAME
-        self._load_key_secret(json_content, stage)
+        self._load_key_secret(self.config, stage)
         self.THROTTLE_LIMIT = throttle_limit
         self.client = polygon.StocksClient(self._my_key)
         self.options_client = polygon.OptionsClient(self._my_key)
