@@ -77,7 +77,7 @@ def build_options_snapshots(market_data_client, contracts, underlying_ticker):
             options_snapshot = market_data_client.get_option_snapshot(underlying_ticker=underlying_ticker, option_symbol=contract.ticker)
             options_snapshots[contract.ticker] = options_snapshot
         except (MarketDataException, KeyError, TypeError) as e:
-            logger.warning(f"Error fetching options_snapshot for contract {contract.ticker}: {type(e).__name__} - {e}")
+            logger.warning(f"{type(e).__name__} - {e}\n {e.inner_exception}")
             continue
     return options_snapshots
 
