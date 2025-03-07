@@ -1,2 +1,2 @@
-# Run the script every 24 hours
-0 0 * * * python /app/app.py $MOUSOUTRADE_CONFIG_FILE >> /var/log/cron.log 2>&1
+# Run the script every 15 minutes
+*/15 * * * * python /app/run.py $MOUSOUTRADE_CONFIG_FILE >> /var/log/cron.log 2>&1
