@@ -7,8 +7,3 @@ polygon
 pydantic==1.8.2
 scipy==1.7.3
 numpy==1.21.2
-cron
-iputils-ping
-vim
-net-tools
-pip==21.2.4

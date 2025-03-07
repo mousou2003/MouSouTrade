@@ -42,6 +42,11 @@ ENV TZ="America/Los_Angeles"
 # Update the package lists for APT
 RUN apt-get update
 
+RUN pip install --upgrade pip
+
+# Install required packages
+RUN apt-get install -y cron iputils-ping vim net-tools
+
 # Install the required Python packages
 RUN pip install -r requirements-run-app.txt
 
