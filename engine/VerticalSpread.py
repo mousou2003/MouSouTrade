@@ -68,7 +68,7 @@ class VerticalSpread(SpreadDataModel):
                 if self.distance_between_strikes == 0:
                     raise ValueError("Zero distance between strikes is not allowed.")
                 
-                premium_delta = self.first_leg_snapshot.day.close - self.second_leg_snapshot.day.close
+                premium_delta = self.first_leg_snapshot.day.last_trade - self.second_leg_snapshot.day.last_trade
                 if premium_delta == 0:
                     logger.warning("Second leg candidate due to zero premium delta indicate a potential error in the selection.")
                     continue
@@ -79,11 +79,11 @@ class VerticalSpread(SpreadDataModel):
                     continue
 
                 if self.strategy == StrategyType.CREDIT:
-                    self.long_premium = self.second_leg_snapshot.day.close * self.LONG_PREMIUM_MULTIPLIER
+                    self.long_premium = self.second_leg_snapshot.day.bid
                     self.long_contract = self.second_leg_contract
                 elif self.strategy == StrategyType.DEBIT:
                     self.short_contract = self.second_leg_contract
-                    self.short_premium = self.second_leg_snapshot.day.close * self.SHORT_PREMIUM_MULTIPLIER
+                    self.short_premium = self.second_leg_snapshot.day.ask
 
                 self.net_premium = self.short_premium - self.long_premium
                 max_profit_percent = (self.distance_between_strikes - self.long_premium / abs(self.net_premium)) * 100

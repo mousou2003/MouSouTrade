@@ -74,9 +74,7 @@ def build_options_snapshots(market_data_client, contracts, underlying_ticker):
     options_snapshots = {}
     for contract in contracts:
         try:
-            options_snapshot = Snapshot.from_dict(
-                market_data_client.get_option_snapshot(underlying_ticker=underlying_ticker, option_symbol=contract.ticker)
-            )
+            options_snapshot = market_data_client.get_option_snapshot(underlying_ticker=underlying_ticker, option_symbol=contract.ticker)
             options_snapshots[contract.ticker] = options_snapshot
         except (MarketDataException, KeyError, TypeError) as e:
             logger.warning(f"Error fetching options_snapshot for contract {contract.ticker}: {type(e).__name__} - {e}")
@@ -160,8 +158,7 @@ def main():
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
         config_loader = ConfigLoader('./config/SecurityKeys.json')
-        market_data_client = MarketDataClient(client_name=POLYGON_CLIENT_NAME, 
-                                              json_content=config_loader.config, 
+        market_data_client = MarketDataClient(json_content=config_loader.config, 
                                               stage=stage)
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 

@@ -66,14 +66,14 @@ class ETradeClient(BaseMarketDataClient):
         self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
         return None
 
-    def get_option_snapshot(self, option_symbol: str):
+    def get_option_snapshot(self, option_symbol: str, underlying_symbol:str=None):
         self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
         match = re.match(r'O:(\w+)(\d{2})(\d{2})(\d{2})(C|P)(\d+)', option_symbol)
         if not match:
             raise ValueError("Invalid option symbol format")
         underlying_symbol, year, month, day, option_type, strike_price = match.groups()
-        strike_price = f"{int(strike_price) / 1000:.2f}"
-        option_symbol = f"{underlying_symbol}:{year}:{month}:{day}:{option_type}:{strike_price}"
+        strike_price = f"{int(strike_price) / 1000:.0f}"
+        option_symbol = f"{underlying_symbol}:20{year}:{month}:{day}:{option_type}:{strike_price}"
         option_url = f"{self.etrade.base_url}/v1/market/quote/{option_symbol}"
         response = self.session.get(option_url)
         root = ET.fromstring(response.text)

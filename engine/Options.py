@@ -221,10 +221,10 @@ class Options:
 
     @staticmethod
     def select_contract(
-        contracts,  
-        options_snapshots, 
+        contracts: Contract,  
+        options_snapshots:Snapshot, 
         underlying_ticker,
-        trade_strategy
+        trade_strategy:TradeStrategy
     ) -> List[Tuple[Contract, int, Snapshot]]:
         matching_contracts = []
         for position, contract in enumerate(contracts):
@@ -234,7 +234,8 @@ class Options:
             try:
                 if not options_snapshot.day.timestamp:
                     logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
-                if not all([options_snapshot.day.close, options_snapshot.implied_volatility, options_snapshot.greeks.delta]):
+                if not all([options_snapshot.day.last_trade, options_snapshot.day.bid, options_snapshot.day.ask,
+                            options_snapshot.day.close, options_snapshot.implied_volatility, options_snapshot.greeks.delta]):
                     logger.debug(f"Missing key data for {contract.ticker}. Skipping.")
                     continue
                 strike_price_type = Options.identify_strike_price_type(options_snapshot.greeks.delta, trade_strategy)

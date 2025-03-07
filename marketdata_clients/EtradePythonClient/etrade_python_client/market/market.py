@@ -59,6 +59,7 @@ class Market:
                     option_symbol = f"{symbol}:{next_friday.year}:{next_friday.month}:{next_friday.day}:C:{strike_price}"
 
                     option_url = self.base_url + "/v1/market/quote/" + option_symbol
+                    logger.debug(option_url)
                     option_response = self.session.get(option_url)
                     logger.debug("Option Request Header: %s", option_response.request.headers)
 

@@ -12,31 +12,31 @@ class IMarketDataClient(ABC):
 
     @abstractmethod
     def get_previous_close(self, ticker):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_snapshot(self, symbol):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_grouped_daily_bars(self, date):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_option_previous_close(self, ticker):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_option_snapshot(self, underlying_ticker, option_symbol=None):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_previous_market_open_day(self, date=None):
-        pass
+        raise NotImplementedError
 
 class BaseMarketDataClient(IMarketDataClient, ABC):
     client_name: str = None
