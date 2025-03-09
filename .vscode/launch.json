@@ -15,7 +15,8 @@
                 "PYTHONPATH": "${workspaceFolder}",
                 "DYNAMODB_ENDPOINT_URL":"http://localhost:8000",
                 "MOUSOUTRADE_STAGE":"Alpha",
-                "DEBUG_MODE":"False"
+                "DEBUG_MODE":"False",
+                "MOUSOUTRADE_CLIENTS":  "etrade;polygon"
             },
             "autoReload": { "enable": true }
         },
