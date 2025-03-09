@@ -120,7 +120,10 @@ class VerticalSpread(SpreadDataModel):
     # Minimum liquidity thresholds
     MIN_ACCEPTABLE_VOLUME: ClassVar[int] = 10  # Minimum acceptable volume
     MIN_ACCEPTABLE_OI: ClassVar[int] = 25  # Minimum acceptable open interest
-    
+    OI_EXCELLENT_THRESHOLD: ClassVar[int] = 500  # Threshold for excellent open interest
+    VOLUME_EXCELLENT_THRESHOLD: ClassVar[int] = 200  # Threshold for excellent volume
+    LONG_TERM_THRESHOLD: ClassVar[int] = 30  # Threshold for long-term options
+
     contracts: List[Contract] = []
     # Default contract selector for production use
     contract_selector: ClassVar[ContractSelector] = StandardContractSelector()
@@ -136,7 +139,7 @@ class VerticalSpread(SpreadDataModel):
         self.contracts = contracts
 
         # Calculate the optimal spread width based on the current price and strategy type
-        self.optimal_spread_width = Options.calculate_optimal_spread_width(Decimal(previous_close), self.strategy)
+        self.optimal_spread_width = Options.calculate_optimal_spread_width(self.to_decimal(previous_close), self.strategy)
         logger.debug(f"Optimal spread width for {underlying_ticker} at price {previous_close} with {strategy.value} strategy: {self.optimal_spread_width}")
 
         days_to_expiration = (self.expiration_date - self.update_date).days
@@ -270,11 +273,30 @@ class VerticalSpread(SpreadDataModel):
                 else:
                     # For production selectors, calculate the actual probability
                     self.probability_of_profit = Options.calculate_probability_of_profit(
-                        current_price=Decimal(self.previous_close),
-                        breakeven_price=Decimal(self.breakeven),
+                        current_price=self.to_decimal(self.previous_close),
+                        breakeven_price=self.to_decimal(self.breakeven),
                         days_to_expiration=days_to_expiration,
                         implied_volatility=self.second_leg_snapshot.implied_volatility * self.first_leg_snapshot.implied_volatility
                     )
+                    
+                    # Apply sanity checks to probability of profit
+                    # No trade should have extremely high probability (cap at 90%)
+                    if self.probability_of_profit > Decimal('90'):
+                        logger.warning(f"Suspiciously high probability of profit: {self.probability_of_profit}%. Capping at 90%.")
+                        self.probability_of_profit = Decimal('90')
+                    
+                    # Credit spreads typically have higher probability than debit spreads
+                    # Add strategy-specific bounds
+                    if self.strategy == StrategyType.CREDIT:
+                        # Credit spreads typically range from 50-85%
+                        if self.probability_of_profit < Decimal('40'):
+                            logger.warning(f"Unusually low probability for credit spread: {self.probability_of_profit}%. Adjusting to minimum 40%.")
+                            self.probability_of_profit = Decimal('40')
+                    else:  # DEBIT strategy
+                        # Debit spreads typically range from 30-60%
+                        if self.probability_of_profit > Decimal('70'):
+                            logger.warning(f"Unusually high probability for debit spread: {self.probability_of_profit}%. Adjusting to maximum 70%.")
+                            self.probability_of_profit = Decimal('70')
 
                 self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type.value}, \n"\
                                   f"buy {self.long_contract.strike_price} {self.long_contract.contract_type.value}; \n"
@@ -335,38 +357,38 @@ class VerticalSpread(SpreadDataModel):
                 risk_score = max(Decimal('0'), Decimal('1.0') - (risk_percent / self.MAX_ACCEPTABLE_LOSS_PERCENT))
                 
                 # Calculate liquidity score based on open interest and volume
-                # Get open interest and volume for both legs
-                first_leg_oi = self.first_leg_snapshot.open_interest or 0
-                second_leg_oi = self.second_leg_snapshot.open_interest or 0
-                first_leg_volume = self.first_leg_snapshot.day.volume or 0
-                second_leg_volume = self.second_leg_snapshot.day.volume or 0
+                # Get open interest and volume for both legs - handle None values explicitly
+                first_leg_oi: Decimal = self.to_decimal(self.first_leg_snapshot.open_interest or 0)
+                second_leg_oi: Decimal = self.to_decimal(self.second_leg_snapshot.open_interest or 0)
+                first_leg_volume: Decimal = self.to_decimal(self.first_leg_snapshot.day.volume or 0)
+                second_leg_volume: Decimal = self.to_decimal(self.second_leg_snapshot.day.volume or 0)
                 
                 # Calculate the average open interest and volume across both legs
-                avg_oi = (first_leg_oi + second_leg_oi) / 2
-                avg_volume = (first_leg_volume + second_leg_volume) / 2
+                avg_oi: Decimal = (first_leg_oi + second_leg_oi) / Decimal('2')
+                avg_volume: Decimal = (first_leg_volume + second_leg_volume) / Decimal('2')
                 # Warn about low liquidity
-                if avg_oi < self.MIN_ACCEPTABLE_OI or avg_volume < self.MIN_ACCEPTABLE_VOLUME:
-                    message = f"Low liquidity for {self.short_contract.ticker}/{self.long_contract.ticker}: OI={
-                        avg_oi:.0f}, Volume={avg_volume:.0f}"
+                if avg_oi < self.to_decimal(self.MIN_ACCEPTABLE_OI) or avg_volume < self.to_decimal(self.MIN_ACCEPTABLE_VOLUME):
+                    message = f"Low liquidity for {self.short_contract.ticker}/{self.long_contract.ticker}: OI={avg_oi:.0f}, Volume={avg_volume:.0f}"
                     logger.debug(message)
                     self.description += message
                 
                 # Calculate liquidity score (0-1 scale where 1 is best)
                 # Open interest is more important for longer-term positions
                 # Volume is more important for short-term tradability
-                oi_score = min(1.0, avg_oi / 500)  # Scale OI: 500+ is excellent (score of 1)
-                volume_score = min(1.0, avg_volume / 200)  # Scale volume: 200+ is excellent (score of 1)
+                oi_score: Decimal = min(Decimal('1.0'), avg_oi / self.to_decimal(self.OI_EXCELLENT_THRESHOLD))
+                volume_score: Decimal = min(Decimal('1.0'), avg_volume / self.to_decimal(self.VOLUME_EXCELLENT_THRESHOLD))
                 
                 # Weight OI more for longer-dated options
-                days_to_expiration = (self.expiration_date - self.update_date).days
-                if days_to_expiration > 30:
-                    liquidity_score = (0.7 * oi_score) + (0.3 * volume_score)
+                days_to_expiration: int = (self.expiration_date - self.update_date).days
+                liquidity_score: Decimal = Decimal('0')
+                if days_to_expiration > self.LONG_TERM_THRESHOLD:
+                    liquidity_score = (Decimal('0.7') * oi_score) + (Decimal('0.3') * volume_score)
                 else:
                     # For shorter-dated options, volume is more important
-                    liquidity_score = (0.4 * oi_score) + (0.6 * volume_score)
+                    liquidity_score = (Decimal('0.4') * oi_score) + (Decimal('0.6') * volume_score)
                 
                 # Convert to a 0-100 scale to match other metrics
-                liquidity_score = Decimal(str(liquidity_score)) * Decimal('100')
+                liquidity_score *= Decimal('100')
                 
                 # Log all the score components
                 logger.debug(f"Spread width: {self.distance_between_strikes}, optimal: {self.optimal_spread_width}, " 
@@ -399,10 +421,17 @@ class VerticalSpread(SpreadDataModel):
                     liquidity_weight * liquidity_score  # Higher liquidity is better
                 )
                 
+                # Add logging for detailed score breakdown
+                logger.debug(f"Score components: POP: {self.probability_of_profit} * {pop_weight} = {pop_weight * self.probability_of_profit:.2f}")
+                logger.debug(f"Width: {width_score} * {width_weight} = {width_weight * width_score:.2f}")
+                logger.debug(f"R/R: {ratio_proximity * Decimal('100')} * {rr_weight} = {rr_weight * (ratio_proximity * Decimal('100')):.2f}")
+                logger.debug(f"Risk: {risk_score * Decimal('100')} * {risk_weight} = {risk_weight * (risk_score * Decimal('100')):.2f}")
+                logger.debug(f"Liquidity: {liquidity_score} * {liquidity_weight} = {liquidity_weight * liquidity_score:.2f}")
+                
                 # CURRENT APPROACH: Calculate base confidence from adjusted_score
                 # This approach evaluates the quality of the trade strategy itself
-                base_confidence = float(min(Decimal('1.0'), self.adjusted_score / Decimal('100.0')))
-                
+                base_confidence: Decimal = min(Decimal('1.0'), self.adjusted_score / Decimal('100.0'))
+
                 # Key differences between approaches:
                 # 1. Score-based confidence evaluates trade QUALITY (POP, reward/risk, etc.)
                 # 2. Data-based confidence evaluates data RELIABILITY only
@@ -412,16 +441,13 @@ class VerticalSpread(SpreadDataModel):
                 
                 # Calculate the overall confidence by combining all confidence levels directly
                 # We weight the data source confidence levels - total weights should equal 1.0 (100%)
-                data_confidence = (
-                    self.first_leg_contract.confidence_level * 0.25 +      # 25% weight for first leg contract
-                    self.second_leg_contract.confidence_level * 0.25 +     # 25% weight for second leg contract
-                    self.first_leg_snapshot.confidence_level * 0.25 +      # 25% weight for first leg snapshot
-                    self.second_leg_snapshot.confidence_level * 0.25       # 25% weight for second leg snapshot
+                # Ensure all confidence values are Decimal, handling potential None values
+                data_confidence: Decimal = (
+                    self.to_decimal(self.first_leg_contract.confidence_level or 1.0) * Decimal('0.25') +
+                    self.to_decimal(self.second_leg_contract.confidence_level or 1.0) * Decimal('0.25') +
+                    self.to_decimal(self.first_leg_snapshot.confidence_level or 1.0) * Decimal('0.25') +
+                    self.to_decimal(self.second_leg_snapshot.confidence_level or 1.0) * Decimal('0.25')
                 )
-                
-                # Final confidence is weighted average of the base confidence (from score) and data confidence
-                # 70% from our score calculation, 30% from the input data confidence levels
-                self.confidence_level = base_confidence * 0.7 + data_confidence * 0.3
                 
                 logger.debug(f"POP: {self.probability_of_profit}, Width Score: {width_score:.2f}, " 
                             f"Liquidity Score: {liquidity_score:.2f}, Final Score: {self.adjusted_score:.2f}")
@@ -433,17 +459,19 @@ class VerticalSpread(SpreadDataModel):
                 
                 # Update best spreads based on standard vs non-standard width
                 if is_standard:
-                    if not best_spread_width or Decimal(str(best_spread_width.get('adjusted_score', '0'))) < self.adjusted_score:
+                    adjusted_score = best_spread_width.get('adjusted_score', '0') if best_spread_width else '0'
+                    if not best_spread_width or self.to_decimal(adjusted_score) < self.adjusted_score:
                         best_spread_width = current_spread
                 else:
-                    if not best_spread_non_standard or Decimal(str(best_spread_non_standard.get('adjusted_score', '0'))) < self.adjusted_score:
+                    adjusted_score = best_spread_non_standard.get('adjusted_score', '0') if best_spread_non_standard else '0'
+                    if not best_spread_non_standard or self.to_decimal(adjusted_score) < self.adjusted_score:
                         best_spread_non_standard = current_spread
                 
                 # Still maintain the original POP-based selection for backward compatibility
                 if self.probability_of_profit > best_pop:
                     best_pop = self.probability_of_profit
                     best_spread = current_spread
-                
+            
             # For test selectors, exit after finding the first valid spread
             if found_valid_spread and not isinstance(self.contract_selector, StandardContractSelector):
                 break
@@ -470,10 +498,10 @@ class VerticalSpread(SpreadDataModel):
         return False
 
     def get_net_premium(self):
-        return Decimal(self.net_premium)
+        return self.to_decimal(self.net_premium)
 
     def get_close_price(self):
-        return Decimal(self.previous_close)
+        return self.to_decimal(self.previous_close)
 
     def get_expiration_date(self):
         return self.expiration_date

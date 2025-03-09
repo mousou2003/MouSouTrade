@@ -130,6 +130,23 @@ class DataModelBase(BaseModel):
         else:
             return lambda value: value
 
+    @staticmethod
+    def to_decimal(value: Union[int, float, str]) -> Decimal:
+        """Convert any numeric type to Decimal safely.
+        
+        Args:
+            value: A numeric value as int, float, or string.
+            
+        Returns:
+            Decimal: The converted decimal value.
+            
+        Raises:
+            ValueError: If value is None or cannot be converted to Decimal.
+        """
+        if value is None:
+            raise ValueError("Cannot convert None to Decimal")
+        return Decimal(str(value))
+
 class Contract(DataModelBase):
     """
     Represents a financial contract with various attributes such as
