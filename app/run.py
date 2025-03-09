@@ -153,7 +153,9 @@ def main():
     if os.getenv("DEBUG_MODE") == "true":
         wait_for_debugger("localhost", 5678)
     try:
-        required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 'MOUSOUTRADE_CONFIG_FILE', 'MOUSOUTRADE_STAGE']
+        required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 
+                             'MOUSOUTRADE_CONFIG_FILE', 'MOUSOUTRADE_STAGE',
+                             'MOUSOUTRADE_CLIENTS']
         env_vars = check_environment_variables(required_env_vars)
 
         for var, value in env_vars.items():
