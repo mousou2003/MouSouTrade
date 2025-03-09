@@ -1,3 +1,30 @@
+"""
+Data Models for Options Trading
+==============================
+This module defines the core data models used throughout the options trading system.
+It provides structured representations of:
+
+1. Core trading concepts:
+   - Direction types (bullish/bearish)
+   - Strategy types (credit/debit)
+   - Contract types (call/put)
+   - Strike price types (ITM/ATM/OTM)
+
+2. Data structures for options contracts and market data:
+   - Contract: Represents an options contract with strike, expiration, etc.
+   - Greeks: Delta, gamma, theta, vega and rho for options pricing
+   - DayData: Daily market data including OHLC, volume, etc.
+   - Snapshot: Complete market snapshot including contract details and Greeks
+
+3. Spread model for vertical options spreads:
+   - SpreadDataModel: Comprehensive model of an options spread
+   - Contract relationships (long/short positions)
+   - Price targets and risk parameters
+
+The module uses Pydantic for data validation and provides serialization/deserialization
+capabilities to support data persistence and API communications.
+"""
+
 import logging
 from pydantic import BaseModel
 from decimal import Decimal, ROUND_HALF_UP
@@ -83,9 +110,13 @@ class DataModelBase(BaseModel):
     def _convert_field_to_model(cls, field: str) -> Any:
         field_type = cls.__annotations__.get(field)
         if field_type == Optional[date]:
-            return lambda value: datetime.strptime(value, cls.DATE_FORMAT).date() if value else None
+            return lambda value: value if isinstance(value, date) else (
+                datetime.strptime(value, cls.DATE_FORMAT).date() if value else None
+            )
         elif field_type == Optional[datetime]:
-            return lambda value: datetime.strptime(value) if value else None
+            return lambda value: value if isinstance(value, datetime) else (
+                datetime.strptime(value, cls.DATE_FORMAT) if value else None
+            )
         elif field_type == Optional[Decimal]:
             return lambda value: Decimal(value) if value else None
         elif field_type == Optional[int]:

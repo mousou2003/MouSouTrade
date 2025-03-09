@@ -1,3 +1,31 @@
+"""
+Options Trading Utilities
+=======================
+This module provides core functionality for options trading calculations and analysis:
+
+1. Option pricing and probability calculations:
+   - Black-Scholes model implementations for calls and puts
+   - Probability of profit calculations
+   - Standard deviation and risk metrics
+
+2. Option expiration date utilities:
+   - Third Friday calculations for standard options
+   - Forward date projections
+
+3. Delta-based option selection strategies:
+   - HIGH_PROBABILITY: 0.10-0.30 delta for premium collection
+   - BALANCED: 0.30-0.45 delta for moderate exposure
+   - DIRECTIONAL: 0.45-0.70 delta for directional trades
+
+4. Contract selection and filtering:
+   - Strike price identification (ITM/ATM/OTM)
+   - Contract type determination based on strategy
+   - Orderbook analysis and liquidity checking
+
+This module serves as a foundation for the more specific spread strategy implementations
+and provides the mathematical models needed for options trading.
+"""
+
 import calendar
 from datetime import datetime, timedelta
 import logging
@@ -5,7 +33,7 @@ from typing import Tuple
 import numpy as np
 from scipy.stats import norm
 from decimal import Decimal, Inexact, InvalidOperation
-from enum import Enum  # Import Enum
+from enum import Enum
 from datetime import datetime, timedelta
 from marketdata_clients.BaseMarketDataClient import MarketDataException
 from engine.data_model import *
