@@ -79,6 +79,45 @@
         th.sortable.desc:after {
             content: '\25BC'; /* Down arrow */
         }
+        /* Add CSS for the score column */
+        .score-cell {
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        /* Add tooltip style for score explanation */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+        
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 300px;
+            background-color: #555;
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            font-weight: normal;
+            line-height: 1.4;
+        }
+        
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -98,7 +137,7 @@
                         <th class="sortable" data-sort="ticker">Spread Info</th>
                         <th class="sortable" data-sort="max_risk">Max Risk</th>
                         <th class="sortable" data-sort="max_reward">Max Profit</th>
-                        <th class="sortable" data-sort="probability_of_profit">PoP</th>
+                        <th class="sortable" data-sort="adjusted_score">Score</th>
                         <th>Description</th>
                         <th>Details</th>
                     </tr>
@@ -112,6 +151,43 @@
         $(document).ready(function() {
             let previousData = [];
             let sortOrders = [];
+
+            // Function to get color for score based on a gradient
+            function getScoreColor(score) {
+                // Convert score to a value between 0 and 100
+                const normalizedScore = Math.min(Math.max(parseFloat(score), 0), 100) / 100;
+                
+                // Create gradient from red (0) to yellow (50) to green (100)
+                let r, g;
+                if (normalizedScore < 0.5) {
+                    // Red to Yellow (increase green)
+                    r = 255;
+                    g = Math.round(normalizedScore * 2 * 255);
+                } else {
+                    // Yellow to Green (decrease red)
+                    r = Math.round((1 - (normalizedScore - 0.5) * 2) * 255);
+                    g = 255;
+                }
+                
+                // Output as CSS RGB
+                return `rgb(${r}, ${g}, 0)`;
+            }
+            
+            // Function to get contrasting text color (black or white) based on background
+            function getContrastColor(rgb) {
+                // Extract R and G values from the rgb string
+                const match = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                if (!match) return '#000000';
+                
+                const r = parseInt(match[1]);
+                const g = parseInt(match[2]);
+                
+                // Calculate perceived brightness (weighted for human eye)
+                const brightness = (0.299 * r + 0.587 * g + 0.114 * 0) / 255;
+                
+                // Return white for dark backgrounds, black for light backgrounds
+                return brightness > 0.5 ? '#000000' : '#FFFFFF';
+            }
 
             function refreshData() {
                 $.ajax({
@@ -171,7 +247,35 @@
                             `);
                             row.append(`<td>$${Number(item.max_risk).toFixed(2)}</td>`);
                             row.append(`<td>$${Number(item.max_reward).toFixed(2)}</td>`);
-                            row.append(`<td>${Number(item.probability_of_profit).toFixed(2)}%</td>`);
+                            
+                            // Add the adjusted score cell with color coding
+                            const score = item.adjusted_score ? Number(item.adjusted_score).toFixed(2) : 'N/A';
+                            if (score !== 'N/A') {
+                                const backgroundColor = getScoreColor(score);
+                                const textColor = getContrastColor(backgroundColor);
+                                row.append(`
+                                    <td>
+                                        <div class="tooltip">
+                                            <span class="score-cell" style="background-color: ${backgroundColor}; color: ${textColor}">
+                                                ${score}
+                                            </span>
+                                            <span class="tooltiptext">
+                                                <strong>Adjusted Score Components:</strong><br>
+                                                - 35%: Probability of Profit (${Number(item.probability_of_profit).toFixed(2)}%)<br>
+                                                - 15%: Optimal Width<br>
+                                                - 20%: Reward/Risk Ratio<br>
+                                                - 10%: Risk Management<br>
+                                                - 20%: Liquidity<br>
+                                                <hr>
+                                                Higher score = better trade opportunity
+                                            </span>
+                                        </div>
+                                    </td>
+                                `);
+                            } else {
+                                row.append(`<td>N/A</td>`);
+                            }
+                            
                             row.append(`<td>${item.description || 'N/A'}</td>`);
 
                             const detailsButton = $(`<button class="view-description" 
@@ -187,23 +291,26 @@
                                 data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + Number(item.short_contract.strike_price).toFixed(2) + ')' : 'N/A'}" 
                                 data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + Number(item.long_contract.strike_price).toFixed(2) + ')' : 'N/A'}" 
                                 data-percentage_max_risk="${item.percentage_max_risk ? Number(item.percentage_max_risk).toFixed(2) : 'N/A'}"
-                                data-percentage_max_reward="${item.percentage_max_profit ? Number(item.percentage_max_profit).toFixed(2) : 'N/A'}">Details</button>`);
+                                data-percentage_max_reward="${item.percentage_max_profit ? Number(item.percentage_max_profit).toFixed(2) : 'N/A'}"
+                                data-adjusted_score="${item.adjusted_score ? Number(item.adjusted_score).toFixed(2) : 'N/A'}"
+                                data-probability_of_profit="${item.probability_of_profit ? Number(item.probability_of_profit).toFixed(2) : 'N/A'}">Details</button>`);
 
                             row.append($('<td>').append(detailsButton));
                             $('#main-data-container tbody').append(row);
 
                             const detailsContainer = $(`
                                 <tr class="details-container">
-                                    <td colspan="4">
+                                    <td colspan="3">
                                         <ul>
                                             <li><strong>Credit:</strong> <span class="credit-content"></span></li>
                                             <li><strong>Debit:</strong> <span class="debit-content"></span></li>
                                             <li><strong>Max Risk:</strong> <span class="max-risk-content"></span></li>
                                             <li><strong>Max Reward:</strong> <span class="max-reward-content"></span></li>
                                             <li><strong>Breakeven:</strong> <span class="breakeven-content"></span></li>
+                                            <li><strong>Probability of Profit:</strong> <span class="pop-content"></span>%</li>
                                         </ul>
                                     </td>
-                                    <td colspan="4">
+                                    <td colspan="3">
                                         <ul>
                                             <li><strong>Entry Price:</strong> <span class="entry-price-content"></span></li>
                                             <li><strong>Target Price:</strong> <span class="target-price-content"></span></li>
@@ -237,6 +344,14 @@
                     detailsRow.find('.exit-date-content').text($(this).data('exit_date') || 'N/A');
                     detailsRow.find('.short-contract-content').text($(this).data('short_contract'));
                     detailsRow.find('.long-contract-content').text($(this).data('long_contract'));
+                    detailsRow.find('.pop-content').text($(this).data('probability_of_profit') || 'N/A');
+                    
+                    // Add adjusted score to details if available
+                    const score = $(this).data('adjusted_score');
+                    if (score && score !== 'N/A') {
+                        detailsRow.find('.score-content').text(score);
+                    }
+                    
                     detailsRow.toggle();
                 } catch (error) {
                     console.error("Error displaying details:", error);

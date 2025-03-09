@@ -22,6 +22,11 @@ This module provides core functionality for options trading calculations and ana
    - Contract type determination based on strategy
    - Orderbook analysis and liquidity checking
 
+5. Vertical spread width utilities:
+   - Optimal width calculation based on underlying price
+   - Standard width validation
+   - Width selection based on market conditions
+
 This module serves as a foundation for the more specific spread strategy implementations
 and provides the mathematical models needed for options trading.
 """
@@ -197,7 +202,7 @@ class Options:
         return Decimal(current_price * iv * Decimal(np.sqrt(Decimal(days_to_expiration/365))))
 
     @staticmethod
-    def identify_strike_price_type(delta: Decimal, trade_strategy: TradeStrategy) -> StrikePriceType:
+    def identify_strike_price_type_by_delta(delta: Decimal, trade_strategy: TradeStrategy) -> StrikePriceType:
         """
         Identifies if the contract is ITM, ATM, or OTM based on the delta value and trade strategy.
 
@@ -215,6 +220,108 @@ class Options:
             return StrikePriceType.ITM
         else:
             return StrikePriceType.OTM
+    
+    @staticmethod
+    def identify_strike_price_by_current_price(strike_price: Decimal, current_price: Decimal, contract_type: ContractType, threshold: Decimal = Decimal('0.02')) -> StrikePriceType:
+        """
+        Identifies if a strike price is ITM, ATM, or OTM based on its relationship to the current price.
+        
+        Parameters:
+        strike_price : Decimal : The strike price of the option
+        current_price : Decimal : The current price of the underlying asset
+        contract_type : ContractType : The type of the contract (CALL or PUT)
+        threshold : Decimal : The price threshold (as percentage) for considering a strike price ATM
+        
+        Returns:
+        StrikePriceType : The type of the strike price (ITM, ATM, or OTM)
+        """
+        # Calculate percentage difference from current price
+        percent_diff = abs(strike_price - current_price) / current_price
+        
+        # If within threshold, consider it ATM
+        if percent_diff <= threshold:
+            return StrikePriceType.ATM
+        
+        if contract_type == ContractType.CALL:
+            # For calls: strike < current = ITM, strike > current = OTM
+            return StrikePriceType.ITM if strike_price < current_price else StrikePriceType.OTM
+        else:  # PUT
+            # For puts: strike > current = ITM, strike < current = OTM
+            return StrikePriceType.ITM if strike_price > current_price else StrikePriceType.OTM
+
+    @staticmethod
+    def calculate_optimal_spread_width(current_price: Decimal, strategy: StrategyType = None) -> Decimal:
+        """
+        Calculate the optimal spread width based on the underlying price and strategy type.
+        Based on industry standard practices for vertical spreads.
+        
+        Parameters:
+        current_price : Decimal : The current price of the underlying asset
+        strategy : StrategyType : Strategy type (CREDIT or DEBIT) to optimize width for
+        
+        Returns:
+        Decimal : The recommended spread width
+        """
+        # First calculate the base width based on stock price
+        if current_price < Decimal('50'):
+            # Very low-priced stocks: 1-2 point spreads (2-4% of price)
+            base_width = Decimal('1')
+        elif current_price < Decimal('100'):
+            # Low-priced stocks: 2-5 point spreads (2-5% of price)
+            base_width = Decimal('2.5')
+        elif current_price < Decimal('300'):
+            # Mid-priced stocks: 5-10 point spreads (2-5% of price)
+            base_width = Decimal('5')
+        elif current_price < Decimal('1000'):
+            # High-priced stocks: 10-20 point spreads (1-3% of price)
+            base_width = Decimal('10')
+        else:
+            # Very high-priced stocks or indices: 25+ point spreads (≤1% of price)
+            base_width = Decimal('25')
+        
+        # Apply strategy-specific adjustments:
+        # - Credit spreads: Often narrower to maximize probability of profit
+        # - Debit spreads: Often wider to increase potential return
+        if strategy:
+            width_multiplier = Decimal('1.0')  # Default multiplier
+            
+            if strategy == StrategyType.CREDIT:
+                # For credit spreads, prefer narrower widths to maximize probability
+                width_multiplier = Decimal('0.8')
+            elif strategy == StrategyType.DEBIT:
+                # For debit spreads, prefer wider widths to increase potential return
+                width_multiplier = Decimal('1.2')
+            
+            # Apply the multiplier
+            adjusted_width = base_width * width_multiplier
+            
+            # Ensure we still return a standard width
+            standard_widths = [Decimal('1'), Decimal('2.5'), Decimal('5'), 
+                             Decimal('10'), Decimal('25'), Decimal('50')]
+            
+            # Find the closest standard width
+            closest_width = min(standard_widths, key=lambda x: abs(x - adjusted_width))
+            
+            return closest_width
+        
+        # If no strategy provided, return the base width
+        return base_width
+
+    @staticmethod
+    def is_standard_width(width: Decimal) -> bool:
+        """
+        Check if a spread width is a standard width used in options markets.
+        Standard widths improve liquidity and ease of execution.
+        
+        Parameters:
+        width : Decimal : The spread width to check
+        
+        Returns:
+        bool : True if the width is standard, False otherwise
+        """
+        standard_widths = [Decimal('1'), Decimal('2.5'), Decimal('5'), 
+                          Decimal('10'), Decimal('25'), Decimal('50')]
+        return width in standard_widths
 
     @staticmethod
     def get_order(strategy: StrategyType, direction: DirectionType) -> OrderType:
@@ -255,8 +362,9 @@ class Options:
         trade_strategy:TradeStrategy
     ) -> List[Tuple[Contract, int, Snapshot]]:
         matching_contracts = []
+        contract:Contract
         for position, contract in enumerate(contracts):
-            options_snapshot = options_snapshots.get(contract.ticker)
+            options_snapshot:Snapshot = options_snapshots.get(contract.ticker)
             if not options_snapshot:
                 continue
             try:
@@ -273,7 +381,7 @@ class Options:
                     logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
                     options_snapshot.day.timestamp = datetime.now().timestamp()
                     options_snapshot.confidence_level *= 0.9
-                strike_price_type = Options.identify_strike_price_type(options_snapshot.greeks.delta, trade_strategy)
+                strike_price_type = Options.identify_strike_price_type_by_delta(options_snapshot.greeks.delta, trade_strategy)
                 if (((trade_strategy == TradeStrategy.DIRECTIONAL) 
                      and (strike_price_type == StrikePriceType.ATM))
                      or (trade_strategy == TradeStrategy.HIGH_PROBABILITY

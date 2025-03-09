@@ -113,7 +113,14 @@ class VerticalSpread(SpreadDataModel):
     """Base class for vertical spread calculations (credit and debit)."""
     MAX_STRIKES: ClassVar[int] = 20  # Maximum number of strikes to consider
     MIN_DELTA: ClassVar[Decimal] = Decimal(0.26)  # Minimum absolute delta for a contract to be considered
-
+    
+    # Constants for scoring calculations
+    TARGET_REWARD_RISK_RATIO: ClassVar[Decimal] = Decimal('2.0')  # Target 2:1 reward-to-risk ratio
+    MAX_ACCEPTABLE_LOSS_PERCENT: ClassVar[Decimal] = Decimal('0.05')  # 5% of account per trade
+    # Minimum liquidity thresholds
+    MIN_ACCEPTABLE_VOLUME: ClassVar[int] = 10  # Minimum acceptable volume
+    MIN_ACCEPTABLE_OI: ClassVar[int] = 25  # Minimum acceptable open interest
+    
     contracts: List[Contract] = []
     # Default contract selector for production use
     contract_selector: ClassVar[ContractSelector] = StandardContractSelector()
@@ -128,6 +135,10 @@ class VerticalSpread(SpreadDataModel):
         self.second_leg_depth = 0
         self.update_date = datetime.today().date()
         self.contracts = contracts
+
+        # Calculate the optimal spread width based on the current price and strategy type
+        self.optimal_spread_width = Options.calculate_optimal_spread_width(Decimal(previous_close), self.strategy)
+        logger.debug(f"Optimal spread width for {underlying_ticker} at price {previous_close} with {strategy.value} strategy: {self.optimal_spread_width}")
 
         days_to_expiration = (self.expiration_date - self.update_date).days
 
@@ -160,6 +171,9 @@ class VerticalSpread(SpreadDataModel):
         
         best_spread = None
         best_pop = Decimal(0)
+        # Track best spreads with standard and non-standard widths separately
+        best_spread_width = None 
+        best_spread_non_standard = None
         found_valid_spread = False
 
         for first_leg in first_leg_candidates:
@@ -282,18 +296,153 @@ class VerticalSpread(SpreadDataModel):
                     best_spread = self.to_dict()
                     break
                 
-                # In production mode, take the spread with the highest POP
+                # Check if the spread width is a standard width
+                is_standard = Options.is_standard_width(self.distance_between_strikes)
+                
+                # Is this spread width close to the optimal width?
+                width_proximity = abs(self.distance_between_strikes - self.optimal_spread_width) / self.optimal_spread_width
+                
+                # Apply strategy-specific adjustments to width scoring
+                width_score_base = Decimal('100') - width_proximity * Decimal('100')
+                
+                # For credit spreads, penalize widths that are too wide
+                # For debit spreads, penalize widths that are too narrow
+                if self.strategy == StrategyType.CREDIT:
+                    if self.distance_between_strikes > self.optimal_spread_width:
+                        # Penalize excessively wide credit spreads (reduce score by excess width %)
+                        excess_width_pct = (self.distance_between_strikes / self.optimal_spread_width) - Decimal('1.0')
+                        width_score_base -= excess_width_pct * Decimal('20')  # Penalty factor
+                        logger.debug(f"Credit spread width penalty: {excess_width_pct * Decimal('20'):.2f} points (too wide)")
+                elif self.strategy == StrategyType.DEBIT:
+                    if self.distance_between_strikes < self.optimal_spread_width:
+                        # Penalize excessively narrow debit spreads (reduce score by width deficit %)
+                        deficit_width_pct = Decimal('1.0') - (self.distance_between_strikes / self.optimal_spread_width)
+                        width_score_base -= deficit_width_pct * Decimal('20')  # Penalty factor
+                        logger.debug(f"Debit spread width penalty: {deficit_width_pct * Decimal('20'):.2f} points (too narrow)")
+                
+                width_score = max(Decimal('0'), width_score_base)  # Ensure score is non-negative
+
+                # Calculate reward-to-risk ratio
+                # Avoid division by zero
+                if self.max_risk and self.max_risk != 0:
+                    reward_risk_ratio = self.max_reward / self.max_risk
+                    # Calculate how close we are to the target ratio (higher is better)
+                    ratio_proximity = min(reward_risk_ratio / self.TARGET_REWARD_RISK_RATIO, Decimal('2.0'))
+                else:
+                    ratio_proximity = Decimal('0')
+                
+                # Calculate risk as a percentage of a hypothetical account
+                # Let's assume a $10,000 account for calculations
+                # We want to penalize trades with risk > MAX_ACCEPTABLE_LOSS_PERCENT
+                account_size = Decimal('10000')
+                risk_percent = self.max_risk / account_size
+                # Convert to a 0-1 score where 1 is best (lowest risk)
+                risk_score = max(Decimal('0'), Decimal('1.0') - (risk_percent / self.MAX_ACCEPTABLE_LOSS_PERCENT))
+                
+                # Calculate liquidity score based on open interest and volume
+                # Get open interest and volume for both legs
+                first_leg_oi = self.first_leg_snapshot.open_interest or 0
+                second_leg_oi = self.second_leg_snapshot.open_interest or 0
+                first_leg_volume = self.first_leg_snapshot.day.volume or 0
+                second_leg_volume = self.second_leg_snapshot.day.volume or 0
+                
+                # Calculate the average open interest and volume across both legs
+                avg_oi = (first_leg_oi + second_leg_oi) / 2
+                avg_volume = (first_leg_volume + second_leg_volume) / 2
+                
+                # Calculate liquidity score (0-1 scale where 1 is best)
+                # Open interest is more important for longer-term positions
+                # Volume is more important for short-term tradability
+                oi_score = min(1.0, avg_oi / 500)  # Scale OI: 500+ is excellent (score of 1)
+                volume_score = min(1.0, avg_volume / 200)  # Scale volume: 200+ is excellent (score of 1)
+                
+                # Weight OI more for longer-dated options
+                days_to_expiration = (self.expiration_date - self.update_date).days
+                if days_to_expiration > 30:
+                    liquidity_score = (0.7 * oi_score) + (0.3 * volume_score)
+                else:
+                    # For shorter-dated options, volume is more important
+                    liquidity_score = (0.4 * oi_score) + (0.6 * volume_score)
+                
+                # Convert to a 0-100 scale to match other metrics
+                liquidity_score = Decimal(str(liquidity_score)) * Decimal('100')
+                
+                # Log all the score components
+                logger.debug(f"Spread width: {self.distance_between_strikes}, optimal: {self.optimal_spread_width}, " 
+                            f"proximity: {width_proximity:.2f}, width score: {width_score:.2f}, standard: {is_standard}")
+                logger.debug(f"Reward/Risk: {reward_risk_ratio:.2f}, Target: {self.TARGET_REWARD_RISK_RATIO}, "
+                            f"RR Score: {ratio_proximity:.2f}")
+                logger.debug(f"Risk: ${self.max_risk}, Risk %: {risk_percent*100:.2f}%, Risk Score: {risk_score:.2f}")
+                logger.debug(f"Liquidity: OI={avg_oi:.0f}, Volume={avg_volume:.0f}, Score: {liquidity_score:.2f}")
+                
+                # Warn about low liquidity
+                if avg_oi < self.MIN_ACCEPTABLE_OI or avg_volume < self.MIN_ACCEPTABLE_VOLUME:
+                    logger.warning(f"Low liquidity for {self.short_contract.ticker}/{self.long_contract.ticker}: "
+                                f"OI={avg_oi:.0f}, Volume={avg_volume:.0f}")
+                
+                # Calculate an adjusted score based on multiple factors
+                # - POP (higher is better)
+                # - Width proximity (lower is better)
+                # - Reward/Risk ratio (higher is better)
+                # - Risk percentage (lower is better)
+                # - Liquidity (higher is better)
+                
+                # Assign weights to each factor (sum to 1.0)
+                pop_weight = Decimal('0.35')       # 35% weight on probability of profit
+                width_weight = Decimal('0.15')     # 15% weight on optimal width
+                rr_weight = Decimal('0.20')        # 20% weight on reward/risk ratio
+                risk_weight = Decimal('0.10')      # 10% weight on total risk
+                liquidity_weight = Decimal('0.20')  # 20% weight on liquidity
+                
+                # Calculate the adjusted score
+                self.adjusted_score = (
+                    pop_weight * self.probability_of_profit +  # Higher POP is better
+                    width_weight * width_score +  # Using strategy-adjusted width score
+                    rr_weight * (ratio_proximity * Decimal('100')) +  # Higher ratio_proximity is better
+                    risk_weight * (risk_score * Decimal('100')) +  # Higher risk_score is better
+                    liquidity_weight * liquidity_score  # Higher liquidity is better
+                )
+                
+                logger.debug(f"POP: {self.probability_of_profit}, Width Score: {width_score:.2f}, " 
+                            f"Liquidity Score: {liquidity_score:.2f}, Final Score: {self.adjusted_score:.2f}")
+                
+                # Track spreads with standard and non-standard widths separately
+                current_spread = self.to_dict()
+                
+                # Update best spreads based on standard vs non-standard width
+                if is_standard:
+                    if not best_spread_width or Decimal(str(best_spread_width.get('adjusted_score', '0'))) < self.adjusted_score:
+                        best_spread_width = current_spread
+                else:
+                    if not best_spread_non_standard or Decimal(str(best_spread_non_standard.get('adjusted_score', '0'))) < self.adjusted_score:
+                        best_spread_non_standard = current_spread
+                
+                # Still maintain the original POP-based selection for backward compatibility
                 if self.probability_of_profit > best_pop:
                     best_pop = self.probability_of_profit
-                    best_spread = self.to_dict()
+                    best_spread = current_spread
                 
             # For test selectors, exit after finding the first valid spread
             if found_valid_spread and not isinstance(self.contract_selector, StandardContractSelector):
                 break
 
-        if best_spread:
-            self.from_dict(best_spread)
-            logger.debug(f'Found a match! {self.second_leg_contract.ticker} with delta {self.second_leg_snapshot.greeks.delta}')
+        # Determine which spread to use based on availability
+        # Prefer standard width spreads when available
+        final_spread = None
+        if best_spread_width:
+            logger.info(f"Using standard width spread with width {best_spread_width.get('distance_between_strikes', 'unknown')}")
+            final_spread = best_spread_width
+        elif best_spread_non_standard:
+            logger.info(f"Using non-standard width spread with width {best_spread_non_standard.get('distance_between_strikes', 'unknown')}")
+            final_spread = best_spread_non_standard
+        else:
+            # Fall back to the original POP-based selection if no optimal width spreads found
+            logger.debug("No optimal width spreads found, falling back to POP-based selection")
+            final_spread = best_spread
+
+        if final_spread:
+            self.from_dict(final_spread)
+            logger.debug(f'Found a match! {self.second_leg_contract.ticker} with score {self.adjusted_score}, description: {self.description}')
             return True
 
         return False

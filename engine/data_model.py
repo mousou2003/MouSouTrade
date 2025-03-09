@@ -342,6 +342,7 @@ class SpreadDataModel(DataModelBase):
     max_reward: Optional[Decimal] = None
     max_risk: Optional[Decimal] = None
     net_premium: Optional[Decimal] = None
+    optimal_spread_width: Optional[Decimal] = None  # Added field for storing optimal spread width
     previous_close: Optional[Decimal] = None
     probability_of_profit: Optional[Decimal] = None
     second_leg_contract: Optional[Contract] = None
@@ -355,6 +356,7 @@ class SpreadDataModel(DataModelBase):
     target_price: Optional[Decimal] = None
     underlying_ticker: Optional[str] = None
     update_date: Optional[date] = None
+    adjusted_score: Optional[Decimal] = None  # Added field for spread selection scoring
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SpreadDataModel':
