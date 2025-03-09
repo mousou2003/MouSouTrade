@@ -283,46 +283,102 @@
                             row.append(`<td>${item.description || 'N/A'}</td>`);
 
                             const detailsButton = $(`<button class="view-description" 
-                                data-short_premium="${item.short_premium ? Number(item.short_premium).toFixed(2) : 'N/A'}" 
-                                data-long_premium="${item.long_premium ? Number(item.long_premium).toFixed(2) : 'N/A'}" 
-                                data-max_risk="${item.max_risk ? Number(item.max_risk).toFixed(2) : 'N/A'}" 
-                                data-max_reward="${item.max_reward ? Number(item.max_reward).toFixed(2) : 'N/A'}" 
-                                data-breakeven="${item.breakeven ? Number(item.breakeven).toFixed(2) : 'N/A'}" 
+                                data-description="${item.description || 'N/A'}" 
+                                data-strategy="${item.strategy || 'N/A'}" 
+                                data-direction="${item.direction || 'N/A'}" 
+                                data-contract_type="${item.contract_type || 'N/A'}" 
+                                data-distance_between_strikes="${item.distance_between_strikes ? Number(item.distance_between_strikes).toFixed(2) : 'N/A'}" 
+                                data-optimal_spread_width="${item.optimal_spread_width ? Number(item.optimal_spread_width).toFixed(2) : 'N/A'}" 
+                                data-datetime="${item.datetime || 'N/A'}" 
+                                data-expiration_date="${item.expiration_date || 'N/A'}" 
+                                data-exit_date="${item.exit_date || 'N/A'}" 
+                                data-update_date="${item.update_date || 'N/A'}" 
+                                data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + Number(item.short_contract.strike_price).toFixed(2) + ')' : 'N/A'}" 
+                                data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + Number(item.long_contract.strike_price).toFixed(2) + ')' : 'N/A'}" 
+                                data-first_leg_contract_position="${item.first_leg_contract_position || 'N/A'}" 
+                                data-second_leg_contract_position="${item.second_leg_contract_position || 'N/A'}" 
+                                data-second_leg_depth="${item.second_leg_depth || 'N/A'}" 
+                                data-previous_close="${item.previous_close ? Number(item.previous_close).toFixed(2) : 'N/A'}" 
                                 data-entry_price="${item.entry_price ? Number(item.entry_price).toFixed(2) : 'N/A'}" 
                                 data-target_price="${item.target_price ? Number(item.target_price).toFixed(2) : 'N/A'}" 
                                 data-stop_price="${item.stop_price ? Number(item.stop_price).toFixed(2) : 'N/A'}" 
-                                data-exit_date="${item.exit_date || 'N/A'}" 
-                                data-short_contract="${item.short_contract ? item.short_contract.ticker + ' (' + Number(item.short_contract.strike_price).toFixed(2) + ')' : 'N/A'}" 
-                                data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + Number(item.long_contract.strike_price).toFixed(2) + ')' : 'N/A'}" 
-                                data-percentage_max_risk="${item.percentage_max_risk ? Number(item.percentage_max_risk).toFixed(2) : 'N/A'}"
-                                data-percentage_max_reward="${item.percentage_max_profit ? Number(item.percentage_max_profit).toFixed(2) : 'N/A'}"
+                                data-breakeven="${item.breakeven ? Number(item.breakeven).toFixed(2) : 'N/A'}" 
+                                data-short_premium="${item.short_premium ? Number(item.short_premium).toFixed(2) : 'N/A'}" 
+                                data-long_premium="${item.long_premium ? Number(item.long_premium).toFixed(2) : 'N/A'}" 
+                                data-net_premium="${item.net_premium ? Number(item.net_premium).toFixed(2) : 'N/A'}"
+                                data-max_risk="${item.max_risk ? Number(item.max_risk).toFixed(2) : 'N/A'}" 
+                                data-max_reward="${item.max_reward ? Number(item.max_reward).toFixed(2) : 'N/A'}" 
+                                data-probability_of_profit="${item.probability_of_profit ? Number(item.probability_of_profit).toFixed(2) : 'N/A'}"
                                 data-adjusted_score="${item.adjusted_score ? Number(item.adjusted_score).toFixed(2) : 'N/A'}"
-                                data-probability_of_profit="${item.probability_of_profit ? Number(item.probability_of_profit).toFixed(2) : 'N/A'}">Details</button>`);
+                                data-confidence_level="${item.confidence_level ? Number(item.confidence_level).toFixed(2) : 'N/A'}"
+                                data-client="${item.client || 'N/A'}">Details</button>`);
 
                             row.append($('<td>').append(detailsButton));
                             $('#main-data-container tbody').append(row);
 
                             const detailsContainer = $(`
                                 <tr class="details-container">
-                                    <td colspan="3">
-                                        <ul>
-                                            <li><strong>Credit:</strong> <span class="credit-content"></span></li>
-                                            <li><strong>Debit:</strong> <span class="debit-content"></span></li>
-                                            <li><strong>Max Risk:</strong> <span class="max-risk-content"></span></li>
-                                            <li><strong>Max Reward:</strong> <span class="max-reward-content"></span></li>
-                                            <li><strong>Breakeven:</strong> <span class="breakeven-content"></span></li>
-                                            <li><strong>Probability of Profit:</strong> <span class="pop-content"></span>%</li>
-                                        </ul>
-                                    </td>
-                                    <td colspan="3">
-                                        <ul>
-                                            <li><strong>Entry Price:</strong> <span class="entry-price-content"></span></li>
-                                            <li><strong>Target Price:</strong> <span class="target-price-content"></span></li>
-                                            <li><strong>Stop Price:</strong> <span class="stop-price-content"></span></li>
-                                            <li><strong>Exit Date:</strong> <span class="exit-date-content"></span></li>
-                                            <li><strong>Short Contract:</strong> <span class="short-contract-content"></span></li>
-                                            <li><strong>Long Contract:</strong> <span class="long-contract-content"></span></li>
-                                        </ul>
+                                    <td colspan="6">
+                                        <div class="row">
+                                            <div class="column">
+                                                <h4>Spread Information</h4>
+                                                <ul>
+                                                    <li><strong>Description:</strong> <span class="description-content"></span></li>
+                                                    <li><strong>Strategy:</strong> <span class="strategy-content"></span></li>
+                                                    <li><strong>Direction:</strong> <span class="direction-content"></span></li>
+                                                    <li><strong>Contract Type:</strong> <span class="contract-type-content"></span></li>
+                                                    <li><strong>Distance Between Strikes:</strong> <span class="strike-distance-content"></span></li>
+                                                    <li><strong>Optimal Spread Width:</strong> <span class="optimal-width-content"></span></li>
+                                                </ul>
+                                                
+                                                <h4>Date Information</h4>
+                                                <ul>
+                                                    <li><strong>Datetime:</strong> <span class="datetime-content"></span></li>
+                                                    <li><strong>Expiration Date:</strong> <span class="expiration-date-content"></span></li>
+                                                    <li><strong>Exit Date:</strong> <span class="exit-date-content"></span></li>
+                                                    <li><strong>Update Date:</strong> <span class="update-date-content"></span></li>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div class="column">
+                                                <h4>Contract Details</h4>
+                                                <ul>
+                                                    <li><strong>Long Contract:</strong> <span class="long-contract-content"></span></li>
+                                                    <li><strong>Short Contract:</strong> <span class="short-contract-content"></span></li>
+                                                    <li><strong>First Leg Position:</strong> <span class="first-leg-position-content"></span></li>
+                                                    <li><strong>Second Leg Position:</strong> <span class="second-leg-position-content"></span></li>
+                                                    <li><strong>Second Leg Depth:</strong> <span class="second-leg-depth-content"></span></li>
+                                                </ul>
+                                                
+                                                <h4>Pricing Information</h4>
+                                                <ul>
+                                                    <li><strong>Previous Close:</strong> <span class="prev-close-content"></span></li>
+                                                    <li><strong>Entry Price:</strong> <span class="entry-price-content"></span></li>
+                                                    <li><strong>Target Price:</strong> <span class="target-price-content"></span></li>
+                                                    <li><strong>Stop Price:</strong> <span class="stop-price-content"></span></li>
+                                                    <li><strong>Breakeven:</strong> <span class="breakeven-content"></span></li>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div class="column">
+                                                <h4>Premium & Risk/Reward</h4>
+                                                <ul>
+                                                    <li><strong>Short Premium:</strong> <span class="short-premium-content"></span></li>
+                                                    <li><strong>Long Premium:</strong> <span class="long-premium-content"></span></li>
+                                                    <li><strong>Net Premium:</strong> <span class="net-premium-content"></span></li>
+                                                    <li><strong>Max Risk:</strong> <span class="max-risk-content"></span></li>
+                                                    <li><strong>Max Reward:</strong> <span class="max-reward-content"></span></li>
+                                                </ul>
+                                                
+                                                <h4>Analysis Metrics</h4>
+                                                <ul>
+                                                    <li><strong>Probability of Profit:</strong> <span class="pop-content"></span>%</li>
+                                                    <li><strong>Adjusted Score:</strong> <span class="score-content"></span></li>
+                                                    <li><strong>Confidence Level:</strong> <span class="confidence-content"></span></li>
+                                                    <li><strong>Client:</strong> <span class="client-content"></span></li>
+                                                </ul>
+                                            </div>
+                                        </div>
                                     </td>
                                 </tr>
                             `);
@@ -337,24 +393,47 @@
             $(document).on('click', '.view-description', function() {
                 try {
                     const detailsRow = $(this).closest('tr').next('.details-container');
-                    detailsRow.find('.credit-content').text($(this).data('short_premium') || 'N/A');
-                    detailsRow.find('.debit-content').text($(this).data('long_premium') || 'N/A');
-                    detailsRow.find('.max-risk-content').text($(this).data('max_risk') || 'N/A');
-                    detailsRow.find('.max-reward-content').text($(this).data('max_reward') || 'N/A');
-                    detailsRow.find('.breakeven-content').text($(this).data('breakeven') || 'N/A');
-                    detailsRow.find('.entry-price-content').text($(this).data('entry_price') || 'N/A');
-                    detailsRow.find('.target-price-content').text($(this).data('target_price') || 'N/A');
-                    detailsRow.find('.stop-price-content').text($(this).data('stop_price') || 'N/A');
-                    detailsRow.find('.exit-date-content').text($(this).data('exit_date') || 'N/A');
-                    detailsRow.find('.short-contract-content').text($(this).data('short_contract'));
-                    detailsRow.find('.long-contract-content').text($(this).data('long_contract'));
-                    detailsRow.find('.pop-content').text($(this).data('probability_of_profit') || 'N/A');
                     
-                    // Add adjusted score to details if available
-                    const score = $(this).data('adjusted_score');
-                    if (score && score !== 'N/A') {
-                        detailsRow.find('.score-content').text(score);
-                    }
+                    // Spread Information
+                    detailsRow.find('.description-content').text($(this).data('description'));
+                    detailsRow.find('.strategy-content').text($(this).data('strategy'));
+                    detailsRow.find('.direction-content').text($(this).data('direction'));
+                    detailsRow.find('.contract-type-content').text($(this).data('contract_type'));
+                    detailsRow.find('.strike-distance-content').text($(this).data('distance_between_strikes'));
+                    detailsRow.find('.optimal-width-content').text($(this).data('optimal_spread_width'));
+                    
+                    // Date Information
+                    detailsRow.find('.datetime-content').text($(this).data('datetime'));
+                    detailsRow.find('.expiration-date-content').text($(this).data('expiration_date'));
+                    detailsRow.find('.exit-date-content').text($(this).data('exit_date'));
+                    detailsRow.find('.update-date-content').text($(this).data('update_date'));
+                    
+                    // Contract Details
+                    detailsRow.find('.long-contract-content').text($(this).data('long_contract'));
+                    detailsRow.find('.short-contract-content').text($(this).data('short_contract'));
+                    detailsRow.find('.first-leg-position-content').text($(this).data('first_leg_contract_position'));
+                    detailsRow.find('.second-leg-position-content').text($(this).data('second_leg_contract_position'));
+                    detailsRow.find('.second-leg-depth-content').text($(this).data('second_leg_depth'));
+                    
+                    // Pricing Information
+                    detailsRow.find('.prev-close-content').text($(this).data('previous_close'));
+                    detailsRow.find('.entry-price-content').text($(this).data('entry_price'));
+                    detailsRow.find('.target-price-content').text($(this).data('target_price'));
+                    detailsRow.find('.stop-price-content').text($(this).data('stop_price'));
+                    detailsRow.find('.breakeven-content').text($(this).data('breakeven'));
+                    
+                    // Premium & Risk/Reward
+                    detailsRow.find('.short-premium-content').text($(this).data('short_premium'));
+                    detailsRow.find('.long-premium-content').text($(this).data('long_premium'));
+                    detailsRow.find('.net-premium-content').text($(this).data('net_premium'));
+                    detailsRow.find('.max-risk-content').text($(this).data('max_risk'));
+                    detailsRow.find('.max-reward-content').text($(this).data('max_reward'));
+                    
+                    // Analysis Metrics
+                    detailsRow.find('.pop-content').text($(this).data('probability_of_profit'));
+                    detailsRow.find('.score-content').text($(this).data('adjusted_score'));
+                    detailsRow.find('.confidence-content').text($(this).data('confidence_level'));
+                    detailsRow.find('.client-content').text($(this).data('client'));
                     
                     detailsRow.toggle();
                 } catch (error) {
