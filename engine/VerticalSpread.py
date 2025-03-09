@@ -399,8 +399,34 @@ class VerticalSpread(SpreadDataModel):
                     liquidity_weight * liquidity_score  # Higher liquidity is better
                 )
                 
+                # CURRENT APPROACH: Calculate base confidence from adjusted_score
+                # This approach evaluates the quality of the trade strategy itself
+                base_confidence = float(min(Decimal('1.0'), self.adjusted_score / Decimal('100.0')))
+                
+                # Key differences between approaches:
+                # 1. Score-based confidence evaluates trade QUALITY (POP, reward/risk, etc.)
+                # 2. Data-based confidence evaluates data RELIABILITY only
+                # 3. Score-based considers multiple weighted strategic factors
+                # 4. Data-based ignores the actual trade parameters/values
+                # 5. The hybrid approach (currently implemented) gives the best of both worlds
+                
+                # Calculate the overall confidence by combining all confidence levels directly
+                # We weight the data source confidence levels - total weights should equal 1.0 (100%)
+                data_confidence = (
+                    self.first_leg_contract.confidence_level * 0.25 +      # 25% weight for first leg contract
+                    self.second_leg_contract.confidence_level * 0.25 +     # 25% weight for second leg contract
+                    self.first_leg_snapshot.confidence_level * 0.25 +      # 25% weight for first leg snapshot
+                    self.second_leg_snapshot.confidence_level * 0.25       # 25% weight for second leg snapshot
+                )
+                
+                # Final confidence is weighted average of the base confidence (from score) and data confidence
+                # 70% from our score calculation, 30% from the input data confidence levels
+                self.confidence_level = base_confidence * 0.7 + data_confidence * 0.3
+                
                 logger.debug(f"POP: {self.probability_of_profit}, Width Score: {width_score:.2f}, " 
                             f"Liquidity Score: {liquidity_score:.2f}, Final Score: {self.adjusted_score:.2f}")
+                logger.debug(f"Base confidence: {base_confidence:.2f}, Data confidence: {data_confidence:.2f}, "
+                            f"Final confidence: {self.confidence_level:.2f}")
                 
                 # Track spreads with standard and non-standard widths separately
                 current_spread = self.to_dict()
