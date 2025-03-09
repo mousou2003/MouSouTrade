@@ -93,10 +93,10 @@ class StandardContractSelector(ContractSelector):
         
         # Pre-filter contracts by type to improve performance
         for position, contract in enumerate(contracts):
-            if (contract.contract_type == expected_contract_type and 
-                contract.underlying_ticker == underlying_ticker):
-                filtered_contracts.append(contract)
-                filtered_positions.append(position)
+            if contract.contract_type.value is expected_contract_type.value :
+                if contract.underlying_ticker.lower() == underlying_ticker.lower():
+                    filtered_contracts.append(contract)
+                    filtered_positions.append(position)
                 
         # No matching contracts by type
         if not filtered_contracts:
