@@ -25,6 +25,79 @@ The module implements two main vertical spread types:
 It uses the Options module for option selection logic and implements the SpreadDataModel interface
 for consistent data representation across the application.
 """
+""" 
+
+# Vertical Spread Width in Real Trading Scenarios
+
+In real-world options trading, vertical spread widths are chosen strategically based on several factors. Here's a detailed breakdown:
+
+### Typical Spread Widths
+
+1. **Small Spreads (1-5 points)**
+   - **Common for:** Lower-priced stocks ($20-100)
+   - **Applications:** Weekly or short-term (30-day) strategies
+   - **Example:** For a $50 stock, a 2-point spread (e.g., 49/51 or 48/50) represents 4% of the underlying price
+   - **Advantages:** Lower capital requirement, precise strikes around technical levels
+
+2. **Medium Spreads (5-10 points)**
+   - **Common for:** Mid-priced stocks ($100-300)
+   - **Applications:** Monthly expirations (30-45 days)
+   - **Example:** For a $150 stock, a 7.5-point spread (147.5/155) represents 5% of the underlying
+   - **Advantages:** Balance between risk/reward and capital efficiency
+
+3. **Wide Spreads (10-20+ points)**
+   - **Common for:** High-priced stocks (>$300) or index options
+   - **Applications:** Longer-term positions or higher conviction trades
+   - **Example:** For SPX at 4000, a 20-point spread (3980/4000) is only 0.5% of the underlying
+   - **Advantages:** Higher potential absolute profit, better commission efficiency
+
+### General Guidelines by Market Professionals
+
+1. **Percentage of Underlying Price:**
+   - Typically ranges from 2% to 10% of the underlying's price
+   - More liquid stocks tend toward the lower end (2-5%)
+   - Less liquid stocks may require wider spreads (7-10%)
+
+2. **Based on Implied Volatility (IV):**
+   - Higher IV environments → wider spreads (to capture premium)
+   - Lower IV environments → narrower spreads (for precision)
+
+3. **Based on Strategy:**
+   - **Credit spreads:** Often narrower to maximize probability of profit
+   - **Debit spreads:** Often wider to increase potential return
+
+4. **Risk Management Factors:**
+   - Maximum acceptable loss (wider spreads = more capital at risk)
+   - Reward-to-risk ratio target (typically 1:1 to 3:1)
+   - Probability of profit target (higher with narrower spreads)
+
+### Common Width Selection Methods
+
+1. **Strike Liquidity Method:**
+   - Choose the most liquid strikes available (highest open interest/volume)
+   - Often results in round-number strikes (e.g., 100/105 rather than 102/107)
+
+2. **Delta-Based Method:**
+   - First leg: Select by target delta (e.g., 0.30 for credit spreads)
+   - Second leg: Select by target delta spacing (e.g., 0.15-0.20 delta away)
+
+3. **Technical Analysis Method:**
+   - Choose strikes based on support/resistance levels
+   - Often creates non-standard width spreads
+
+4. **Standard Width Method:**
+   - Use exchange-standard widths (e.g., 5-point spreads for stocks over $100)
+   - Maximizes liquidity and ease of execution
+
+### Real-World Examples
+
+- **SPY ($420):** 5-point spreads (1.2% of underlying) are standard
+- **AAPL ($175):** 5-point spreads (2.9% of underlying) are common
+- **AMZN ($130):** 2.5 or 5-point spreads (2-4% of underlying)
+- **TSLA ($250):** 10-point spreads (4% of underlying)
+- **SPX ($4200):** 25-50 point spreads (0.6-1.2% of underlying)
+
+In professional trading environments, spread width is often standardized by asset class to simplify risk management across portfolios. """
 
 from engine.data_model import *
 from engine.Options import Options, TradeStrategy
@@ -106,10 +179,6 @@ class VerticalSpread(SpreadDataModel):
 
             for second_leg in second_leg_candidates:
                 self.second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = second_leg
-
-                # Ensure contract types match for a valid spread
-                if self.first_leg_contract.contract_type != self.second_leg_contract.contract_type:
-                    continue
                 
                 # Make sure the strike prices are in the correct order for the strategy
                 if self.strategy == StrategyType.CREDIT:
@@ -129,7 +198,7 @@ class VerticalSpread(SpreadDataModel):
 
                 self.distance_between_strikes = abs(self.first_leg_contract.strike_price - self.second_leg_contract.strike_price)
                 if self.distance_between_strikes == 0:
-                    logger.debug("Zero distance between strikes is not allowed.")
+                    logger.error("Zero distance between strikes is not allowed.")
                     continue
                 
                 # Use the actual bid/ask prices for calculating premium delta, not last_trade

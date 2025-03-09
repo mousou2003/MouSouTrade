@@ -175,9 +175,9 @@ class Options:
         if trade_strategy == TradeStrategy.HIGH_PROBABILITY:
             return (Decimal('0.10'), Decimal('0.30'))
         elif trade_strategy == TradeStrategy.BALANCED:
-            return (Decimal('0.30'), Decimal('0.45'))
+            return (Decimal('0.30'), Decimal('0.50'))
         elif trade_strategy == TradeStrategy.DIRECTIONAL:
-            return (Decimal('0.45'), Decimal('0.70'))
+            return (Decimal('0.50'), Decimal('0.70'))
         else:
             raise ValueError("Invalid trade strategy. Choose from TradeStrategy.HIGH_PROBABILITY, TradeStrategy.BALANCED, or TradeStrategy.DIRECTIONAL.")
 
