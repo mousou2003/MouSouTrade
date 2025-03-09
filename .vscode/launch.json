@@ -28,7 +28,8 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}",
                 "MOUSOUTRADE_STAGE": "Alpha",
-                "DEBUG_MODE":"True"
+                "DEBUG_MODE":"True",
+                "MOUSOUTRADE_CLIENTS":  "etrade;polygon"
             },
             "autoReload": { "enable": true }
         }

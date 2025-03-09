@@ -12,6 +12,7 @@ class ConfigLoader:
     def __init__(self, json_file: str):
         self.config = self._load_config(json_file)
         self.json_file = json_file
+        self._load_config(self.json_file)
 
     def _load_config(self, json_file: str) -> dict:
         try:
@@ -30,12 +31,14 @@ class ConfigLoader:
     def reload_config(self):
         self.config = self._load_config(self.json_file)
 
-    def get_client_keys(self, client_name: ClientKeys, stage: str) -> dict:
+    def get_client_keys(self, client_name: str, stage: str) -> dict:
         try:
-            client_config = self.config["Clients"][client_name.value][stage]
+            client_config = self.config["Clients"][client_name][stage]
             return {
                 "Key": client_config["Key"],
-                "Secret": client_config["Secret"]
+                "Secret": client_config["Secret"],
+                "code": client_config["code"],
+                "BaseUrl": client_config["BaseUrl"]
             }
         except KeyError as e:
             logger.error(f"Key error: {e}")

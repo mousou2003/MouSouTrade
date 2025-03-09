@@ -22,12 +22,9 @@ class ETradeClient(BaseMarketDataClient):
     stocks_data = {}
 
     def __init__(self, config_file: str, stage: str, throttle_limit=DEFAULT_THROTTLE_LIMIT):
-        super().__init__(config_file, stage)
-        self.client_name = ETRADE_CLIENT_NAME
-        self._load_key_secret(self.config, stage)
+        super().__init__(client_name = ETRADE_CLIENT_NAME, config_file = config_file, stage= stage)
         self.THROTTLE_LIMIT = throttle_limit
         # Initialize ETrade API client here
-        base_url = self.config["Clients"][self.client_name][stage]["BaseUrl"]
         self.etrade = OAuth1Service(
             name="etrade",
             consumer_key=self._my_key,
@@ -35,7 +32,7 @@ class ETradeClient(BaseMarketDataClient):
             request_token_url="https://api.etrade.com/oauth/request_token",
             access_token_url="https://api.etrade.com/oauth/access_token",
             authorize_url="https://us.etrade.com/e/t/etws/authorize?key={}&token={}",
-            base_url=base_url
+            base_url=self._BaseUrl
         )
         request_token, request_token_secret = self.etrade.get_request_token(
             params={"oauth_callback": "oob", "format": "json"}
@@ -62,9 +59,9 @@ class ETradeClient(BaseMarketDataClient):
             self.verification_code = input("Please enter the verification code: ")
         except Exception as e:
             logger.warning(f"Failed to read input: {e}")
-        while not self.verification_code:
-            self.config_loader.reload_config()
-            self.verification_code = self.config.get("ETRADE_CODE")
+        while not self.verification_code or len(self.verification_code) < 5:
+            self.reload_config()
+            self.verification_code = self._mycode
             time.sleep(self.WAIT_TIME)
 
     def get_previous_close(self, ticker):

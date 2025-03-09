@@ -42,16 +42,22 @@ class BaseMarketDataClient(IMarketDataClient, ABC):
     client_name: str = None
     _my_key: str = None
     _my_secret: str = None
+    _mycode: str = None
+    _BaseUrl: str = None
+    stage: str = None
+    config_loader: ConfigLoader = None
     
-    def __init__(self, config_file: str, stage: str):
-        self.config_loader = ConfigLoader(config_file)
+    def __init__(self, stage: str= None, config_file: str = None, client_name:str = None):
         self.stage = stage
-        self.config = self.config_loader.config
+        self.client_name = client_name
+        if config_file:
+            self.config_loader = ConfigLoader(config_file)
+            self._load_key_secret()
 
     def reload_config(self):
         self.config_loader.reload_config()
-        self.config = self.config_loader.config
-    
+        self._load_key_secret()
+
     def get_previous_market_open_day(self, date=None):
         date = date if date else datetime.now().date()
         days_checked = 0
@@ -62,11 +68,11 @@ class BaseMarketDataClient(IMarketDataClient, ABC):
                 return date
         raise IndexError("Failed to find a previous market open day within the last 7 days")
     
-    def _load_key_secret(self, config, stage):
-        clients = config["Clients"]
-        logger.debug("load secrets")
-        self._my_key = clients[self.client_name][stage]["Key"]
-        self._my_secret = clients[self.client_name][stage]["Secret"]
+    def _load_key_secret(self):
+        keys = self.config_loader.get_client_keys(self.client_name, self.stage)
+        self._my_key = keys["Key"]
+        self._my_secret = keys["Secret"]
+        self._mycode = keys["code"]
 
     def _wait_for_no_throttle(self, wait_time=0):
         time.sleep(wait_time)

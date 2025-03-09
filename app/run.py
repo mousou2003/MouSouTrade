@@ -168,7 +168,8 @@ def main():
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
         
-        market_data_client = MarketDataClient(config_file='./config/SecurityKeys.json', stage=stage)
+        clients = env_vars['MOUSOUTRADE_CLIENTS']
+        market_data_client = MarketDataClient(config_file='./config/SecurityKeys.json', stage=stage, client_name=clients)
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 
         for stock_number, stock in enumerate(stocks, start=1):

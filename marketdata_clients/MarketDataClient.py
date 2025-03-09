@@ -17,21 +17,22 @@ class MarketDataClient(BaseMarketDataClient):
     polygon_client = None
 
     def __init__(self, config_file: str, stage: str = "Sandbox", client_name: str = None):
-        super().__init__(config_file, stage)
+        super().__init__()
         logger.debug("create MarketDataClient")
 
         if client_name is None:
-            _name = f'{POLYGON_CLIENT_NAME};{ETRADE_CLIENT_NAME}'
+            raise MarketDataException("Client name is required")
         else:
             _name = client_name
         if POLYGON_CLIENT_NAME in _name:
-            self.polygon_client = PolygonClient(config_file, stage=stage)
+            self.polygon_client = PolygonClient(config_file=config_file, stage=stage)
             self.client = self.polygon_client
         if ETRADE_CLIENT_NAME in _name:
-            self.etrade_client = ETradeClient(config_file, stage=stage)
+            self.etrade_client = ETradeClient(config_file=config_file, stage=stage)
             self.client = self.etrade_client
         if ETRADE_CLIENT_NAME in _name and POLYGON_CLIENT_NAME in _name:
             self.client = None
+            
     def get_previous_close(self, ticker):
         try:
             client = self.client
