@@ -73,6 +73,7 @@ class BaseMarketDataClient(IMarketDataClient, ABC):
         self._my_key = keys["Key"]
         self._my_secret = keys["Secret"]
         self._mycode = keys["code"]
+        self._BaseUrl = keys["BaseUrl"]
 
     def _wait_for_no_throttle(self, wait_time=0):
         time.sleep(wait_time)
