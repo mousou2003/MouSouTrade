@@ -1,7 +1,7 @@
 # filepath: /c:/Users/mouso/Documents/GitHub/MouSouTrade/requirements.txt
-Flask==2.0.1
-Werkzeug==2.0.1
-boto3==1.26.0
-pydantic==1.8.2
-scipy==1.7.3
-numpy==1.21.2
+Flask
+Werkzeug
+boto3
+pydantic
+scipy
+numpy
