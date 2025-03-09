@@ -132,7 +132,6 @@ class VerticalSpread(SpreadDataModel):
         self.strategy = strategy
         self.previous_close = previous_close
         self.expiration_date = date
-        self.second_leg_depth = 0
         self.update_date = datetime.today().date()
         self.contracts = contracts
 
@@ -258,6 +257,7 @@ class VerticalSpread(SpreadDataModel):
                 self.target_price = self.get_target_price()
                 self.stop_price = self.get_stop_price()
                 self.exit_date = self.get_exit_date()
+                self.contract_type = self.long_contract.contract_type
 
                 # Calculate probability of profit
                 # In test mode, we'll set a fixed value

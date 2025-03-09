@@ -238,6 +238,8 @@
                 $.each(groupedData, function(ticker, items) {
                     items.forEach((item) => {
                         console.log("Content of item:", item);
+                        // Add this debug line
+                        console.log("Contract type value:", item.contract_type, "Type:", typeof item.contract_type);
                         try {
                             let row = $('<tr>');
                             row.append(`
@@ -286,10 +288,13 @@
                                 data-description="${item.description || 'N/A'}" 
                                 data-strategy="${item.strategy || 'N/A'}" 
                                 data-direction="${item.direction || 'N/A'}" 
-                                data-contract_type="${item.contract_type || 'N/A'}" 
+                                data-contract_type="${item.contract_type ? 
+                                    (typeof item.contract_type === 'object' ? 
+                                        (item.contract_type.value || '') : 
+                                        item.contract_type) : 
+                                    'N/A'}" 
                                 data-distance_between_strikes="${item.distance_between_strikes ? Number(item.distance_between_strikes).toFixed(2) : 'N/A'}" 
                                 data-optimal_spread_width="${item.optimal_spread_width ? Number(item.optimal_spread_width).toFixed(2) : 'N/A'}" 
-                                data-datetime="${item.datetime || 'N/A'}" 
                                 data-expiration_date="${item.expiration_date || 'N/A'}" 
                                 data-exit_date="${item.exit_date || 'N/A'}" 
                                 data-update_date="${item.update_date || 'N/A'}" 
@@ -297,7 +302,6 @@
                                 data-long_contract="${item.long_contract ? item.long_contract.ticker + ' (' + Number(item.long_contract.strike_price).toFixed(2) + ')' : 'N/A'}" 
                                 data-first_leg_contract_position="${item.first_leg_contract_position || 'N/A'}" 
                                 data-second_leg_contract_position="${item.second_leg_contract_position || 'N/A'}" 
-                                data-second_leg_depth="${item.second_leg_depth || 'N/A'}" 
                                 data-previous_close="${item.previous_close ? Number(item.previous_close).toFixed(2) : 'N/A'}" 
                                 data-entry_price="${item.entry_price ? Number(item.entry_price).toFixed(2) : 'N/A'}" 
                                 data-target_price="${item.target_price ? Number(item.target_price).toFixed(2) : 'N/A'}" 
@@ -310,8 +314,7 @@
                                 data-max_reward="${item.max_reward ? Number(item.max_reward).toFixed(2) : 'N/A'}" 
                                 data-probability_of_profit="${item.probability_of_profit ? Number(item.probability_of_profit).toFixed(2) : 'N/A'}"
                                 data-adjusted_score="${item.adjusted_score ? Number(item.adjusted_score).toFixed(2) : 'N/A'}"
-                                data-confidence_level="${item.confidence_level ? Number(item.confidence_level).toFixed(2) : 'N/A'}"
-                                data-client="${item.client || 'N/A'}">Details</button>`);
+                                data-confidence_level="${item.confidence_level ? Number(item.confidence_level).toFixed(2) : 'N/A'}">Details</button>`);
 
                             row.append($('<td>').append(detailsButton));
                             $('#main-data-container tbody').append(row);
@@ -333,7 +336,6 @@
                                                 
                                                 <h4>Date Information</h4>
                                                 <ul>
-                                                    <li><strong>Datetime:</strong> <span class="datetime-content"></span></li>
                                                     <li><strong>Expiration Date:</strong> <span class="expiration-date-content"></span></li>
                                                     <li><strong>Exit Date:</strong> <span class="exit-date-content"></span></li>
                                                     <li><strong>Update Date:</strong> <span class="update-date-content"></span></li>
@@ -347,7 +349,6 @@
                                                     <li><strong>Short Contract:</strong> <span class="short-contract-content"></span></li>
                                                     <li><strong>First Leg Position:</strong> <span class="first-leg-position-content"></span></li>
                                                     <li><strong>Second Leg Position:</strong> <span class="second-leg-position-content"></span></li>
-                                                    <li><strong>Second Leg Depth:</strong> <span class="second-leg-depth-content"></span></li>
                                                 </ul>
                                                 
                                                 <h4>Pricing Information</h4>
@@ -375,7 +376,6 @@
                                                     <li><strong>Probability of Profit:</strong> <span class="pop-content"></span>%</li>
                                                     <li><strong>Adjusted Score:</strong> <span class="score-content"></span></li>
                                                     <li><strong>Confidence Level:</strong> <span class="confidence-content"></span></li>
-                                                    <li><strong>Client:</strong> <span class="client-content"></span></li>
                                                 </ul>
                                             </div>
                                         </div>
@@ -403,7 +403,6 @@
                     detailsRow.find('.optimal-width-content').text($(this).data('optimal_spread_width'));
                     
                     // Date Information
-                    detailsRow.find('.datetime-content').text($(this).data('datetime'));
                     detailsRow.find('.expiration-date-content').text($(this).data('expiration_date'));
                     detailsRow.find('.exit-date-content').text($(this).data('exit_date'));
                     detailsRow.find('.update-date-content').text($(this).data('update_date'));
@@ -413,7 +412,6 @@
                     detailsRow.find('.short-contract-content').text($(this).data('short_contract'));
                     detailsRow.find('.first-leg-position-content').text($(this).data('first_leg_contract_position'));
                     detailsRow.find('.second-leg-position-content').text($(this).data('second_leg_contract_position'));
-                    detailsRow.find('.second-leg-depth-content').text($(this).data('second_leg_depth'));
                     
                     // Pricing Information
                     detailsRow.find('.prev-close-content').text($(this).data('previous_close'));
@@ -433,7 +431,6 @@
                     detailsRow.find('.pop-content').text($(this).data('probability_of_profit'));
                     detailsRow.find('.score-content').text($(this).data('adjusted_score'));
                     detailsRow.find('.confidence-content').text($(this).data('confidence_level'));
-                    detailsRow.find('.client-content').text($(this).data('client'));
                     
                     detailsRow.toggle();
                 } catch (error) {

@@ -324,10 +324,8 @@ class SpreadDataModel(DataModelBase):
         arbitrary_types_allowed = True
 
     breakeven: Optional[Decimal] = None
-    client: Optional[str] = None
     contract_type: Optional[ContractType] = None
     daily_bars: Optional[List[DayData]] = None
-    datetime: Optional[date] = None
     description: Optional[str] = None
     direction: Optional[DirectionType] = None
     distance_between_strikes: Optional[Decimal] = None
@@ -347,7 +345,6 @@ class SpreadDataModel(DataModelBase):
     probability_of_profit: Optional[Decimal] = None
     second_leg_contract: Optional[Contract] = None
     second_leg_contract_position: Optional[int] = None
-    second_leg_depth: Optional[int] = None
     second_leg_snapshot: Optional[Snapshot] = None
     short_contract: Optional[Contract] = None
     short_premium: Optional[Decimal] = None
