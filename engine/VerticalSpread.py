@@ -348,7 +348,7 @@ class VerticalSpread(SpreadDataModel):
                 if avg_oi < self.MIN_ACCEPTABLE_OI or avg_volume < self.MIN_ACCEPTABLE_VOLUME:
                     message = f"Low liquidity for {self.short_contract.ticker}/{self.long_contract.ticker}: OI={
                         avg_oi:.0f}, Volume={avg_volume:.0f}"
-                    logger.warning(message)
+                    logger.debug(message)
                     self.description += message
                 
                 # Calculate liquidity score (0-1 scale where 1 is best)
