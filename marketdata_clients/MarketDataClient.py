@@ -117,7 +117,7 @@ class MarketDataClient(BaseMarketDataClient):
         for attempt in range(retries):
             try:
                 return func(*args, **kwargs)
-            except TimeoutError as err:
+            except Exception as err:
                 if attempt < retries - 1:
                     time.sleep(2 ** attempt)  # Exponential backoff
                     continue
