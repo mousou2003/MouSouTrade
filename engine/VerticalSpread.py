@@ -284,11 +284,6 @@ class VerticalSpread(SpreadDataModel):
                 elif self.strategy == StrategyType.DEBIT:
                     self.description += f"max profit as percent of the debit {max_profit_percent/self.net_premium:.2f}%."
 
-                if self.first_leg_snapshot.open_interest < 10 or self.second_leg_snapshot.open_interest < 10:
-                    self.description += f"\nOpen Interest is less than 10, careful!"
-                if self.first_leg_snapshot.day.volume < 10 or self.second_leg_snapshot.day.volume < 10:
-                    self.description += f"\nVolume is less than 10, careful!"
-
                 found_valid_spread = True
 
                 # In test mode, take the first valid spread
@@ -349,6 +344,12 @@ class VerticalSpread(SpreadDataModel):
                 # Calculate the average open interest and volume across both legs
                 avg_oi = (first_leg_oi + second_leg_oi) / 2
                 avg_volume = (first_leg_volume + second_leg_volume) / 2
+                # Warn about low liquidity
+                if avg_oi < self.MIN_ACCEPTABLE_OI or avg_volume < self.MIN_ACCEPTABLE_VOLUME:
+                    message = f"Low liquidity for {self.short_contract.ticker}/{self.long_contract.ticker}: OI={
+                        avg_oi:.0f}, Volume={avg_volume:.0f}"
+                    logger.warning(message)
+                    self.description += message
                 
                 # Calculate liquidity score (0-1 scale where 1 is best)
                 # Open interest is more important for longer-term positions
@@ -374,11 +375,6 @@ class VerticalSpread(SpreadDataModel):
                             f"RR Score: {ratio_proximity:.2f}")
                 logger.debug(f"Risk: ${self.max_risk}, Risk %: {risk_percent*100:.2f}%, Risk Score: {risk_score:.2f}")
                 logger.debug(f"Liquidity: OI={avg_oi:.0f}, Volume={avg_volume:.0f}, Score: {liquidity_score:.2f}")
-                
-                # Warn about low liquidity
-                if avg_oi < self.MIN_ACCEPTABLE_OI or avg_volume < self.MIN_ACCEPTABLE_VOLUME:
-                    logger.warning(f"Low liquidity for {self.short_contract.ticker}/{self.long_contract.ticker}: "
-                                f"OI={avg_oi:.0f}, Volume={avg_volume:.0f}")
                 
                 # Calculate an adjusted score based on multiple factors
                 # - POP (higher is better)

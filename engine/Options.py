@@ -368,19 +368,42 @@ class Options:
             if not options_snapshot:
                 continue
             try:
-                if not all([options_snapshot.day.close, options_snapshot.implied_volatility, options_snapshot.greeks.delta]):
-                    logger.debug(f"Missing key data for {contract.ticker}. Skipping.")
+                if not options_snapshot.day.close:
+                    logger.debug(f"Missing close price for {contract.ticker}. Skipping.")
                     options_snapshot.confidence_level = 0
                     continue
-                if not all([options_snapshot.day.last_trade, options_snapshot.day.bid, options_snapshot.day.ask]):
+                    
+                if not options_snapshot.implied_volatility:
+                    logger.debug(f"Missing implied volatility for {contract.ticker}. Skipping.")
+                    options_snapshot.confidence_level = 0
+                    continue
+                    
+                if not options_snapshot.greeks.delta:
+                    logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
+                    options_snapshot.confidence_level = 0
+                    continue
+                    
+                # Check for trade data individually and provide fallbacks
+                if not options_snapshot.day.last_trade:
+                    logger.warning(f"Missing last_trade data for {contract.ticker}. Using close price.")
                     options_snapshot.day.last_trade = options_snapshot.day.close
+                    options_snapshot.confidence_level *= 0.8
+                    
+                if not options_snapshot.day.bid:
+                    logger.warning(f"Missing bid data for {contract.ticker}. Using close price.")
                     options_snapshot.day.bid = options_snapshot.day.close
+                    options_snapshot.confidence_level *= 0.8
+                    
+                if not options_snapshot.day.ask:
+                    logger.warning(f"Missing ask data for {contract.ticker}. Using close price.")
                     options_snapshot.day.ask = options_snapshot.day.close
-                    options_snapshot.confidence_level *= 0.5
+                    options_snapshot.confidence_level *= 0.8
+                    
                 if not options_snapshot.day.timestamp:
-                    logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
+                    logger.warning("Snapshot is not up-to-date. Option may not be traded yet.")
                     options_snapshot.day.timestamp = datetime.now().timestamp()
                     options_snapshot.confidence_level *= 0.9
+                    
                 strike_price_type = Options.identify_strike_price_type_by_delta(options_snapshot.greeks.delta, trade_strategy)
                 if (((trade_strategy == TradeStrategy.DIRECTIONAL) 
                      and (strike_price_type == StrikePriceType.ATM))

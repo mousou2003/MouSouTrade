@@ -83,7 +83,7 @@ class ETradeClient(BaseMarketDataClient):
 
     def get_snapshot(self, symbol):
         self._wait_for_no_throttle(self.DEFAULT_THROTTLE_LIMIT)
-        url = f"{self.etrade.base_url}/v1/market/quote/{symbol}"
+        url = f"{self.etrade.BaseUrl}/v1/market/quote/{symbol}"
         response = self.session.get(url)
         if not response.text.strip():
             logger.error("Empty or whitespace-only response for snapshot")
