@@ -125,8 +125,9 @@
     <div id="filter-section">
         <input type="text" class="filter-input" placeholder="Filter Ticker" />
         <label>
-            <input type="checkbox" id="filter-exit-date" checked /> Show only records with a spread strategy
+            <input type="checkbox" id="filter-by-score" checked /> Show only records with score above 
         </label>
+        <input type="number" id="min-score-threshold" value="60" min="0" max="100" step="1" style="width: 50px;">
     </div>
     
     <div class="data-container">
@@ -212,8 +213,11 @@
             function renderData(data) {
                 $('#main-data-container tbody').empty();
 
-                const filterExitDate = $('#filter-exit-date').is(':checked');
-                const filteredData = filterExitDate ? data.filter(item => item.exit_date) : data;
+                const filterByScore = $('#filter-by-score').is(':checked');
+                const minScoreThreshold = parseFloat($('#min-score-threshold').val()) || 0;
+                const filteredData = filterByScore ? 
+                    data.filter(item => item.adjusted_score && parseFloat(item.adjusted_score) >= minScoreThreshold) : 
+                    data;
 
                 const sortedData = filteredData.sort((a, b) => {
                     for (const { column, order } of sortOrders) {
@@ -375,7 +379,7 @@
                 }
             });
 
-            $('#filter-exit-date').on('change', function() {
+            $('#filter-by-score, #min-score-threshold').on('change', function() {
                 try {
                     renderData(previousData);
                 } catch (error) {
