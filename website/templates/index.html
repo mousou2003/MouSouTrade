@@ -451,14 +451,10 @@
 
             $('.filter-input').on('keyup', function() {
                 try {
-                    const filters = $('.filter-input').map(function() {
-                        return $(this).val().toLowerCase();
-                    }).get();
+                    const filter = $(this).val().toLowerCase();
 
                     const filteredData = previousData.filter(item => {
-                        return (
-                            (item.underlying_ticker || '').toLowerCase().includes(filters[0])
-                        );
+                        return (item.underlying_ticker || '').toLowerCase().includes(filter);
                     });
                     renderData(filteredData);
                 } catch (error) {
