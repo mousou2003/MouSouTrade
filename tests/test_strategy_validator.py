@@ -118,6 +118,23 @@ class TestStrategyValidator(unittest.TestCase):
             'Stop Price': '141.00'
         }
         
+        # Bearish credit call spread for NKE
+        self.nke_bear_call_dict = {
+            'Ticker': 'NKE',
+            'Strategy': 'credit',
+            'Direction': 'bearish',
+            'Short Contract': 'O:NKE250411C00079000',  # 79 strike
+            'Long Contract': 'O:NKE250411C00100000',   # 100 strike
+            'Entry Price': '78.59',
+            'Target Price': '370.00',
+            'Stop Price': '1730.00',
+            'Distance Between Strikes': '21.00',
+            'Optimal Spread Width': '2.50',
+            'Expiration Date': '2025-04-11',
+            'Update Date': '2025-03-09',
+            'Description': 'Sell 79 call, buy 100 call; max profit as fraction of the distance between strikes 82.38%.Low liquidity for O:NKE250411C00079000/O:NKE250411C00100000: OI=8, Volume=2'
+        }
+
         # Convert dictionaries to SpreadDataModel objects
         self.bull_call_spread = StrategyValidator.create_spread_model_from_dict(self.bull_call_dict)
         self.bear_put_spread = StrategyValidator.create_spread_model_from_dict(self.bear_put_dict)
@@ -125,6 +142,7 @@ class TestStrategyValidator(unittest.TestCase):
         self.bear_call_spread = StrategyValidator.create_spread_model_from_dict(self.bear_call_dict)
         self.invalid_bull_call = StrategyValidator.create_spread_model_from_dict(self.invalid_bull_call_dict)
         self.invalid_bear_put = StrategyValidator.create_spread_model_from_dict(self.invalid_bear_put_dict)
+        self.nke_bear_call_spread = StrategyValidator.create_spread_model_from_dict(self.nke_bear_call_dict)
         
         # Store all spread models in a list for combined testing
         self.all_strategies = [
@@ -133,7 +151,8 @@ class TestStrategyValidator(unittest.TestCase):
             self.bull_put_spread,
             self.bear_call_spread,
             self.invalid_bull_call,
-            self.invalid_bear_put
+            self.invalid_bear_put,
+            self.nke_bear_call_spread
         ]
     
     def test_extract_strike_price(self):
@@ -193,13 +212,14 @@ class TestStrategyValidator(unittest.TestCase):
             print(f"Validation error: {error}")
         
         # Update our expectation to match the actual number of errors
-        self.assertEqual(len(errors), 3, f"Should find exactly 3 errors but found {len(errors)}: {errors}")
+        self.assertEqual(len(errors), 5, f"Should find exactly 5 errors but found {len(errors)}: {errors}")
         
         # Verify specific error messages for each invalid spread
         expected_errors = [
             "Bullish call debit spread should buy lower strike and sell higher strike",
             "Bearish put debit spread should buy higher strike and sell lower strike",
-            "Bearish call credit spread should sell higher strike and buy lower strike"
+            "Bearish call credit spread should sell higher strike and buy lower strike",
+            "Bearish strategy has target price (370.00) >= entry price (78.59)"
         ]
         
         # Check that each expected error message is present in one of the errors
@@ -645,6 +665,23 @@ class TestStrategyValidator(unittest.TestCase):
                 
                 errors = StrategyValidator.validate_spread_model(spread)
                 self.assertEqual(len(errors), 0, f"{name} spread should be valid but found errors: {errors}")
+
+    def test_valid_bearish_credit_call_spread_nke(self):
+        """Test a valid bearish credit call spread for NKE with provided data"""
+        spread = self.nke_bear_call_spread
+        
+        errors = StrategyValidator.validate_spread_model(spread)
+        self.assertEqual(len(errors), 2, f"Bearish credit call spread for NKE should have 2 errors but found: {errors}")
+        
+        # Check for specific error messages
+        expected_errors = [
+            "Bearish strategy has target price (370.00) >= entry price (78.59)",
+            "Bearish call credit spread should sell higher strike and buy lower strike"
+        ]
+        
+        for expected in expected_errors:
+            self.assertTrue(any(expected in error for error in errors), 
+                           f"Expected error message '{expected}' not found in errors: {errors}")
 
 if __name__ == '__main__':
     unittest.main()

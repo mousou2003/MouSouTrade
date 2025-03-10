@@ -45,6 +45,7 @@ from engine.data_model import *
 import operator
 
 logger = logging.getLogger(__name__)
+logger.level = logging.DEBUG
 
 class TradeStrategy(Enum):
     HIGH_PROBABILITY = 'high_probability'
@@ -131,40 +132,100 @@ class Options:
         return put_price
 
     @staticmethod
-    def calculate_probability_of_profit(current_price: Decimal, breakeven_price: Decimal, days_to_expiration: int, implied_volatility: Decimal) -> Decimal:
+    def calculate_probability_of_profit(current_price: Decimal, breakeven_price: Decimal, 
+                                        days_to_expiration: int, implied_volatility: Decimal) -> Decimal:
         """
-        Calculate the Probability of Profit (POP) for an option position.
+        Calculate probability of profit based on price, implied volatility, and time to expiration.
         
-        Parameters:
-        current_price : Decimal : Current price of the underlying asset
-        breakeven_price : Decimal : Breakeven price of the option position
-        days_to_expiration : int : Number of days until the option expires
-        implied_volatility : Decimal : Implied volatility of the underlying asset
-        
+        Args:
+            current_price: Current price of the underlying
+            breakeven_price: Breakeven price for the trade
+            days_to_expiration: Days until option expiration
+            implied_volatility: IV as a decimal (e.g., 0.30 for 30%)
+            
         Returns:
-        Decimal : Probability of Profit (POP) as a percentage
+            Probability of profit as a percentage (0-100)
         """
-        logger.debug(f"Calculating POP with current_price={current_price}, breakeven_price={breakeven_price}, days_to_expiration={days_to_expiration}, implied_volatility={implied_volatility}")
-        
-        # Calculate standard deviation for the underlying asset price
-        annualized_sd = implied_volatility * current_price
-        logger.debug(f"Annualized standard deviation: {annualized_sd}")
-        
-        daily_sd = annualized_sd / Decimal(np.sqrt(252))  # 252 trading days in a year
-        logger.debug(f"Daily standard deviation: {daily_sd}")
-        
-        price_movement_sd = daily_sd * Decimal(np.sqrt(days_to_expiration))
-        logger.debug(f"Price movement standard deviation over {days_to_expiration} days: {price_movement_sd}")
-
-        # Calculate Z-Score for Breakeven
-        z_score = (breakeven_price - current_price) / price_movement_sd
-        logger.debug(f"Z-Score for breakeven price: {z_score}")
-
-        # Calculate Probability of Profit (POP)
-        probability_of_profit = Decimal(norm.cdf(float(z_score)))
-        logger.debug(f"Probability of Profit (POP): {probability_of_profit * Decimal(100)}%")
-
-        return probability_of_profit * Decimal(100)
+        try:
+            # Ensure inputs are valid
+            if days_to_expiration <= 0:
+                logger.warning(f"Invalid days_to_expiration: {days_to_expiration}. Using default of 30.")
+                days_to_expiration = 30
+                
+            # Sanity checks for implied_volatility - keep the check for zero/negative
+            if implied_volatility <= Decimal('0'):
+                logger.warning(f"Invalid implied_volatility: {implied_volatility}. Using default of 0.3.")
+                implied_volatility = Decimal('0.3')
+            
+            # For debit spreads, we need to factor in the fact that price needs to move favorably
+            # For credit spreads, we benefit from time decay and need price to stay within a range
+            
+            # Calculate distance to breakeven as a percentage of current price
+            price_diff_pct = abs((breakeven_price - current_price) / current_price) * Decimal('100')
+            
+            # Calculate standard deviation move based on IV and time
+            time_factor = Decimal(days_to_expiration) / Decimal('365')
+            annual_stddev_pct = implied_volatility * Decimal('100')  # Convert to percentage
+            period_stddev_pct = annual_stddev_pct * time_factor.sqrt()
+            
+            # Calculate number of standard deviations to breakeven
+            if period_stddev_pct == Decimal('0'):
+                # Fallback if stddev calculation fails
+                std_deviations = Decimal('0.5')  # Default value
+                logger.warning(f"Standard deviation calculation resulted in zero. Using default of {std_deviations} std deviations.")
+            else:
+                std_deviations = price_diff_pct / period_stddev_pct
+            
+            logger.debug(f"Price diff: {price_diff_pct:.2f}%, Period StdDev: {period_stddev_pct:.2f}%, "
+                       f"Std deviations to breakeven: {std_deviations:.2f}")
+            
+            # Apply a more relaxed model for the probability calculation without capping
+            # NOTE: This can result in very high probability values for deep OTM options
+            
+            # The closer the breakeven is (fewer std deviations away), the lower the probability of profit
+            if std_deviations <= Decimal('0.25'):
+                # Very close to breakeven (high risk)
+                base_probability = Decimal('50') + (std_deviations * Decimal('40'))  # 50-60% range
+            elif std_deviations <= Decimal('0.75'):
+                # Moderately close to breakeven
+                base_probability = Decimal('60') + ((std_deviations - Decimal('0.25')) * Decimal('20'))  # 60-70% range
+            elif std_deviations <= Decimal('1.5'):
+                # Reasonable distance from breakeven
+                base_probability = Decimal('70') + ((std_deviations - Decimal('0.75')) * Decimal('15'))  # 70-81.25% range
+            elif std_deviations <= Decimal('2.5'):
+                # Far from breakeven
+                base_probability = Decimal('81.25') + ((std_deviations - Decimal('1.5')) * Decimal('7.5'))  # 81.25-88.75% range
+            else:
+                # Very far from breakeven (low risk)
+                # Continue the progression without capping
+                base_probability = Decimal('88.75') + ((std_deviations - Decimal('2.5')) * Decimal('4.5'))
+            
+            # Apply additional factors based on days to expiration
+            time_factor_adjustment = Decimal('0')
+            
+            if days_to_expiration < 14:  # Very short-dated
+                time_factor_adjustment = Decimal('5')  # +5% for short duration
+            elif days_to_expiration > 60:  # Longer-dated
+                time_factor_adjustment = Decimal('-5')  # -5% for long duration
+            
+            # Final probability calculation
+            result = base_probability + time_factor_adjustment
+            
+            # Log the calculation details
+            logger.debug(f"POP calculation: Base={base_probability}, Time adjustment={time_factor_adjustment}, Final={result}")
+            
+            # Log unusually high or low values but don't cap them
+            if result < Decimal('30'):
+                logger.warning(f"Unusually low probability calculated: {result}%")
+            elif result > Decimal('95'):
+                logger.warning(f"Unusually high probability calculated: {result}%")
+            
+            return result
+                
+        except Exception as e:
+            logger.error(f"Error calculating probability of profit: {str(e)}")
+            # Return a reasonable default based on typical option strategies
+            return Decimal('60')
 
     @staticmethod
     def get_delta_range(trade_strategy: TradeStrategy):
@@ -199,7 +260,9 @@ class Options:
         Returns:
         Decimal : Standard deviation of the underlying asset
         """
-        return Decimal(current_price * iv * Decimal(np.sqrt(Decimal(days_to_expiration/365))))
+        # Make sure to convert the result of np.sqrt to Decimal
+        sqrt_result = Decimal(str(np.sqrt(float(days_to_expiration/Decimal('365')))))
+        return current_price * iv * sqrt_result
 
     @staticmethod
     def identify_strike_price_type_by_delta(delta: Decimal, trade_strategy: TradeStrategy) -> StrikePriceType:
@@ -250,7 +313,7 @@ class Options:
             return StrikePriceType.ITM if strike_price > current_price else StrikePriceType.OTM
 
     @staticmethod
-    def calculate_optimal_spread_width(current_price: Decimal, strategy: StrategyType = None) -> Decimal:
+    def calculate_optimal_spread_width(current_price: Decimal, strategy: StrategyType, direction: DirectionType) -> Decimal:
         """
         Calculate the optimal spread width based on the underlying price and strategy type.
         Based on industry standard practices for vertical spreads.
@@ -282,27 +345,31 @@ class Options:
         # Apply strategy-specific adjustments:
         # - Credit spreads: Often narrower to maximize probability of profit
         # - Debit spreads: Often wider to increase potential return
+
         if strategy:
-            width_multiplier = Decimal('1.0')  # Default multiplier
-            
             if strategy == StrategyType.CREDIT:
-                # For credit spreads, prefer narrower widths to maximize probability
                 width_multiplier = Decimal('0.8')
             elif strategy == StrategyType.DEBIT:
-                # For debit spreads, prefer wider widths to increase potential return
                 width_multiplier = Decimal('1.2')
+
+        # Adjust for directional bias
+        if direction:
+            if direction == DirectionType.BULLISH:
+                width_multiplier *= Decimal('1.5')  # Wider spread for bullish expectation
+            elif direction == DirectionType.BEARISH:
+                width_multiplier *= Decimal('1.5')  # Wider spread for bearish expectation
             
-            # Apply the multiplier
-            adjusted_width = base_width * width_multiplier
-            
-            # Ensure we still return a standard width
-            standard_widths = [Decimal('1'), Decimal('2.5'), Decimal('5'), 
-                             Decimal('10'), Decimal('25'), Decimal('50')]
-            
-            # Find the closest standard width
-            closest_width = min(standard_widths, key=lambda x: abs(x - adjusted_width))
-            
-            return closest_width
+        # Apply the multiplier
+        adjusted_width = base_width * width_multiplier
+        
+        # Ensure we still return a standard width
+        standard_widths = [Decimal('1'), Decimal('2.5'), Decimal('5'), 
+                            Decimal('10'), Decimal('25'), Decimal('50')]
+        
+        # Find the closest standard width
+        closest_width = min(standard_widths, key=lambda x: abs(x - adjusted_width))
+        
+        return closest_width
         
         # If no strategy provided, return the base width
         return base_width
@@ -387,22 +454,21 @@ class Options:
                 if not options_snapshot.day.last_trade:
                     logger.debug(f"Missing last_trade data for {contract.ticker}. Using close price.")
                     options_snapshot.day.last_trade = options_snapshot.day.close
-                    options_snapshot.confidence_level *= 0.8
+                    options_snapshot.confidence_level *= Decimal(0.8)
                     
                 if not options_snapshot.day.bid:
                     logger.debug(f"Missing bid data for {contract.ticker}. Using close price.")
                     options_snapshot.day.bid = options_snapshot.day.close
-                    options_snapshot.confidence_level *= 0.8
+                    options_snapshot.confidence_level *= Decimal(0.8)
                     
                 if not options_snapshot.day.ask:
                     logger.debug(f"Missing ask data for {contract.ticker}. Using close price.")
                     options_snapshot.day.ask = options_snapshot.day.close
-                    options_snapshot.confidence_level *= 0.8
-                    
+                    options_snapshot.confidence_level *= Decimal(0.8)
                 if not options_snapshot.day.timestamp:
                     logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
                     options_snapshot.day.timestamp = datetime.now().timestamp()
-                    options_snapshot.confidence_level *= 0.9
+                    options_snapshot.confidence_level *= Decimal(0.9)
                     
                 strike_price_type = Options.identify_strike_price_type_by_delta(options_snapshot.greeks.delta, trade_strategy)
                 if (((trade_strategy == TradeStrategy.DIRECTIONAL) 

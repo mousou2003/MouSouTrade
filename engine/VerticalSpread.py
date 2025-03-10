@@ -139,7 +139,7 @@ class VerticalSpread(SpreadDataModel):
         self.contracts = contracts
 
         # Calculate the optimal spread width based on the current price and strategy type
-        self.optimal_spread_width = Options.calculate_optimal_spread_width(self.to_decimal(previous_close), self.strategy)
+        self.optimal_spread_width = Options.calculate_optimal_spread_width(self.to_decimal(previous_close), self.strategy, self.direction)
         logger.debug(f"Optimal spread width for {underlying_ticker} at price {previous_close} with {strategy.value} strategy: {self.optimal_spread_width}")
 
         days_to_expiration = (self.expiration_date - self.update_date).days
@@ -252,6 +252,12 @@ class VerticalSpread(SpreadDataModel):
 
                 # Calculate the net premium based on the actual bid-ask differences
                 self.net_premium = abs(self.short_premium - self.long_premium)
+                
+                # Validate spread parameters to catch potential issues
+                if not self._validate_spread_parameters():
+                    logger.warning(f"Invalid spread parameters detected, skipping this combination")
+                    continue
+                
                 max_profit_percent = (self.distance_between_strikes - abs(self.net_premium)) * 100
                 self.max_risk = self.get_max_risk()
                 self.max_reward = self.get_max_reward()
@@ -279,24 +285,12 @@ class VerticalSpread(SpreadDataModel):
                         implied_volatility=self.second_leg_snapshot.implied_volatility * self.first_leg_snapshot.implied_volatility
                     )
                     
-                    # Apply sanity checks to probability of profit
-                    # No trade should have extremely high probability (cap at 90%)
+                    # Remove probability capping - let the raw calculation be used
+                    # Let's add logging of high/low values but not modify them
                     if self.probability_of_profit > Decimal('90'):
-                        logger.warning(f"Suspiciously high probability of profit: {self.probability_of_profit}%. Capping at 90%.")
-                        self.probability_of_profit = Decimal('90')
-                    
-                    # Credit spreads typically have higher probability than debit spreads
-                    # Add strategy-specific bounds
-                    if self.strategy == StrategyType.CREDIT:
-                        # Credit spreads typically range from 50-85%
-                        if self.probability_of_profit < Decimal('40'):
-                            logger.warning(f"Unusually low probability for credit spread: {self.probability_of_profit}%. Adjusting to minimum 40%.")
-                            self.probability_of_profit = Decimal('40')
-                    else:  # DEBIT strategy
-                        # Debit spreads typically range from 30-60%
-                        if self.probability_of_profit > Decimal('70'):
-                            logger.warning(f"Unusually high probability for debit spread: {self.probability_of_profit}%. Adjusting to maximum 70%.")
-                            self.probability_of_profit = Decimal('70')
+                        logger.info(f"High probability of profit detected: {self.probability_of_profit}%")
+                    elif self.probability_of_profit < Decimal('20'):
+                        logger.info(f"Low probability of profit detected: {self.probability_of_profit}%")
 
                 self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type.value}, \n"\
                                   f"buy {self.long_contract.strike_price} {self.long_contract.contract_type.value}; \n"
@@ -449,11 +443,51 @@ class VerticalSpread(SpreadDataModel):
                     self.to_decimal(self.second_leg_snapshot.confidence_level or 1.0) * Decimal('0.25')
                 )
                 
-                logger.debug(f"POP: {self.probability_of_profit}, Width Score: {width_score:.2f}, " 
-                            f"Liquidity Score: {liquidity_score:.2f}, Final Score: {self.adjusted_score:.2f}")
-                logger.debug(f"Base confidence: {base_confidence:.2f}, Data confidence: {data_confidence:.2f}, "
-                            f"Final confidence: {self.confidence_level:.2f}")
+                # Final confidence is weighted average of the base confidence (from score) and data confidence
+                self.confidence_level = base_confidence * Decimal('0.7') + data_confidence * Decimal('0.3')
                 
+                # More extensive debug logging
+                logger.debug(
+                    f"Base confidence calculation:\n"
+                    f"  - Adjusted score: {self.adjusted_score:.2f} / 100 = {base_confidence:.2f}\n"
+                    f"  - Data confidence inputs:\n"
+                    f"    - First leg contract: {self.first_leg_contract.confidence_level:.2f}\n"
+                    f"    - Second leg contract: {self.second_leg_contract.confidence_level:.2f}\n"
+                    f"    - First leg snapshot: {self.first_leg_snapshot.confidence_level:.2f}\n"
+                    f"    - Second leg snapshot: {self.second_leg_snapshot.confidence_level:.2f}\n"
+                    f"    - Weighted average: {data_confidence:.2f}\n"
+                    f"  - Combined (70% base, 30% data): {self.confidence_level:.2f}"
+                )
+                
+                # Apply confidence modifiers based on specific risk factors
+                
+                # 1. Liquidity adjustment - lower confidence for illiquid options
+                if avg_oi < self.to_decimal(self.MIN_ACCEPTABLE_OI) * Decimal(2) or avg_volume < self.to_decimal(self.MIN_ACCEPTABLE_VOLUME) * Decimal(2):
+                    liquidity_confidence_factor = Decimal('0.9')  # Reduce by 10% for low liquidity
+                    old_confidence = self.confidence_level
+                    self.confidence_level *= liquidity_confidence_factor
+                    logger.debug(f"Applied liquidity confidence adjustment: {old_confidence:.2f} -> {self.confidence_level:.2f}")
+                
+                # 2. Width adjustment - reduce confidence for extreme spread widths
+                width_ratio = self.distance_between_strikes / self.optimal_spread_width
+                if width_ratio > Decimal('5') or width_ratio < Decimal('0.2'):
+                    width_confidence_factor = Decimal('0.9')  # Reduce by 10% for extreme spread widths
+                    old_confidence = self.confidence_level
+                    self.confidence_level *= width_confidence_factor
+                    logger.debug(f"Applied width confidence adjustment: {old_confidence:.2f} -> {self.confidence_level:.2f} (width ratio: {width_ratio:.2f})")
+                
+                # 3. Probability extremes - adjust confidence for extreme probability values
+                if self.probability_of_profit > Decimal('90'):
+                    pop_confidence_factor = Decimal('0.8')  # Reduce by 20% for very high POPs (stronger reduction)
+                    old_confidence = self.confidence_level
+                    self.confidence_level *= pop_confidence_factor
+                    logger.debug(f"Applied probability confidence adjustment: {old_confidence:.2f} -> {self.confidence_level:.2f} (high POP: {self.probability_of_profit}%)")
+                elif self.probability_of_profit < Decimal('20'):
+                    pop_confidence_factor = Decimal('0.8')  # Reduce by 20% for very low POPs (stronger reduction)
+                    old_confidence = self.confidence_level
+                    self.confidence_level *= pop_confidence_factor
+                    logger.debug(f"Applied probability confidence adjustment: {old_confidence:.2f} -> {self.confidence_level:.2f} (low POP: {self.probability_of_profit}%)")
+
                 # Track spreads with standard and non-standard widths separately
                 current_spread = self.to_dict()
                 
@@ -494,8 +528,73 @@ class VerticalSpread(SpreadDataModel):
             self.from_dict(final_spread)
             logger.debug(f'Found a match! {self.second_leg_contract.ticker} with score {self.adjusted_score}, description: {self.description}')
             return True
-
         return False
+
+    def _validate_spread_parameters(self) -> bool:
+        """Validate spread parameters to catch potential issues."""
+        # Check for reasonable spread width
+        if self.distance_between_strikes <= 0:
+            logger.error("Invalid spread width: must be positive")
+            return False
+            
+        # Check for valid premiums
+        if self.short_premium is None or self.long_premium is None:
+            logger.error("Missing premium values")
+            return False
+            
+        if self.short_premium < 0 or self.long_premium < 0:
+            logger.error(f"Invalid premiums: short={self.short_premium}, long={self.long_premium}")
+            return False
+            
+        # For credit spread, short premium should generally be higher than long premium
+        # BUT this can be violated in some market conditions, especially with wide spreads
+        if self.strategy == StrategyType.CREDIT and self.short_premium <= self.long_premium:
+            width_ratio = self.distance_between_strikes / self.optimal_spread_width
+            # Only warn if the spread width is not extremely wide compared to optimal
+            if width_ratio < Decimal('5.0'):
+                logger.warning(f"Unusual credit spread: short premium ({self.short_premium}) <= long premium ({self.long_premium})")
+                # Allow it to continue but flag as low confidence
+                if hasattr(self, 'confidence_level'):
+                    self.confidence_level *= Decimal('0.7')  # Reduce confidence by 30%
+            else:
+                logger.info(f"Wide credit spread ({width_ratio:.1f}x optimal width) explains premium inversion")
+            
+        # For debit spread, long premium should be higher than short premium
+        # This is more strict - a debit spread should cost money (pay a debit)
+        if self.strategy == StrategyType.DEBIT and self.long_premium <= self.short_premium:
+            width_ratio = self.distance_between_strikes / self.optimal_spread_width
+            # For extremely wide spreads, this can be legitimate
+            if width_ratio < Decimal('5.0'):
+                logger.warning(f"Unusual debit spread: long premium ({self.long_premium}) <= short premium ({self.short_premium}) "
+                               f"for {self.direction.value} direction")
+                # Allow it to continue but flag as low confidence
+                if hasattr(self, 'confidence_level'):
+                    self.confidence_level *= Decimal('0.7')  # Reduce confidence by 30%
+            else:
+                logger.info(f"Wide debit spread ({width_ratio:.1f}x optimal width) explains premium inversion "
+                            f"for {self.direction.value} direction")
+            
+        # Check for unreasonable break-evens (too far from current price)
+        breakeven = self.get_breakeven_price()
+        if breakeven:
+            price_diff_pct = abs((breakeven - self.to_decimal(self.previous_close)) / self.to_decimal(self.previous_close))
+            if price_diff_pct > Decimal('0.5'):  # More than 50% move needed
+                logger.warning(f"Breakeven requires large price move: {price_diff_pct*100:.1f}% from current price")
+                # We'll reduce confidence for trades requiring large moves
+                if hasattr(self, 'confidence_level'):
+                    self.confidence_level *= Decimal('0.9')
+                
+        # Check for extremely wide spreads compared to optimal width
+        width_ratio = self.distance_between_strikes / self.optimal_spread_width
+        if width_ratio > Decimal('5.0'):
+            logger.warning(f"Spread width ({self.distance_between_strikes}) is {width_ratio:.1f}x the optimal width ({self.optimal_spread_width})")
+            # Apply progressive confidence reduction for extremely wide spreads
+            if hasattr(self, 'confidence_level'):
+                confidence_reduction = min(Decimal('0.5'), (width_ratio - Decimal('5.0')) * Decimal('0.1'))  # Cap at 50% reduction
+                self.confidence_level *= (Decimal('1.0') - confidence_reduction)
+                logger.info(f"Applied {confidence_reduction*100:.1f}% confidence reduction due to extreme width")
+                
+        return True
 
     def get_net_premium(self):
         return self.to_decimal(self.net_premium)
@@ -516,7 +615,7 @@ class VerticalSpread(SpreadDataModel):
         return self.long_contract
 
     def to_dict(self):
-        """Override to_dict to ensure only serializable data from the parent SpreadDataModel is included.""" 
+        """Override to_dict to ensure only serializable data from the parent SpreadDataModel is included."""
         data = super().to_dict()
         return data
 
@@ -539,17 +638,26 @@ class VerticalSpread(SpreadDataModel):
         pass
 
 class CreditSpread(VerticalSpread):
-
     ideal_expiration: ClassVar[int] = 45
 
     def match_option(self, options_snapshots, underlying_ticker, direction: DirectionType, strategy: StrategyType, previous_close: Decimal, date: datetime, contracts) -> bool:
         return super().match_option(options_snapshots, underlying_ticker, direction, strategy, previous_close, date, contracts)
 
+    def get_max_risk(self):
+        # For a credit spread, the max risk is:
+        # (Distance between strikes - Net premium) * 100
+        # We need to ensure the calculation is done with Decimal types
+        distance = self.to_decimal(self.distance_between_strikes)
+        net_premium = self.get_net_premium()
+        # Safeguard against calculation errors
+        if distance <= net_premium:
+            logger.warning(f"Invalid spread parameters: distance between strikes ({distance}) <= net premium ({net_premium})")
+            # Fallback to a reasonable value
+            return (distance - (net_premium * Decimal('0.9'))) * Decimal('100')
+        return (distance - net_premium) * Decimal('100')
+
     def get_max_reward(self):
         return self.get_net_premium()*100
-
-    def get_max_risk(self):
-        return Decimal((abs(self.distance_between_strikes) - self.get_net_premium())*Decimal(100))
 
     def get_breakeven_price(self):
         net_premium = self.get_net_premium()
@@ -570,10 +678,15 @@ class DebitSpread(VerticalSpread):
         return super().match_option(options_snapshots, underlying_ticker, direction, strategy, previous_close, date, contracts)
 
     def get_max_reward(self):
-        return (self.distance_between_strikes - self.long_premium)*100
+        # For a debit spread, the max reward is the difference between the strike prices
+        # minus the net debit paid
+        distance = self.to_decimal(self.distance_between_strikes)
+        net_premium = self.get_net_premium()
+        return (distance - net_premium) * Decimal('100')
 
     def get_max_risk(self):
-        return abs(self.get_net_premium()*100)
+        # For a debit spread, the max risk is simply the net debit paid
+        return self.get_net_premium() * Decimal('100')
 
     def get_breakeven_price(self):
         net_premium = self.get_net_premium()

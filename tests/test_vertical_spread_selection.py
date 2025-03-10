@@ -25,6 +25,7 @@ These tests are complementary to the strategy_validator tests, focusing on the a
 selection of appropriate contracts rather than the validation of already formed spreads.
 """
 
+import logging
 import unittest
 from unittest.mock import patch, MagicMock
 import sys, os
@@ -33,6 +34,8 @@ from decimal import Decimal
 import pandas as pd
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+logger = logging.getLogger(__name__)
+logger.level = logging.DEBUG
 
 from engine.data_model import (
     Contract, Snapshot, DayData, Greeks, DirectionType, StrategyType,
@@ -442,6 +445,43 @@ class TestVerticalSpreadStrikeSelection(unittest.TestCase):
             expected_net = abs(long_snapshot.day.ask - short_snapshot.day.bid)
             self.assertEqual(debit_spread.net_premium, expected_net,
                 "Net premium calculation incorrect for debit spread")
+    
+    def test_bearish_credit_call_spread_nke(self):
+        """Test a bearish credit call spread for NKE with provided data"""
+        spread = CreditSpread()
+        result = spread.match_option(
+            self.options_snapshots, 
+            "NKE",
+            DirectionType.BEARISH, 
+            StrategyType.CREDIT, 
+            Decimal('78.59'), 
+            datetime.strptime("2025-04-11", "%Y-%m-%d").date(),
+            self.contracts
+        )
+        
+        self.assertTrue(result, "Bearish credit spread (call) for NKE should find valid options")
+        
+        # Check that short call is ATM/directional and long call is OTM/high probability
+        self.assertEqual(spread.short_contract.contract_type, ContractType.CALL)
+        self.assertEqual(spread.long_contract.contract_type, ContractType.CALL)
+        self.assertTrue(spread.short_contract.strike_price < spread.long_contract.strike_price,
+                      "Short call strike should be lower than long call strike")
+                      
+        # Verify the absolute delta values are appropriate - keeping as Decimal
+        short_delta = abs(self.options_snapshots[spread.short_contract.ticker].greeks.delta)
+        long_delta = abs(self.options_snapshots[spread.long_contract.ticker].greeks.delta)
+        
+        # Short call should have higher delta (closer to ATM or directional)
+        self.assertGreaterEqual(short_delta, Decimal('0.4'), "Short call delta should be >= 0.4 (directional)")
+        # Long call should have lower delta (more OTM)
+        self.assertLessEqual(long_delta, Decimal('0.35'), "Long call delta should be <= 0.35 (high probability)")
+        
+        # Check additional spread details
+        self.assertEqual(spread.distance_between_strikes, Decimal('21.00'), "Distance between strikes should be 21.00")
+        self.assertEqual(spread.optimal_spread_width, Decimal('2.50'), "Optimal spread width should be 2.50")
+        self.assertEqual(spread.expiration_date, datetime.strptime("2025-04-11", "%Y-%m-%d").date(), "Expiration date should be 2025-04-11")
+        self.assertEqual(spread.update_date, datetime.strptime("2025-03-09", "%Y-%m-%d").date(), "Update date should be 2025-03-09")
+        self.assertEqual(spread.description, "Sell 79 call, buy 100 call; max profit as fraction of the distance between strikes 82.38%.Low liquidity for O:NKE250411C00079000/O:NKE250411C00100000: OI=8, Volume=2", "Description should match the provided data")
                     
 if __name__ == '__main__':
     unittest.main()
