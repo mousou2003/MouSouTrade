@@ -45,7 +45,6 @@ from engine.data_model import *
 import operator
 
 logger = logging.getLogger(__name__)
-logger.level = logging.DEBUG
 
 class TradeStrategy(Enum):
     HIGH_PROBABILITY = 'high_probability'
@@ -426,7 +425,8 @@ class Options:
         contracts: Contract,  
         options_snapshots:Snapshot, 
         underlying_ticker,
-        trade_strategy:TradeStrategy
+        trade_strategy:TradeStrategy,
+        current_price: Decimal
     ) -> List[Tuple[Contract, int, Snapshot]]:
         matching_contracts = []
         contract:Contract
@@ -470,12 +470,14 @@ class Options:
                     options_snapshot.day.timestamp = datetime.now().timestamp()
                     options_snapshot.confidence_level *= Decimal(0.9)
                     
-                strike_price_type = Options.identify_strike_price_type_by_delta(options_snapshot.greeks.delta, trade_strategy)
+#                strike_price_type = Options.identify_strike_price_type_by_delta(options_snapshot.greeks.delta, trade_strategy)
+                strike_price_type = Options.identify_strike_price_by_current_price(contract.strike_price, current_price, contract.contract_type, Decimal('0.02'))
                 if (((trade_strategy == TradeStrategy.DIRECTIONAL) 
                      and (strike_price_type == StrikePriceType.ATM))
                      or (trade_strategy == TradeStrategy.HIGH_PROBABILITY
                      and (strike_price_type == StrikePriceType.OTM))): 
                     logger.info(f"Selected contract {contract.ticker} with delta {options_snapshot.greeks.delta} and strike price type {strike_price_type.value}.")
+                    contract.matched = True
                     matching_contracts.append((contract, position, options_snapshot))
             except (MarketDataException, KeyError, TypeError) as e:
                 logger.warning(f"Error processing contract {contract.ticker}: {type(e).__name__} - {e}")

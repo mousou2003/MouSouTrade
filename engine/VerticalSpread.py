@@ -123,13 +123,51 @@ class VerticalSpread(SpreadDataModel):
     OI_EXCELLENT_THRESHOLD: ClassVar[int] = 500  # Threshold for excellent open interest
     VOLUME_EXCELLENT_THRESHOLD: ClassVar[int] = 200  # Threshold for excellent volume
     LONG_TERM_THRESHOLD: ClassVar[int] = 30  # Threshold for long-term options
+    CONFIDENCE_REDUCTION_FACTOR: ClassVar[Decimal] = Decimal('0.7')  # Confidence reduction factor
+    LARGE_MOVE_THRESHOLD: ClassVar[Decimal] = Decimal('0.1')  # Threshold for large price moves
+    EXTREME_WIDTH_RATIO: ClassVar[Decimal] = Decimal('5.0')  # Ratio for extremely wide spreads
+    MAX_CONFIDENCE_REDUCTION: ClassVar[Decimal] = Decimal('0.5')  # Maximum confidence reduction
+    CONFIDENCE_REDUCTION_STEP: ClassVar[Decimal] = Decimal('0.1')  # Step for confidence reduction
 
     contracts: List[Contract] = []
     # Default contract selector for production use
     contract_selector: ClassVar[ContractSelector] = StandardContractSelector()
+    
+    def match_option(self, options_snapshots: dict, underlying_ticker: str, 
+                     direction: DirectionType, strategy: StrategyType, previous_close: Decimal, 
+                     date: datetime, contracts: List[Contract]) -> bool:
+        logger.debug("Entering match_option")
+        self._initialize_match_option(underlying_ticker, direction, strategy, previous_close, date, contracts)
+        self.optimal_spread_width = Options.calculate_optimal_spread_width(self.to_decimal(previous_close), self.strategy, self.direction)
+        logger.debug(f"Optimal spread width for {underlying_ticker} at price ${previous_close} with {strategy.value} strategy: ${self.optimal_spread_width}")
 
-    def match_option(self, options_snapshots, underlying_ticker, 
-                     direction, strategy, previous_close, date, contracts) -> bool:
+        days_to_expiration: int = (self.expiration_date - self.update_date).days
+
+        first_leg_candidates: List[Tuple[Contract, int, Snapshot]] = self._select_first_leg_candidates(options_snapshots)
+        if not first_leg_candidates:
+            logger.debug("No suitable first leg contract found.")
+            logger.debug("Exiting match_option")
+            return False
+
+        second_leg_candidates: List[Tuple[Contract, int, Snapshot]] = self._select_second_leg_candidates(options_snapshots)
+        if not second_leg_candidates:
+            logger.debug("No suitable second leg contract found.")
+            logger.debug("Exiting match_option")
+            return False
+
+        best_spread: Optional[dict] = self._find_best_spread(first_leg_candidates, second_leg_candidates, 
+                                                             days_to_expiration, self.optimal_spread_width)
+        if best_spread:
+            self.from_dict(best_spread)
+            logger.debug(f'Found a match! {self.second_leg_contract.ticker} with score {self.adjusted_score}, description: {self.description}')
+            logger.debug("Exiting match_option")
+            return True
+        logger.debug("Exiting match_option")
+        return False
+
+    def _initialize_match_option(self, underlying_ticker: str, direction: DirectionType, strategy: StrategyType, 
+                                 previous_close: Decimal, date: datetime, contracts: List[Contract]) -> None:
+        logger.debug("Entering _initialize_match_option")
         self.underlying_ticker = underlying_ticker
         self.direction = direction
         self.strategy = strategy
@@ -137,448 +175,111 @@ class VerticalSpread(SpreadDataModel):
         self.expiration_date = date
         self.update_date = datetime.today().date()
         self.contracts = contracts
+        logger.debug("Exiting _initialize_match_option")
 
-        # Calculate the optimal spread width based on the current price and strategy type
-        self.optimal_spread_width = Options.calculate_optimal_spread_width(self.to_decimal(previous_close), self.strategy, self.direction)
-        logger.debug(f"Optimal spread width for {underlying_ticker} at price {previous_close} with {strategy.value} strategy: {self.optimal_spread_width}")
-
-        days_to_expiration = (self.expiration_date - self.update_date).days
-
-        # Use the injected contract selector
-        first_leg_candidates = self.contract_selector.select_contracts(
+    def _select_first_leg_candidates(self, options_snapshots: dict) -> List[Tuple[Contract, int, Snapshot]]:
+        logger.debug("Entering _select_first_leg_candidates")
+        result = self.contract_selector.select_contracts(
             self.contracts, 
             options_snapshots, 
             self.underlying_ticker, 
             TradeStrategy.DIRECTIONAL,
             self.strategy,
-            self.direction
+            self.direction,
+            self.previous_close
         )
-        if not first_leg_candidates:
-            logger.debug("No suitable first leg contract found.")
-            return False
-        logger.debug(f"Number of first leg candidates: {len(first_leg_candidates)}")
+        logger.debug("Exiting _select_first_leg_candidates")
+        return result
 
-        second_leg_candidates = self.contract_selector.select_contracts(
+    def _select_second_leg_candidates(self, options_snapshots: dict) -> List[Tuple[Contract, int, Snapshot]]:
+        logger.debug("Entering _select_second_leg_candidates")
+        result = self.contract_selector.select_contracts(
             self.contracts, 
             options_snapshots, 
             self.underlying_ticker, 
             TradeStrategy.HIGH_PROBABILITY,
             self.strategy,
-            self.direction
+            self.direction,
+            self.previous_close
         )
-        if not second_leg_candidates:
-            logger.debug("No suitable second leg contract found.")
-            return False
-        logger.debug(f"Number of second leg candidates: {len(second_leg_candidates)}")
-        
-        best_spread = None
-        best_pop = Decimal(0)
-        # Track best spreads with standard and non-standard widths separately
-        best_spread_width = None 
-        best_spread_non_standard = None
-        found_valid_spread = False
+        logger.debug("Exiting _select_second_leg_candidates")
+        return result
+
+    def _find_best_spread(self, first_leg_candidates: List[Tuple[Contract, int, Snapshot]], 
+                          second_leg_candidates: List[Tuple[Contract, int, Snapshot]], 
+                          days_to_expiration: int, optimal_spread_width: Decimal) -> Optional[dict]:
+        logger.debug("Entering _find_best_spread")
+        best_spread: Optional[dict] = None
+        best_pop: Decimal = Decimal(0)
+        best_spread_width: Optional[dict] = None 
+        best_spread_non_standard: Optional[dict] = None
+        found_valid_spread: bool = False
 
         for first_leg in first_leg_candidates:
-            self.first_leg_contract, self.first_leg_contract_position, self.first_leg_snapshot = first_leg
-
-            # Always use bid/ask prices for proper spread calculation
-            if self.strategy == StrategyType.CREDIT:
-                # For credit spread, we're selling the first leg (short contract), so use bid price
-                self.short_contract = self.first_leg_contract
-                # For selling, we receive the bid price (what buyers are willing to pay)
-                self.short_premium = self.first_leg_snapshot.day.bid
-            elif self.strategy == StrategyType.DEBIT:
-                # For debit spread, we're buying the first leg (long contract), so use ask price
-                self.long_contract = self.first_leg_contract
-                # For buying, we pay the ask price (what sellers are asking for)
-                self.long_premium = self.first_leg_snapshot.day.ask
-
+            contract, _, _ = first_leg
+            if not contract.matched:
+                continue
+            self._set_first_leg(first_leg)
             for second_leg in second_leg_candidates:
-                self.second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = second_leg
-                
-                # Make sure the strike prices are in the correct order for the strategy
-                if self.strategy == StrategyType.CREDIT:
-                    if self.direction == DirectionType.BULLISH:  # Bull Put Credit
-                        if self.first_leg_contract.strike_price <= self.second_leg_contract.strike_price:
-                            continue  # Short PUT must have higher strike than long PUT
-                    else:  # Bearish Call Credit
-                        if self.first_leg_contract.strike_price >= self.second_leg_contract.strike_price:
-                            continue  # Short CALL must have lower strike than long CALL
-                else:  # DEBIT
-                    if self.direction == DirectionType.BULLISH:  # Bull Call Debit
-                        if self.first_leg_contract.strike_price >= self.second_leg_contract.strike_price:
-                            continue  # Long CALL must have lower strike than short CALL
-                    else:  # Bearish Put Debit
-                        if self.first_leg_contract.strike_price <= self.second_leg_contract.strike_price:
-                            continue  # Long PUT must have higher strike than short PUT
-
-                self.distance_between_strikes = abs(self.first_leg_contract.strike_price - self.second_leg_contract.strike_price)
-                if self.distance_between_strikes == 0:
-                    logger.error("Zero distance between strikes is not allowed.")
+                # if not self._is_valid_leg_combination(second_leg):
+                #    continue
+                contract, _, _ = second_leg
+                if not contract.matched:
                     continue
-                
-                # Use the actual bid/ask prices for calculating premium delta, not last_trade
-                if self.strategy == StrategyType.CREDIT:
-                    # For credit spreads, first leg is sold (bid) and second leg is bought (ask)
-                    premium_delta = self.first_leg_snapshot.day.bid - self.second_leg_snapshot.day.ask
-                else:  # DEBIT
-                    # For debit spreads, first leg is bought (ask) and second leg is sold (bid)
-                    premium_delta = self.second_leg_snapshot.day.bid - self.first_leg_snapshot.day.ask
-                
-                premium_delta = abs(premium_delta)
-                
-                if premium_delta == 0:
-                    logger.warning("Second leg candidate has zero premium delta, indicating a potential error in the selection.")
+                self._set_second_leg(second_leg)
+                self._calculate_spread_metrics(days_to_expiration)
+                if not self._calculate_premium_delta():
                     continue
-
-                # Check relative delta meets minimum criteria
-                relative_delta = premium_delta / self.distance_between_strikes
-                if relative_delta == Decimal(0) or relative_delta < self.MIN_DELTA:
-                    logger.debug(f"Skipping second leg candidate due to relative delta {relative_delta} being less than minimum delta {self.MIN_DELTA}.")
-                    # For test selectors, we'll allow this to pass
-                    if not isinstance(self.contract_selector, StandardContractSelector):
-                        pass  # Continue with the candidate for test purposes
-                    else:
-                        continue  # Skip this candidate in production
-
-                if self.strategy == StrategyType.CREDIT:
-                    # For credit spreads, second leg is long position, so we use ask price
-                    self.long_premium = self.second_leg_snapshot.day.ask
-                    self.long_contract = self.second_leg_contract
-                elif self.strategy == StrategyType.DEBIT:
-                    # For debit spreads, second leg is short position, so we use bid price
-                    self.short_contract = self.second_leg_contract
-                    self.short_premium = self.second_leg_snapshot.day.bid
-
-                # Calculate the net premium based on the actual bid-ask differences
-                self.net_premium = abs(self.short_premium - self.long_premium)
-                
-                # Validate spread parameters to catch potential issues
                 if not self._validate_spread_parameters():
-                    logger.warning(f"Invalid spread parameters detected, skipping this combination")
                     continue
-                
-                max_profit_percent = (self.distance_between_strikes - abs(self.net_premium)) * 100
-                self.max_risk = self.get_max_risk()
-                self.max_reward = self.get_max_reward()
-                self.breakeven = self.get_breakeven_price()
-                self.entry_price = self.get_close_price()
-                self.target_price = self.get_target_price()
-                self.stop_price = self.get_stop_price()
-                self.exit_date = self.get_exit_date()
-                self.contract_type = self.long_contract.contract_type
-
-                # Calculate probability of profit
-                # In test mode, we'll set a fixed value
-                if not isinstance(self.contract_selector, StandardContractSelector):
-                    # For test selectors, use fixed values based on strategy
-                    if self.strategy == StrategyType.CREDIT:
-                        self.probability_of_profit = Decimal('60')  # 60% for credit spreads
-                    else:
-                        self.probability_of_profit = Decimal('40')  # 40% for debit spreads
-                else:
-                    # For production selectors, calculate the actual probability
-                    self.probability_of_profit = Options.calculate_probability_of_profit(
-                        current_price=self.to_decimal(self.previous_close),
-                        breakeven_price=self.to_decimal(self.breakeven),
-                        days_to_expiration=days_to_expiration,
-                        implied_volatility=self.second_leg_snapshot.implied_volatility * self.first_leg_snapshot.implied_volatility
-                    )
-                    
-                    # Remove probability capping - let the raw calculation be used
-                    # Let's add logging of high/low values but not modify them
-                    if self.probability_of_profit > Decimal('90'):
-                        logger.info(f"High probability of profit detected: {self.probability_of_profit}%")
-                    elif self.probability_of_profit < Decimal('20'):
-                        logger.info(f"Low probability of profit detected: {self.probability_of_profit}%")
-
-                self.description = f"Sell {self.short_contract.strike_price} {self.short_contract.contract_type.value}, \n"\
-                                  f"buy {self.long_contract.strike_price} {self.long_contract.contract_type.value}; \n"
-                
-                if self.strategy == StrategyType.CREDIT:
-                    self.description += f"max profit as fraction of the distance between strikes {self.net_premium/self.distance_between_strikes*100:.2f}%."
-                elif self.strategy == StrategyType.DEBIT:
-                    self.description += f"max profit as percent of the debit {max_profit_percent/self.net_premium:.2f}%."
-
+                self._calculate_adjusted_score()
+                best_spread, best_spread_width, best_spread_non_standard = self._update_best_spreads(best_spread, best_spread_width, best_spread_non_standard)
                 found_valid_spread = True
-
-                # In test mode, take the first valid spread
                 if not isinstance(self.contract_selector, StandardContractSelector):
-                    best_spread = self.to_dict()
                     break
-                
-                # Check if the spread width is a standard width
-                is_standard = Options.is_standard_width(self.distance_between_strikes)
-                
-                # Is this spread width close to the optimal width?
-                width_proximity = abs(self.distance_between_strikes - self.optimal_spread_width) / self.optimal_spread_width
-                
-                # Apply strategy-specific adjustments to width scoring
-                width_score_base = Decimal('100') - width_proximity * Decimal('100')
-                
-                # For credit spreads, penalize widths that are too wide
-                # For debit spreads, penalize widths that are too narrow
-                if self.strategy == StrategyType.CREDIT:
-                    if self.distance_between_strikes > self.optimal_spread_width:
-                        # Penalize excessively wide credit spreads (reduce score by excess width %)
-                        excess_width_pct = (self.distance_between_strikes / self.optimal_spread_width) - Decimal('1.0')
-                        width_score_base -= excess_width_pct * Decimal('20')  # Penalty factor
-                        logger.debug(f"Credit spread width penalty: {excess_width_pct * Decimal('20'):.2f} points (too wide)")
-                elif self.strategy == StrategyType.DEBIT:
-                    if self.distance_between_strikes < self.optimal_spread_width:
-                        # Penalize excessively narrow debit spreads (reduce score by width deficit %)
-                        deficit_width_pct = Decimal('1.0') - (self.distance_between_strikes / self.optimal_spread_width)
-                        width_score_base -= deficit_width_pct * Decimal('20')  # Penalty factor
-                        logger.debug(f"Debit spread width penalty: {deficit_width_pct * Decimal('20'):.2f} points (too narrow)")
-                
-                width_score = max(Decimal('0'), width_score_base)  # Ensure score is non-negative
-
-                # Calculate reward-to-risk ratio
-                # Avoid division by zero
-                if self.max_risk and self.max_risk != 0:
-                    reward_risk_ratio = self.max_reward / self.max_risk
-                    # Calculate how close we are to the target ratio (higher is better)
-                    ratio_proximity = min(reward_risk_ratio / self.TARGET_REWARD_RISK_RATIO, Decimal('2.0'))
-                else:
-                    ratio_proximity = Decimal('0')
-                
-                # Calculate risk as a percentage of a hypothetical account
-                # Let's assume a $10,000 account for calculations
-                # We want to penalize trades with risk > MAX_ACCEPTABLE_LOSS_PERCENT
-                account_size = Decimal('10000')
-                risk_percent = self.max_risk / account_size
-                # Convert to a 0-1 score where 1 is best (lowest risk)
-                risk_score = max(Decimal('0'), Decimal('1.0') - (risk_percent / self.MAX_ACCEPTABLE_LOSS_PERCENT))
-                
-                # Calculate liquidity score based on open interest and volume
-                # Get open interest and volume for both legs - handle None values explicitly
-                first_leg_oi: Decimal = self.to_decimal(self.first_leg_snapshot.open_interest or 0)
-                second_leg_oi: Decimal = self.to_decimal(self.second_leg_snapshot.open_interest or 0)
-                first_leg_volume: Decimal = self.to_decimal(self.first_leg_snapshot.day.volume or 0)
-                second_leg_volume: Decimal = self.to_decimal(self.second_leg_snapshot.day.volume or 0)
-                
-                # Calculate the average open interest and volume across both legs
-                avg_oi: Decimal = (first_leg_oi + second_leg_oi) / Decimal('2')
-                avg_volume: Decimal = (first_leg_volume + second_leg_volume) / Decimal('2')
-                # Warn about low liquidity
-                if avg_oi < self.to_decimal(self.MIN_ACCEPTABLE_OI) or avg_volume < self.to_decimal(self.MIN_ACCEPTABLE_VOLUME):
-                    message = f"Low liquidity for {self.short_contract.ticker}/{self.long_contract.ticker}: OI={avg_oi:.0f}, Volume={avg_volume:.0f}"
-                    logger.debug(message)
-                    self.description += message
-                
-                # Calculate liquidity score (0-1 scale where 1 is best)
-                # Open interest is more important for longer-term positions
-                # Volume is more important for short-term tradability
-                oi_score: Decimal = min(Decimal('1.0'), avg_oi / self.to_decimal(self.OI_EXCELLENT_THRESHOLD))
-                volume_score: Decimal = min(Decimal('1.0'), avg_volume / self.to_decimal(self.VOLUME_EXCELLENT_THRESHOLD))
-                
-                # Weight OI more for longer-dated options
-                days_to_expiration: int = (self.expiration_date - self.update_date).days
-                liquidity_score: Decimal = Decimal('0')
-                if days_to_expiration > self.LONG_TERM_THRESHOLD:
-                    liquidity_score = (Decimal('0.7') * oi_score) + (Decimal('0.3') * volume_score)
-                else:
-                    # For shorter-dated options, volume is more important
-                    liquidity_score = (Decimal('0.4') * oi_score) + (Decimal('0.6') * volume_score)
-                
-                # Convert to a 0-100 scale to match other metrics
-                liquidity_score *= Decimal('100')
-                
-                # Log all the score components
-                logger.debug(f"Spread width: {self.distance_between_strikes}, optimal: {self.optimal_spread_width}, " 
-                            f"proximity: {width_proximity:.2f}, width score: {width_score:.2f}, standard: {is_standard}")
-                logger.debug(f"Reward/Risk: {reward_risk_ratio:.2f}, Target: {self.TARGET_REWARD_RISK_RATIO}, "
-                            f"RR Score: {ratio_proximity:.2f}")
-                logger.debug(f"Risk: ${self.max_risk}, Risk %: {risk_percent*100:.2f}%, Risk Score: {risk_score:.2f}")
-                logger.debug(f"Liquidity: OI={avg_oi:.0f}, Volume={avg_volume:.0f}, Score: {liquidity_score:.2f}")
-                
-                # Calculate an adjusted score based on multiple factors
-                # - POP (higher is better)
-                # - Width proximity (lower is better)
-                # - Reward/Risk ratio (higher is better)
-                # - Risk percentage (lower is better)
-                # - Liquidity (higher is better)
-                
-                # Assign weights to each factor (sum to 1.0)
-                pop_weight = Decimal('0.35')       # 35% weight on probability of profit
-                width_weight = Decimal('0.15')     # 15% weight on optimal width
-                rr_weight = Decimal('0.20')        # 20% weight on reward/risk ratio
-                risk_weight = Decimal('0.10')      # 10% weight on total risk
-                liquidity_weight = Decimal('0.20')  # 20% weight on liquidity
-                
-                # Calculate the adjusted score
-                self.adjusted_score = (
-                    pop_weight * self.probability_of_profit +  # Higher POP is better
-                    width_weight * width_score +  # Using strategy-adjusted width score
-                    rr_weight * (ratio_proximity * Decimal('100')) +  # Higher ratio_proximity is better
-                    risk_weight * (risk_score * Decimal('100')) +  # Higher risk_score is better
-                    liquidity_weight * liquidity_score  # Higher liquidity is better
-                )
-                
-                # Add logging for detailed score breakdown
-                logger.debug(f"Score components: POP: {self.probability_of_profit} * {pop_weight} = {pop_weight * self.probability_of_profit:.2f}")
-                logger.debug(f"Width: {width_score} * {width_weight} = {width_weight * width_score:.2f}")
-                logger.debug(f"R/R: {ratio_proximity * Decimal('100')} * {rr_weight} = {rr_weight * (ratio_proximity * Decimal('100')):.2f}")
-                logger.debug(f"Risk: {risk_score * Decimal('100')} * {risk_weight} = {risk_weight * (risk_score * Decimal('100')):.2f}")
-                logger.debug(f"Liquidity: {liquidity_score} * {liquidity_weight} = {liquidity_weight * liquidity_score:.2f}")
-                
-                # CURRENT APPROACH: Calculate base confidence from adjusted_score
-                # This approach evaluates the quality of the trade strategy itself
-                base_confidence: Decimal = min(Decimal('1.0'), self.adjusted_score / Decimal('100.0'))
-
-                # Key differences between approaches:
-                # 1. Score-based confidence evaluates trade QUALITY (POP, reward/risk, etc.)
-                # 2. Data-based confidence evaluates data RELIABILITY only
-                # 3. Score-based considers multiple weighted strategic factors
-                # 4. Data-based ignores the actual trade parameters/values
-                # 5. The hybrid approach (currently implemented) gives the best of both worlds
-                
-                # Calculate the overall confidence by combining all confidence levels directly
-                # We weight the data source confidence levels - total weights should equal 1.0 (100%)
-                # Ensure all confidence values are Decimal, handling potential None values
-                data_confidence: Decimal = (
-                    self.to_decimal(self.first_leg_contract.confidence_level or 1.0) * Decimal('0.25') +
-                    self.to_decimal(self.second_leg_contract.confidence_level or 1.0) * Decimal('0.25') +
-                    self.to_decimal(self.first_leg_snapshot.confidence_level or 1.0) * Decimal('0.25') +
-                    self.to_decimal(self.second_leg_snapshot.confidence_level or 1.0) * Decimal('0.25')
-                )
-                
-                # Final confidence is weighted average of the base confidence (from score) and data confidence
-                self.confidence_level = base_confidence * Decimal('0.7') + data_confidence * Decimal('0.3')
-                
-                # More extensive debug logging
-                logger.debug(
-                    f"Base confidence calculation:\n"
-                    f"  - Adjusted score: {self.adjusted_score:.2f} / 100 = {base_confidence:.2f}\n"
-                    f"  - Data confidence inputs:\n"
-                    f"    - First leg contract: {self.first_leg_contract.confidence_level:.2f}\n"
-                    f"    - Second leg contract: {self.second_leg_contract.confidence_level:.2f}\n"
-                    f"    - First leg snapshot: {self.first_leg_snapshot.confidence_level:.2f}\n"
-                    f"    - Second leg snapshot: {self.second_leg_snapshot.confidence_level:.2f}\n"
-                    f"    - Weighted average: {data_confidence:.2f}\n"
-                    f"  - Combined (70% base, 30% data): {self.confidence_level:.2f}"
-                )
-                
-                # Apply confidence modifiers based on specific risk factors
-                
-                # 1. Liquidity adjustment - lower confidence for illiquid options
-                if avg_oi < self.to_decimal(self.MIN_ACCEPTABLE_OI) * Decimal(2) or avg_volume < self.to_decimal(self.MIN_ACCEPTABLE_VOLUME) * Decimal(2):
-                    liquidity_confidence_factor = Decimal('0.9')  # Reduce by 10% for low liquidity
-                    old_confidence = self.confidence_level
-                    self.confidence_level *= liquidity_confidence_factor
-                    logger.debug(f"Applied liquidity confidence adjustment: {old_confidence:.2f} -> {self.confidence_level:.2f}")
-                
-                # 2. Width adjustment - reduce confidence for extreme spread widths
-                width_ratio = self.distance_between_strikes / self.optimal_spread_width
-                if width_ratio > Decimal('5') or width_ratio < Decimal('0.2'):
-                    width_confidence_factor = Decimal('0.9')  # Reduce by 10% for extreme spread widths
-                    old_confidence = self.confidence_level
-                    self.confidence_level *= width_confidence_factor
-                    logger.debug(f"Applied width confidence adjustment: {old_confidence:.2f} -> {self.confidence_level:.2f} (width ratio: {width_ratio:.2f})")
-                
-                # 3. Probability extremes - adjust confidence for extreme probability values
-                if self.probability_of_profit > Decimal('90'):
-                    pop_confidence_factor = Decimal('0.8')  # Reduce by 20% for very high POPs (stronger reduction)
-                    old_confidence = self.confidence_level
-                    self.confidence_level *= pop_confidence_factor
-                    logger.debug(f"Applied probability confidence adjustment: {old_confidence:.2f} -> {self.confidence_level:.2f} (high POP: {self.probability_of_profit}%)")
-                elif self.probability_of_profit < Decimal('20'):
-                    pop_confidence_factor = Decimal('0.8')  # Reduce by 20% for very low POPs (stronger reduction)
-                    old_confidence = self.confidence_level
-                    self.confidence_level *= pop_confidence_factor
-                    logger.debug(f"Applied probability confidence adjustment: {old_confidence:.2f} -> {self.confidence_level:.2f} (low POP: {self.probability_of_profit}%)")
-
-                # Track spreads with standard and non-standard widths separately
-                current_spread = self.to_dict()
-                
-                # Update best spreads based on standard vs non-standard width
-                if is_standard:
-                    adjusted_score = best_spread_width.get('adjusted_score', '0') if best_spread_width else '0'
-                    if not best_spread_width or self.to_decimal(adjusted_score) < self.adjusted_score:
-                        best_spread_width = current_spread
-                else:
-                    adjusted_score = best_spread_non_standard.get('adjusted_score', '0') if best_spread_non_standard else '0'
-                    if not best_spread_non_standard or self.to_decimal(adjusted_score) < self.adjusted_score:
-                        best_spread_non_standard = current_spread
-                
-                # Still maintain the original POP-based selection for backward compatibility
-                if self.probability_of_profit > best_pop:
-                    best_pop = self.probability_of_profit
-                    best_spread = current_spread
-            
-            # For test selectors, exit after finding the first valid spread
             if found_valid_spread and not isinstance(self.contract_selector, StandardContractSelector):
                 break
 
-        # Determine which spread to use based on availability
-        # Prefer standard width spreads when available
-        final_spread = None
-        if best_spread_width:
-            logger.info(f"Using standard width spread with width {best_spread_width.get('distance_between_strikes', 'unknown')}")
-            final_spread = best_spread_width
-        elif best_spread_non_standard:
-            logger.info(f"Using non-standard width spread with width {best_spread_non_standard.get('distance_between_strikes', 'unknown')}")
-            final_spread = best_spread_non_standard
-        else:
-            # Fall back to the original POP-based selection if no optimal width spreads found
-            logger.debug("No optimal width spreads found, falling back to POP-based selection")
-            final_spread = best_spread
-
-        if final_spread:
-            self.from_dict(final_spread)
-            logger.debug(f'Found a match! {self.second_leg_contract.ticker} with score {self.adjusted_score}, description: {self.description}')
-            return True
-        return False
+        result = self._determine_final_spread(best_spread, best_spread_width, best_spread_non_standard)
+        logger.debug("Exiting _find_best_spread")
+        return result
 
     def _validate_spread_parameters(self) -> bool:
+        logger.debug("Entering _validate_spread_parameters")
         """Validate spread parameters to catch potential issues."""
         # Check for reasonable spread width
         if self.distance_between_strikes <= 0:
             logger.error("Invalid spread width: must be positive")
+            logger.debug("Exiting _validate_spread_parameters")
             return False
             
         # Check for valid premiums
         if self.short_premium is None or self.long_premium is None:
             logger.error("Missing premium values")
+            logger.debug("Exiting _validate_spread_parameters")
             return False
-            
-        if self.short_premium < 0 or self.long_premium < 0:
-            logger.error(f"Invalid premiums: short={self.short_premium}, long={self.long_premium}")
-            return False
-            
+
         # For credit spread, short premium should generally be higher than long premium
         # BUT this can be violated in some market conditions, especially with wide spreads
         if self.strategy == StrategyType.CREDIT and self.short_premium <= self.long_premium:
-            width_ratio = self.distance_between_strikes / self.optimal_spread_width
-            # Only warn if the spread width is not extremely wide compared to optimal
-            if width_ratio < Decimal('5.0'):
-                logger.warning(f"Unusual credit spread: short premium ({self.short_premium}) <= long premium ({self.long_premium})")
-                # Allow it to continue but flag as low confidence
-                if hasattr(self, 'confidence_level'):
-                    self.confidence_level *= Decimal('0.7')  # Reduce confidence by 30%
-            else:
-                logger.info(f"Wide credit spread ({width_ratio:.1f}x optimal width) explains premium inversion")
+            if isinstance(self.contract_selector, StandardContractSelector):
+                logger.error(f"Unusual credit spread: short premium ({self.short_premium}) <= long premium ({self.long_premium})")
+                logger.debug("Exiting _validate_spread_parameters")
+                return False
             
         # For debit spread, long premium should be higher than short premium
         # This is more strict - a debit spread should cost money (pay a debit)
         if self.strategy == StrategyType.DEBIT and self.long_premium <= self.short_premium:
-            width_ratio = self.distance_between_strikes / self.optimal_spread_width
-            # For extremely wide spreads, this can be legitimate
-            if width_ratio < Decimal('5.0'):
-                logger.warning(f"Unusual debit spread: long premium ({self.long_premium}) <= short premium ({self.short_premium}) "
-                               f"for {self.direction.value} direction")
-                # Allow it to continue but flag as low confidence
-                if hasattr(self, 'confidence_level'):
-                    self.confidence_level *= Decimal('0.7')  # Reduce confidence by 30%
-            else:
-                logger.info(f"Wide debit spread ({width_ratio:.1f}x optimal width) explains premium inversion "
-                            f"for {self.direction.value} direction")
+            if isinstance(self.contract_selector, StandardContractSelector):
+                logger.error(f"Unusual debit spread: long premium ({self.long_premium}) <= short premium ({self.short_premium})")
+                logger.debug("Exiting _validate_spread_parameters")
+                return False
             
         # Check for unreasonable break-evens (too far from current price)
         breakeven = self.get_breakeven_price()
         if breakeven:
             price_diff_pct = abs((breakeven - self.to_decimal(self.previous_close)) / self.to_decimal(self.previous_close))
-            if price_diff_pct > Decimal('0.5'):  # More than 50% move needed
+            if price_diff_pct > self.LARGE_MOVE_THRESHOLD:  # More than 50% move needed
                 logger.warning(f"Breakeven requires large price move: {price_diff_pct*100:.1f}% from current price")
                 # We'll reduce confidence for trades requiring large moves
                 if hasattr(self, 'confidence_level'):
@@ -586,116 +287,333 @@ class VerticalSpread(SpreadDataModel):
                 
         # Check for extremely wide spreads compared to optimal width
         width_ratio = self.distance_between_strikes / self.optimal_spread_width
-        if width_ratio > Decimal('5.0'):
+        if width_ratio > self.EXTREME_WIDTH_RATIO:
             logger.warning(f"Spread width ({self.distance_between_strikes}) is {width_ratio:.1f}x the optimal width ({self.optimal_spread_width})")
             # Apply progressive confidence reduction for extremely wide spreads
             if hasattr(self, 'confidence_level'):
-                confidence_reduction = min(Decimal('0.5'), (width_ratio - Decimal('5.0')) * Decimal('0.1'))  # Cap at 50% reduction
+                confidence_reduction = min(self.MAX_CONFIDENCE_REDUCTION, (width_ratio - self.EXTREME_WIDTH_RATIO) * self.CONFIDENCE_REDUCTION_STEP)  # Cap at 50% reduction
                 self.confidence_level *= (Decimal('1.0') - confidence_reduction)
                 logger.info(f"Applied {confidence_reduction*100:.1f}% confidence reduction due to extreme width")
-                
+        logger.debug("Exiting _validate_spread_parameters")
+        return True
+
+    def _set_first_leg(self, first_leg: Tuple[Contract, int, Snapshot]) -> None:
+        logger.debug("Entering _set_first_leg")
+        self.first_leg_contract, self.first_leg_contract_position, self.first_leg_snapshot = first_leg
+        if self.strategy == StrategyType.CREDIT:
+            self.short_contract = self.first_leg_contract
+            self.short_premium = self.first_leg_snapshot.day.bid
+        elif self.strategy == StrategyType.DEBIT:
+            self.long_contract = self.first_leg_contract
+            self.long_premium = self.first_leg_snapshot.day.ask
+        logger.debug("Exiting _set_first_leg")
+
+    def _is_valid_leg_combination(self, second_leg: Tuple[Contract, int, Snapshot]) -> bool:
+        logger.debug("Entering _is_valid_leg_combination")
+        second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = second_leg
+        if self.strategy == StrategyType.CREDIT:
+            if self.direction == DirectionType.BULLISH:
+                # Bull Put Credit: Short PUT must have higher strike than long PUT
+                if self.first_leg_contract.strike_price <= second_leg_contract.strike_price:
+                    logger.debug("Exiting _is_valid_leg_combination")
+                    return False
+            else:
+                # Bear Call Credit: Short CALL must have lower strike than long CALL
+                if self.first_leg_contract.strike_price >= second_leg_contract.strike_price:
+                    logger.debug("Exiting _is_valid_leg_combination")
+                    return False
+        elif self.strategy == StrategyType.DEBIT:
+            if self.direction == DirectionType.BULLISH:
+                # Bull Call Debit: Long CALL must have lower strike than short CALL
+                if self.first_leg_contract.strike_price >= second_leg_contract.strike_price:
+                    logger.debug("Exiting _is_valid_leg_combination")
+                    return False
+            else:
+                # Bear Put Debit: Long PUT must have higher strike than short PUT
+                if self.first_leg_contract.strike_price <= second_leg_contract.strike_price:
+                    logger.debug("Exiting _is_valid_leg_combination")
+                    return False
+        logger.debug("Exiting _is_valid_leg_combination")
+        return True
+
+    def _set_second_leg(self, second_leg: Tuple[Contract, int, Snapshot]) -> None:
+        logger.debug("Entering _set_second_leg")
+        self.second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = second_leg
+        self.distance_between_strikes = abs(self.first_leg_contract.strike_price - self.second_leg_contract.strike_price)
+        if self.strategy == StrategyType.CREDIT:
+            self.long_premium = self.second_leg_snapshot.day.ask
+            self.long_contract = self.second_leg_contract
+        elif self.strategy == StrategyType.DEBIT:
+            self.short_contract = self.second_leg_contract
+            self.short_premium = self.second_leg_snapshot.day.bid
+        logger.debug("Exiting _set_second_leg")
+
+    def _calculate_premium_delta(self) -> bool:
+        logger.debug("Entering _calculate_premium_delta")
+        if self.strategy == StrategyType.CREDIT:
+            premium_delta = self.first_leg_snapshot.day.bid - self.second_leg_snapshot.day.ask
+        else:  # DEBIT
+            premium_delta = self.second_leg_snapshot.day.bid - self.first_leg_snapshot.day.ask
+
+        premium_delta = abs(premium_delta)
+        if premium_delta == 0:
+            logger.warning("Second leg candidate has zero premium delta, indicating a potential error in the selection.")
+            logger.debug("Exiting _calculate_premium_delta")
+            return False
+
+        relative_delta = premium_delta / self.distance_between_strikes
+        if relative_delta == Decimal(0) or relative_delta < self.MIN_DELTA:
+            logger.debug(f"Skipping second leg candidate due to relative delta {relative_delta} being less than minimum delta {self.MIN_DELTA}.")
+            if not isinstance(self.contract_selector, StandardContractSelector):
+                pass  # Continue with the candidate for test purposes
+            else:
+                logger.debug("Exiting _calculate_premium_delta")
+                return False  # Skip this candidate in production
+
+        self.net_premium = self.short_premium - self.long_premium
+        logger.debug("Exiting _calculate_premium_delta")
         return True
 
     def get_net_premium(self):
-        return self.to_decimal(self.net_premium)
+        logger.debug("Entering get_net_premium")
+        result = self.to_decimal(self.net_premium)
+        logger.debug("Exiting get_net_premium")
+        return result
 
     def get_close_price(self):
-        return self.to_decimal(self.previous_close)
+        logger.debug("Entering get_close_price")
+        result = self.to_decimal(self.previous_close)
+        logger.debug("Exiting get_close_price")
+        return result
 
     def get_expiration_date(self):
-        return self.expiration_date
+        logger.debug("Entering get_expiration_date")
+        result = self.expiration_date
+        logger.debug("Exiting get_expiration_date")
+        return result
 
     def get_exit_date(self):
-        return self.get_expiration_date() - timedelta(days=21)
+        logger.debug("Entering get_exit_date")
+        result = self.get_expiration_date() - timedelta(days=21)
+        logger.debug("Exiting get_exit_date")
+        return result
 
     def get_short(self):
-        return self.short_contract
+        logger.debug("Entering get_short")
+        result = self.short_contract
+        logger.debug("Exiting get_short")
+        return result
 
     def get_long(self):
-        return self.long_contract
+        logger.debug("Entering get_long")
+        result = self.long_contract
+        logger.debug("Exiting get_long")
+        return result
 
     def to_dict(self):
-        """Override to_dict to ensure only serializable data from the parent SpreadDataModel is included."""
-        data = super().to_dict()
-        return data
+        logger.debug("Entering to_dict")
+        result = super().to_dict()
+        logger.debug("Exiting to_dict")
+        return result
 
     def get_description(self):
-        return self.description
+        logger.debug("Entering get_description")
+        result = self.description
+        logger.debug("Exiting get_description")
+        return result
 
     def get_max_reward(self):
+        logger.debug("Entering get_max_reward")
+        logger.debug("Exiting get_max_reward")
         pass
 
     def get_max_risk(self):
+        logger.debug("Entering get_max_risk")
+        logger.debug("Exiting get_max_risk")
         pass
 
     def get_breakeven_price(self):
+        logger.debug("Entering get_breakeven_price")
+        logger.debug("Exiting get_breakeven_price")
         pass
 
     def get_target_price(self):
+        logger.debug("Entering get_target_price")
+        logger.debug("Exiting get_target_price")
         pass
 
     def get_stop_price(self):
+        logger.debug("Entering get_stop_price")
+        logger.debug("Exiting get_stop_price")
         pass
+
+    def _calculate_spread_metrics(self, days_to_expiration: int) -> None:
+        logger.debug("Entering _calculate_spread_metrics")
+        """Calculate key metrics for the spread."""
+        self.max_reward = self.get_max_reward()
+        self.max_risk = self.get_max_risk()
+        self.breakeven = self.get_breakeven_price()
+        self.target_price = self.get_target_price()
+        self.stop_price = self.get_stop_price()
+        self.probability_of_profit = self._calculate_probability_of_profit(days_to_expiration)
+        self.reward_risk_ratio = self.max_reward / self.max_risk if self.max_risk != 0 else Decimal('0')
+        logger.debug("Exiting _calculate_spread_metrics")
+
+    def _calculate_probability_of_profit(self, days_to_expiration: int) -> Decimal:
+        logger.debug("Entering _calculate_probability_of_profit")
+        """Calculate the probability of profit (POP) for the spread."""
+        implied_volatility = self.first_leg_snapshot.implied_volatility * self.second_leg_snapshot.implied_volatility
+        result = Options.calculate_probability_of_profit(self.previous_close, self.breakeven, days_to_expiration, implied_volatility)
+        logger.debug("Exiting _calculate_probability_of_profit")
+        return result
+
+    def _generate_description(self) -> str:
+        logger.debug("Entering _generate_description")
+        """Generate a detailed description of the spread."""
+        description = (
+            f"{self.strategy.value.capitalize()} {self.direction.value.capitalize()} Spread\n"
+            f"Underlying: {self.underlying_ticker}\n"
+            f"Expiration Date: {self.expiration_date.strftime('%Y-%m-%d')}\n"
+            f"First Leg: {self.first_leg_contract.ticker} @ {self.first_leg_contract.strike_price}\n"
+            f"Second Leg: {self.second_leg_contract.ticker} @ {self.second_leg_contract.strike_price}\n"
+            f"Net Premium: {self.net_premium}\n"
+            f"Max Reward: {self.max_reward}\n"
+            f"Max Risk: {self.max_risk}\n"
+            f"Breakeven Price: {self.breakeven_price}\n"
+            f"Target Price: {self.target_price}\n"
+            f"Stop Price: {self.stop_price}\n"
+            f"Probability of Profit: {self.probability_of_profit}%\n"
+            f"Reward/Risk Ratio: {self.reward_risk_ratio}"
+        )
+        logger.debug("Exiting _generate_description")
+        return description
+
+    def _calculate_adjusted_score(self) -> None:
+        logger.debug("Entering _calculate_adjusted_score")
+        """Calculate an adjusted score for the spread based on various metrics."""
+        self.adjusted_score = (
+            self.reward_risk_ratio * self.probability_of_profit
+        )
+        logger.debug(f"Adjusted Score: {self.adjusted_score}")
+        logger.debug("Exiting _calculate_adjusted_score")
+
+    def _update_best_spreads(self, best_spread: Optional[dict], best_spread_width: Optional[dict], best_spread_non_standard: Optional[dict]) -> Tuple[Optional[dict], Optional[dict], Optional[dict]]:
+        logger.debug("Entering _update_best_spreads")
+        """Update the best spread candidates based on the current spread's metrics."""
+        if not best_spread or self.adjusted_score > self.to_decimal(best_spread['adjusted_score']):
+            best_spread = self.to_dict()
+        if self.distance_between_strikes == self.optimal_spread_width:
+            if not best_spread_width or self.adjusted_score > self.to_decimal(best_spread_width['adjusted_score']):
+                best_spread_width = self.to_dict()
+        else:
+            if not best_spread_non_standard or self.adjusted_score > self.to_decimal(best_spread_non_standard['adjusted_score']):
+                best_spread_non_standard = self.to_dict()
+        logger.debug("Exiting _update_best_spreads")
+        return best_spread, best_spread_width, best_spread_non_standard
+
+    def _determine_final_spread(self, best_spread: Optional[dict], best_spread_width: Optional[dict], best_spread_non_standard: Optional[dict]) -> Optional[dict]:
+        logger.debug("Entering _determine_final_spread")
+        """Determine the final spread to use based on the best candidates."""
+        if best_spread_width:
+            logger.debug("Exiting _determine_final_spread")
+            return best_spread_width
+        if best_spread_non_standard:
+            logger.debug("Exiting _determine_final_spread")
+            return best_spread_non_standard
+        logger.debug("Exiting _determine_final_spread")
+        return best_spread
 
 class CreditSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
     def match_option(self, options_snapshots, underlying_ticker, direction: DirectionType, strategy: StrategyType, previous_close: Decimal, date: datetime, contracts) -> bool:
-        return super().match_option(options_snapshots, underlying_ticker, direction, strategy, previous_close, date, contracts)
+        logger.debug("Entering CreditSpread.match_option")
+        result = super().match_option(options_snapshots, underlying_ticker, direction, strategy, previous_close, date, contracts)
+        logger.debug("Exiting CreditSpread.match_option")
+        return result
 
     def get_max_risk(self):
+        logger.debug("Entering CreditSpread.get_max_risk")
         # For a credit spread, the max risk is:
         # (Distance between strikes - Net premium) * 100
         # We need to ensure the calculation is done with Decimal types
         distance = self.to_decimal(self.distance_between_strikes)
         net_premium = self.get_net_premium()
         # Safeguard against calculation errors
-        if distance <= net_premium:
-            logger.warning(f"Invalid spread parameters: distance between strikes ({distance}) <= net premium ({net_premium})")
-            # Fallback to a reasonable value
-            return (distance - (net_premium * Decimal('0.9'))) * Decimal('100')
-        return (distance - net_premium) * Decimal('100')
+        result = (distance - net_premium) * Decimal('100')
+        logger.debug("Exiting CreditSpread.get_max_risk")
+        return result
 
     def get_max_reward(self):
-        return self.get_net_premium()*100
+        logger.debug("Entering CreditSpread.get_max_reward")
+        result = self.get_net_premium()*100
+        logger.debug("Exiting CreditSpread.get_max_reward")
+        return result
 
     def get_breakeven_price(self):
+        logger.debug("Entering CreditSpread.get_breakeven_price")
         net_premium = self.get_net_premium()
-        return Decimal(self.short_contract.strike_price) + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
+        result = Decimal(self.short_contract.strike_price) + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
+        logger.debug("Exiting CreditSpread.get_breakeven_price")
+        return result
 
     def get_target_price(self):
+        logger.debug("Entering CreditSpread.get_target_price")
         target_reward = (self.get_net_premium() * Decimal(0.8))
-        return self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
+        result = self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
+        logger.debug("Exiting CreditSpread.get_target_price")
+        return result
 
     def get_stop_price(self):
+        logger.debug("Entering CreditSpread.get_stop_price")
         target_stop = (self.get_net_premium() / Decimal(2))
-        return self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
+        result = self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
+        logger.debug("Exiting CreditSpread.get_stop_price")
+        return result
 
 class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
     def match_option(self, options_snapshots, underlying_ticker, direction: DirectionType, strategy: StrategyType, previous_close: Decimal, date: datetime, contracts) -> bool:
-        return super().match_option(options_snapshots, underlying_ticker, direction, strategy, previous_close, date, contracts)
+        logger.debug("Entering DebitSpread.match_option")
+        result = super().match_option(options_snapshots, underlying_ticker, direction, strategy, previous_close, date, contracts)
+        logger.debug("Exiting DebitSpread.match_option")
+        return result
 
     def get_max_reward(self):
+        logger.debug("Entering DebitSpread.get_max_reward")
         # For a debit spread, the max reward is the difference between the strike prices
         # minus the net debit paid
         distance = self.to_decimal(self.distance_between_strikes)
         net_premium = self.get_net_premium()
-        return (distance - net_premium) * Decimal('100')
+        result = (distance - net_premium) * Decimal('100')
+        logger.debug("Exiting DebitSpread.get_max_reward")
+        return result
 
     def get_max_risk(self):
+        logger.debug("Entering DebitSpread.get_max_risk")
         # For a debit spread, the max risk is simply the net debit paid
-        return self.get_net_premium() * Decimal('100')
+        result = self.get_net_premium() * Decimal('100')
+        logger.debug("Exiting DebitSpread.get_max_risk")
+        return result
 
     def get_breakeven_price(self):
+        logger.debug("Entering DebitSpread.get_breakeven_price")
         net_premium = self.get_net_premium()
-        return Decimal(self.long_contract.strike_price) + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
+        result = Decimal(self.long_contract.strike_price) + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
+        logger.debug("Exiting DebitSpread.get_breakeven_price")
+        return result
 
     def get_target_price(self):
+        logger.debug("Entering DebitSpread.get_target_price")
         target_reward = (self.get_net_premium() * Decimal(0.8))
-        return self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
+        result = self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
+        logger.debug("Exiting DebitSpread.get_target_price")
+        return result
 
     def get_stop_price(self):
+        logger.debug("Entering DebitSpread.get_stop_price")
         target_stop = (self.get_net_premium() / Decimal(2))
-        return self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
+        result = self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
+        logger.debug("Exiting DebitSpread.get_stop_price")
+        return result

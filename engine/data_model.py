@@ -62,7 +62,9 @@ class StrikePriceType(Enum):
 class DataModelBase(BaseModel):
     EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client']
     DATE_FORMAT: ClassVar[str] = '%Y-%m-%d'
+    
     confidence_level: Optional[Decimal] = Decimal(1.0)
+    matched: Optional[bool] = False
 
     def __init__(self, **data: Any):
         converted_data = {
@@ -309,7 +311,8 @@ class DayData(BaseModel):
     osi_key: Optional[str] = None
     time_of_last_trade: Optional[int] = None
     average_volume: Optional[int] = None
-
+    reward_risk_ratio: Decimal = Decimal('0')
+    
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DayData':
         return cls(**data)
@@ -371,6 +374,7 @@ class SpreadDataModel(DataModelBase):
     underlying_ticker: Optional[str] = None
     update_date: Optional[date] = None
     adjusted_score: Optional[Decimal] = None  # Added field for spread selection scoring
+    reward_risk_ratio: Decimal = Decimal('0')
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SpreadDataModel':

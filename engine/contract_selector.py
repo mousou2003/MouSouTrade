@@ -64,7 +64,8 @@ class StandardContractSelector(ContractSelector):
                         underlying_ticker: str,
                         trade_strategy: TradeStrategy,
                         strategy: StrategyType, 
-                        direction: DirectionType) -> List[Tuple[Contract, int, Snapshot]]:
+                        direction: DirectionType,
+                        current_price:Decimal) -> List[Tuple[Contract, int, Snapshot]]:
         """
         Select contracts using standard production criteria based on delta values.
         
@@ -108,7 +109,8 @@ class StandardContractSelector(ContractSelector):
             filtered_contracts, 
             options_snapshots, 
             underlying_ticker, 
-            trade_strategy
+            trade_strategy,
+            current_price
         )
         
         # If needed, adjust the positions to match the original contract list

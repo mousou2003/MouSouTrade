@@ -42,9 +42,9 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
+# logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
 # logging.getLogger('engine.VerticalSpread').addHandler(handler)
-logging.getLogger('engine.Options').setLevel(logging.DEBUG)
+# logging.getLogger('engine.Options').setLevel(logging.DEBUG)
 # logging.getLogger('engine.Options').addHandler(handler)
 # logging.getLogger('engine.Stocks').setLevel(logging.INFO)
 # logging.getLogger('engine.Stocks').addHandler(handler)
@@ -216,4 +216,4 @@ def main():
         return 1
 
 if __name__ == "__main__":
-    sys.exit(main())
+     sys.exit(main())
