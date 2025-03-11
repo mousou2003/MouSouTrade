@@ -90,38 +90,32 @@ class StandardContractSelector(ContractSelector):
         
         # Filter candidates by contract type first
         filtered_contracts = []
-        filtered_positions = []
         
         # Pre-filter contracts by type to improve performance
         for position, contract in enumerate(contracts):
             if contract.contract_type.value is expected_contract_type.value :
                 if contract.underlying_ticker.lower() == underlying_ticker.lower():
                     filtered_contracts.append(contract)
-                    filtered_positions.append(position)
+
                 
         # No matching contracts by type
         if not filtered_contracts:
             logger.debug(f"No {expected_contract_type.value} contracts found for {direction.value} {strategy.value} strategy")
             return []
-                
+        
+        # Reorder filtered contracts using get_order function
+        order = Options.get_order(strategy, direction)
+        reverse_order = (order.lower() == 'desc')
+        filtered_contracts.sort(key=lambda c: c.strike_price, reverse=reverse_order)
+
         # Now use the Options module's select_contract method with the filtered contracts
-        candidates = Options.select_contract(
+        return Options.select_contract(
             filtered_contracts, 
             options_snapshots, 
             underlying_ticker, 
             trade_strategy,
             current_price
         )
-        
-        # If needed, adjust the positions to match the original contract list
-        if candidates:
-            adjusted_candidates = []
-            for contract, relative_pos, snapshot in candidates:
-                original_pos = filtered_positions[relative_pos]
-                adjusted_candidates.append((contract, original_pos, snapshot))
-            return adjusted_candidates
-        
-        return []
 
 class TestContractSelector(ContractSelector):
     """Contract selection strategy optimized for testing."""

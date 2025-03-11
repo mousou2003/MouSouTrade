@@ -158,7 +158,6 @@ class VerticalSpread(SpreadDataModel):
         best_spread: Optional[dict] = self._find_best_spread(first_leg_candidates, second_leg_candidates, 
                                                              days_to_expiration, self.optimal_spread_width)
         if best_spread:
-            self.from_dict(best_spread)
             logger.debug(f'Found a match! {self.second_leg_contract.ticker} with score {self.adjusted_score}, description: {self.description}')
             logger.debug("Exiting match_option")
             return True
@@ -227,10 +226,11 @@ class VerticalSpread(SpreadDataModel):
                 if not contract.matched:
                     continue
                 self._set_second_leg(second_leg)
-                self._calculate_spread_metrics(days_to_expiration)
-                if not self._calculate_premium_delta():
+                if not self._calculate_spread_metrics(days_to_expiration):
+                    logger.debug("Skipping candidate due to failed spread metrics calculation.")
                     continue
                 if not self._validate_spread_parameters():
+                    logger.debug("Skipping candidate due to failed spread parameter validation.")
                     continue
                 self._calculate_adjusted_score()
                 best_spread, best_spread_width, best_spread_non_standard = self._update_best_spreads(best_spread, best_spread_width, best_spread_non_standard)
@@ -240,18 +240,16 @@ class VerticalSpread(SpreadDataModel):
             if found_valid_spread and not isinstance(self.contract_selector, StandardContractSelector):
                 break
 
-        result = self._determine_final_spread(best_spread, best_spread_width, best_spread_non_standard)
-        logger.debug("Exiting _find_best_spread")
-        return result
+        if found_valid_spread:
+            result = self._determine_final_spread(best_spread, best_spread_width, best_spread_non_standard)
+            self.from_dict(result)
+            self.description = self._generate_description()
+            logger.debug("Exiting _find_best_spread")
+            return result
 
     def _validate_spread_parameters(self) -> bool:
         logger.debug("Entering _validate_spread_parameters")
         """Validate spread parameters to catch potential issues."""
-        # Check for reasonable spread width
-        if self.distance_between_strikes <= 0:
-            logger.error("Invalid spread width: must be positive")
-            logger.debug("Exiting _validate_spread_parameters")
-            return False
             
         # Check for valid premiums
         if self.short_premium is None or self.long_premium is None:
@@ -271,14 +269,15 @@ class VerticalSpread(SpreadDataModel):
         # This is more strict - a debit spread should cost money (pay a debit)
         if self.strategy == StrategyType.DEBIT and self.long_premium <= self.short_premium:
             if isinstance(self.contract_selector, StandardContractSelector):
-                logger.error(f"Unusual debit spread: long premium ({self.long_premium}) <= short premium ({self.short_premium})")
+                logger.error(f"Unusual debit spread: long premium ({self.long_premium}) <= short premium ({self.short_premium})\n"+
+                             f"Spread details: first_leg_contract={self.first_leg_contract}, second_leg_contract={self.second_leg_contract}, distance_between_strikes={self.distance_between_strikes}")
                 logger.debug("Exiting _validate_spread_parameters")
                 return False
             
         # Check for unreasonable break-evens (too far from current price)
         breakeven = self.get_breakeven_price()
         if breakeven:
-            price_diff_pct = abs((breakeven - self.to_decimal(self.previous_close)) / self.to_decimal(self.previous_close))
+            price_diff_pct = abs((breakeven - self.previous_close) / self.previous_close)
             if price_diff_pct > self.LARGE_MOVE_THRESHOLD:  # More than 50% move needed
                 logger.warning(f"Breakeven requires large price move: {price_diff_pct*100:.1f}% from current price")
                 # We'll reduce confidence for trades requiring large moves
@@ -308,38 +307,10 @@ class VerticalSpread(SpreadDataModel):
             self.long_premium = self.first_leg_snapshot.day.ask
         logger.debug("Exiting _set_first_leg")
 
-    def _is_valid_leg_combination(self, second_leg: Tuple[Contract, int, Snapshot]) -> bool:
-        logger.debug("Entering _is_valid_leg_combination")
-        second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = second_leg
-        if self.strategy == StrategyType.CREDIT:
-            if self.direction == DirectionType.BULLISH:
-                # Bull Put Credit: Short PUT must have higher strike than long PUT
-                if self.first_leg_contract.strike_price <= second_leg_contract.strike_price:
-                    logger.debug("Exiting _is_valid_leg_combination")
-                    return False
-            else:
-                # Bear Call Credit: Short CALL must have lower strike than long CALL
-                if self.first_leg_contract.strike_price >= second_leg_contract.strike_price:
-                    logger.debug("Exiting _is_valid_leg_combination")
-                    return False
-        elif self.strategy == StrategyType.DEBIT:
-            if self.direction == DirectionType.BULLISH:
-                # Bull Call Debit: Long CALL must have lower strike than short CALL
-                if self.first_leg_contract.strike_price >= second_leg_contract.strike_price:
-                    logger.debug("Exiting _is_valid_leg_combination")
-                    return False
-            else:
-                # Bear Put Debit: Long PUT must have higher strike than short PUT
-                if self.first_leg_contract.strike_price <= second_leg_contract.strike_price:
-                    logger.debug("Exiting _is_valid_leg_combination")
-                    return False
-        logger.debug("Exiting _is_valid_leg_combination")
-        return True
-
     def _set_second_leg(self, second_leg: Tuple[Contract, int, Snapshot]) -> None:
         logger.debug("Entering _set_second_leg")
         self.second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = second_leg
-        self.distance_between_strikes = abs(self.first_leg_contract.strike_price - self.second_leg_contract.strike_price)
+        self.distance_between_strikes = self.first_leg_contract.strike_price - self.second_leg_contract.strike_price
         if self.strategy == StrategyType.CREDIT:
             self.long_premium = self.second_leg_snapshot.day.ask
             self.long_contract = self.second_leg_contract
@@ -348,42 +319,10 @@ class VerticalSpread(SpreadDataModel):
             self.short_premium = self.second_leg_snapshot.day.bid
         logger.debug("Exiting _set_second_leg")
 
-    def _calculate_premium_delta(self) -> bool:
-        logger.debug("Entering _calculate_premium_delta")
-        if self.strategy == StrategyType.CREDIT:
-            premium_delta = self.first_leg_snapshot.day.bid - self.second_leg_snapshot.day.ask
-        else:  # DEBIT
-            premium_delta = self.second_leg_snapshot.day.bid - self.first_leg_snapshot.day.ask
-
-        premium_delta = abs(premium_delta)
-        if premium_delta == 0:
-            logger.warning("Second leg candidate has zero premium delta, indicating a potential error in the selection.")
-            logger.debug("Exiting _calculate_premium_delta")
-            return False
-
-        relative_delta = premium_delta / self.distance_between_strikes
-        if relative_delta == Decimal(0) or relative_delta < self.MIN_DELTA:
-            logger.debug(f"Skipping second leg candidate due to relative delta {relative_delta} being less than minimum delta {self.MIN_DELTA}.")
-            if not isinstance(self.contract_selector, StandardContractSelector):
-                pass  # Continue with the candidate for test purposes
-            else:
-                logger.debug("Exiting _calculate_premium_delta")
-                return False  # Skip this candidate in production
-
-        self.net_premium = self.short_premium - self.long_premium
-        logger.debug("Exiting _calculate_premium_delta")
-        return True
-
     def get_net_premium(self):
         logger.debug("Entering get_net_premium")
-        result = self.to_decimal(self.net_premium)
+        result = self.short_premium - self.long_premium
         logger.debug("Exiting get_net_premium")
-        return result
-
-    def get_close_price(self):
-        logger.debug("Entering get_close_price")
-        result = self.to_decimal(self.previous_close)
-        logger.debug("Exiting get_close_price")
         return result
 
     def get_expiration_date(self):
@@ -398,68 +337,52 @@ class VerticalSpread(SpreadDataModel):
         logger.debug("Exiting get_exit_date")
         return result
 
-    def get_short(self):
-        logger.debug("Entering get_short")
-        result = self.short_contract
-        logger.debug("Exiting get_short")
-        return result
-
-    def get_long(self):
-        logger.debug("Entering get_long")
-        result = self.long_contract
-        logger.debug("Exiting get_long")
-        return result
-
-    def to_dict(self):
-        logger.debug("Entering to_dict")
-        result = super().to_dict()
-        logger.debug("Exiting to_dict")
-        return result
-
     def get_description(self):
         logger.debug("Entering get_description")
         result = self.description
         logger.debug("Exiting get_description")
         return result
 
-    def get_max_reward(self):
-        logger.debug("Entering get_max_reward")
-        logger.debug("Exiting get_max_reward")
-        pass
-
-    def get_max_risk(self):
-        logger.debug("Entering get_max_risk")
-        logger.debug("Exiting get_max_risk")
-        pass
-
-    def get_breakeven_price(self):
-        logger.debug("Entering get_breakeven_price")
-        logger.debug("Exiting get_breakeven_price")
-        pass
-
-    def get_target_price(self):
-        logger.debug("Entering get_target_price")
-        logger.debug("Exiting get_target_price")
-        pass
-
-    def get_stop_price(self):
-        logger.debug("Entering get_stop_price")
-        logger.debug("Exiting get_stop_price")
-        pass
-
-    def _calculate_spread_metrics(self, days_to_expiration: int) -> None:
+    def _calculate_spread_metrics(self, days_to_expiration: int) -> bool:
         logger.debug("Entering _calculate_spread_metrics")
         """Calculate key metrics for the spread."""
+
+        self.net_premium = self.get_net_premium()
+        if self.net_premium == 0:
+            logger.warning("Second leg candidate has zero premium delta, indicating a potential error in the selection.")
+            logger.debug("Exiting _calculate_spread_metrics")
+            return False
+
+        relative_delta = self.net_premium / self.distance_between_strikes
+        if relative_delta == Decimal(0) or relative_delta < self.MIN_DELTA:
+            logger.debug(f"Skipping second leg candidate due to relative delta {relative_delta} being less than minimum delta {self.MIN_DELTA}.")
+            if not isinstance(self.contract_selector, StandardContractSelector):
+                logger.debug("Continuing with the candidate for test purposes despite low relative delta.")
+                pass  # Continue with the candidate for test purposes
+            else:
+                logger.debug("Exiting _calculate_spread_metrics")
+                return False  # Skip this candidate in production
+
         self.max_reward = self.get_max_reward()
         self.max_risk = self.get_max_risk()
         self.breakeven = self.get_breakeven_price()
         self.target_price = self.get_target_price()
         self.stop_price = self.get_stop_price()
+        self.entry_price = self.previous_close
+        self.exit_date = self.get_exit_date()
+        self.contract_type = self.short_contract.contract_type
         self.probability_of_profit = self._calculate_probability_of_profit(days_to_expiration)
+        
+        if self.probability_of_profit is None:
+            logger.warning("Probability of profit calculation failed.")
+            logger.debug("Exiting _calculate_spread_metrics")
+            return False
+
         self.reward_risk_ratio = self.max_reward / self.max_risk if self.max_risk != 0 else Decimal('0')
         logger.debug("Exiting _calculate_spread_metrics")
+        return True
 
-    def _calculate_probability_of_profit(self, days_to_expiration: int) -> Decimal:
+    def _calculate_probability_of_profit(self, days_to_expiration: int) -> Optional[Decimal]:
         logger.debug("Entering _calculate_probability_of_profit")
         """Calculate the probability of profit (POP) for the spread."""
         implied_volatility = self.first_leg_snapshot.implied_volatility * self.second_leg_snapshot.implied_volatility
@@ -473,17 +396,10 @@ class VerticalSpread(SpreadDataModel):
         description = (
             f"{self.strategy.value.capitalize()} {self.direction.value.capitalize()} Spread\n"
             f"Underlying: {self.underlying_ticker}\n"
-            f"Expiration Date: {self.expiration_date.strftime('%Y-%m-%d')}\n"
-            f"First Leg: {self.first_leg_contract.ticker} @ {self.first_leg_contract.strike_price}\n"
-            f"Second Leg: {self.second_leg_contract.ticker} @ {self.second_leg_contract.strike_price}\n"
-            f"Net Premium: {self.net_premium}\n"
-            f"Max Reward: {self.max_reward}\n"
-            f"Max Risk: {self.max_risk}\n"
-            f"Breakeven Price: {self.breakeven_price}\n"
-            f"Target Price: {self.target_price}\n"
-            f"Stop Price: {self.stop_price}\n"
-            f"Probability of Profit: {self.probability_of_profit}%\n"
-            f"Reward/Risk Ratio: {self.reward_risk_ratio}"
+            f"Sale: ${self.short_contract.strike_price:.2f}\n"
+            f"Buy: ${self.long_contract.strike_price:.2f}\n"
+            f"Net Premium: ${self.net_premium:.2f}\n"
+            f"Target Price: ${self.target_price:.2f}\n"
         )
         logger.debug("Exiting _generate_description")
         return description
@@ -537,7 +453,7 @@ class CreditSpread(VerticalSpread):
         # For a credit spread, the max risk is:
         # (Distance between strikes - Net premium) * 100
         # We need to ensure the calculation is done with Decimal types
-        distance = self.to_decimal(self.distance_between_strikes)
+        distance = self.distance_between_strikes
         net_premium = self.get_net_premium()
         # Safeguard against calculation errors
         result = (distance - net_premium) * Decimal('100')
@@ -546,14 +462,14 @@ class CreditSpread(VerticalSpread):
 
     def get_max_reward(self):
         logger.debug("Entering CreditSpread.get_max_reward")
-        result = self.get_net_premium()*100
+        result = self.get_net_premium() * Decimal('100')
         logger.debug("Exiting CreditSpread.get_max_reward")
         return result
 
     def get_breakeven_price(self):
         logger.debug("Entering CreditSpread.get_breakeven_price")
         net_premium = self.get_net_premium()
-        result = Decimal(self.short_contract.strike_price) + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
+        result = self.previous_close + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
         logger.debug("Exiting CreditSpread.get_breakeven_price")
         return result
 
@@ -579,14 +495,12 @@ class DebitSpread(VerticalSpread):
         result = super().match_option(options_snapshots, underlying_ticker, direction, strategy, previous_close, date, contracts)
         logger.debug("Exiting DebitSpread.match_option")
         return result
-
+    
     def get_max_reward(self):
         logger.debug("Entering DebitSpread.get_max_reward")
         # For a debit spread, the max reward is the difference between the strike prices
         # minus the net debit paid
-        distance = self.to_decimal(self.distance_between_strikes)
-        net_premium = self.get_net_premium()
-        result = (distance - net_premium) * Decimal('100')
+        result = (self.distance_between_strikes + self.get_net_premium()) * Decimal('100')
         logger.debug("Exiting DebitSpread.get_max_reward")
         return result
 
@@ -606,7 +520,7 @@ class DebitSpread(VerticalSpread):
 
     def get_target_price(self):
         logger.debug("Entering DebitSpread.get_target_price")
-        target_reward = (self.get_net_premium() * Decimal(0.8))
+        target_reward = ((self.distance_between_strikes + self.get_net_premium()) * Decimal(0.8))
         result = self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
         logger.debug("Exiting DebitSpread.get_target_price")
         return result

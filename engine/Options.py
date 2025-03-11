@@ -304,7 +304,7 @@ class Options:
         if percent_diff <= threshold:
             return StrikePriceType.ATM
         
-        if contract_type == ContractType.CALL:
+        if contract_type.value == ContractType.CALL.value:
             # For calls: strike < current = ITM, strike > current = OTM
             return StrikePriceType.ITM if strike_price < current_price else StrikePriceType.OTM
         else:  # PUT
