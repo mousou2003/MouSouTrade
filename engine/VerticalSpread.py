@@ -99,6 +99,7 @@ In real-world options trading, vertical spread widths are chosen strategically b
 
 In professional trading environments, spread width is often standardized by asset class to simplify risk management across portfolios. """
 
+from tracemalloc import Snapshot
 from engine.data_model import *
 from engine.Options import Options, TradeStrategy
 from engine.contract_selector import ContractSelector, StandardContractSelector
@@ -130,195 +131,9 @@ class VerticalSpread(SpreadDataModel):
     CONFIDENCE_REDUCTION_STEP: ClassVar[Decimal] = Decimal('0.1')  # Step for confidence reduction
 
     contracts: List[Contract] = []
-    # Default contract selector for production use
-    contract_selector: ClassVar[ContractSelector] = StandardContractSelector()
+    # Make contract_selector an instance attribute instead of ClassVar
+    contract_selector: ContractSelector = StandardContractSelector()
     
-    def match_option(self, options_snapshots: dict, underlying_ticker: str, 
-                     direction: DirectionType, strategy: StrategyType, previous_close: Decimal, 
-                     date: datetime, contracts: List[Contract]) -> bool:
-        logger.debug("Entering match_option")
-        self._initialize_match_option(underlying_ticker, direction, strategy, previous_close, date, contracts)
-        self.optimal_spread_width = Options.calculate_optimal_spread_width(self.to_decimal(previous_close), self.strategy, self.direction)
-        logger.debug(f"Optimal spread width for {underlying_ticker} at price ${previous_close} with {strategy.value} strategy: ${self.optimal_spread_width}")
-
-        days_to_expiration: int = (self.expiration_date - self.update_date).days
-
-        first_leg_candidates: List[Tuple[Contract, int, Snapshot]] = self._select_first_leg_candidates(options_snapshots)
-        if not first_leg_candidates:
-            logger.debug("No suitable first leg contract found.")
-            logger.debug("Exiting match_option")
-            return False
-
-        second_leg_candidates: List[Tuple[Contract, int, Snapshot]] = self._select_second_leg_candidates(options_snapshots)
-        if not second_leg_candidates:
-            logger.debug("No suitable second leg contract found.")
-            logger.debug("Exiting match_option")
-            return False
-
-        best_spread: Optional[dict] = self._find_best_spread(first_leg_candidates, second_leg_candidates, 
-                                                             days_to_expiration, self.optimal_spread_width)
-        if best_spread:
-            logger.debug(f'Found a match! {self.second_leg_contract.ticker} with score {self.adjusted_score}, description: {self.description}')
-            logger.debug("Exiting match_option")
-            return True
-        logger.debug("Exiting match_option")
-        return False
-
-    def _initialize_match_option(self, underlying_ticker: str, direction: DirectionType, strategy: StrategyType, 
-                                 previous_close: Decimal, date: datetime, contracts: List[Contract]) -> None:
-        logger.debug("Entering _initialize_match_option")
-        self.underlying_ticker = underlying_ticker
-        self.direction = direction
-        self.strategy = strategy
-        self.previous_close = previous_close
-        self.expiration_date = date
-        self.update_date = datetime.today().date()
-        self.contracts = contracts
-        logger.debug("Exiting _initialize_match_option")
-
-    def _select_first_leg_candidates(self, options_snapshots: dict) -> List[Tuple[Contract, int, Snapshot]]:
-        logger.debug("Entering _select_first_leg_candidates")
-        result = self.contract_selector.select_contracts(
-            self.contracts, 
-            options_snapshots, 
-            self.underlying_ticker, 
-            TradeStrategy.DIRECTIONAL,
-            self.strategy,
-            self.direction,
-            self.previous_close
-        )
-        logger.debug("Exiting _select_first_leg_candidates")
-        return result
-
-    def _select_second_leg_candidates(self, options_snapshots: dict) -> List[Tuple[Contract, int, Snapshot]]:
-        logger.debug("Entering _select_second_leg_candidates")
-        result = self.contract_selector.select_contracts(
-            self.contracts, 
-            options_snapshots, 
-            self.underlying_ticker, 
-            TradeStrategy.HIGH_PROBABILITY,
-            self.strategy,
-            self.direction,
-            self.previous_close
-        )
-        logger.debug("Exiting _select_second_leg_candidates")
-        return result
-
-    def _find_best_spread(self, first_leg_candidates: List[Tuple[Contract, int, Snapshot]], 
-                          second_leg_candidates: List[Tuple[Contract, int, Snapshot]], 
-                          days_to_expiration: int, optimal_spread_width: Decimal) -> Optional[dict]:
-        logger.debug("Entering _find_best_spread")
-        best_spread: Optional[dict] = None
-        best_pop: Decimal = Decimal(0)
-        best_spread_width: Optional[dict] = None 
-        best_spread_non_standard: Optional[dict] = None
-        found_valid_spread: bool = False
-
-        for first_leg in first_leg_candidates:
-            contract, _, _ = first_leg
-            if not contract.matched:
-                continue
-            self._set_first_leg(first_leg)
-            for second_leg in second_leg_candidates:
-                # if not self._is_valid_leg_combination(second_leg):
-                #    continue
-                contract, _, _ = second_leg
-                if not contract.matched:
-                    continue
-                self._set_second_leg(second_leg)
-                if not self._calculate_spread_metrics(days_to_expiration):
-                    logger.debug("Skipping candidate due to failed spread metrics calculation.")
-                    continue
-                if not self._validate_spread_parameters():
-                    logger.debug("Skipping candidate due to failed spread parameter validation.")
-                    continue
-                self._calculate_adjusted_score()
-                best_spread, best_spread_width, best_spread_non_standard = self._update_best_spreads(best_spread, best_spread_width, best_spread_non_standard)
-                found_valid_spread = True
-                if not isinstance(self.contract_selector, StandardContractSelector):
-                    break
-            if found_valid_spread and not isinstance(self.contract_selector, StandardContractSelector):
-                break
-
-        if found_valid_spread:
-            result = self._determine_final_spread(best_spread, best_spread_width, best_spread_non_standard)
-            self.from_dict(result)
-            self.description = self._generate_description()
-            logger.debug("Exiting _find_best_spread")
-            return result
-
-    def _validate_spread_parameters(self) -> bool:
-        logger.debug("Entering _validate_spread_parameters")
-        """Validate spread parameters to catch potential issues."""
-            
-        # Check for valid premiums
-        if self.short_premium is None or self.long_premium is None:
-            logger.error("Missing premium values")
-            logger.debug("Exiting _validate_spread_parameters")
-            return False
-
-        # For credit spread, short premium should generally be higher than long premium
-        # BUT this can be violated in some market conditions, especially with wide spreads
-        if self.strategy == StrategyType.CREDIT and self.short_premium <= self.long_premium:
-            if isinstance(self.contract_selector, StandardContractSelector):
-                logger.error(f"Unusual credit spread: short premium ({self.short_premium}) <= long premium ({self.long_premium})")
-                logger.debug("Exiting _validate_spread_parameters")
-                return False
-            
-        # For debit spread, long premium should be higher than short premium
-        # This is more strict - a debit spread should cost money (pay a debit)
-        if self.strategy == StrategyType.DEBIT and self.long_premium <= self.short_premium:
-            if isinstance(self.contract_selector, StandardContractSelector):
-                logger.error(f"Unusual debit spread: long premium ({self.long_premium}) <= short premium ({self.short_premium})\n"+
-                             f"Spread details: first_leg_contract={self.first_leg_contract}, second_leg_contract={self.second_leg_contract}, distance_between_strikes={self.distance_between_strikes}")
-                logger.debug("Exiting _validate_spread_parameters")
-                return False
-            
-        # Check for unreasonable break-evens (too far from current price)
-        breakeven = self.get_breakeven_price()
-        if breakeven:
-            price_diff_pct = abs((breakeven - self.previous_close) / self.previous_close)
-            if price_diff_pct > self.LARGE_MOVE_THRESHOLD:  # More than 50% move needed
-                logger.warning(f"Breakeven requires large price move: {price_diff_pct*100:.1f}% from current price")
-                # We'll reduce confidence for trades requiring large moves
-                if hasattr(self, 'confidence_level'):
-                    self.confidence_level *= Decimal('0.9')
-                
-        # Check for extremely wide spreads compared to optimal width
-        width_ratio = self.distance_between_strikes / self.optimal_spread_width
-        if width_ratio > self.EXTREME_WIDTH_RATIO:
-            logger.warning(f"Spread width ({self.distance_between_strikes}) is {width_ratio:.1f}x the optimal width ({self.optimal_spread_width})")
-            # Apply progressive confidence reduction for extremely wide spreads
-            if hasattr(self, 'confidence_level'):
-                confidence_reduction = min(self.MAX_CONFIDENCE_REDUCTION, (width_ratio - self.EXTREME_WIDTH_RATIO) * self.CONFIDENCE_REDUCTION_STEP)  # Cap at 50% reduction
-                self.confidence_level *= (Decimal('1.0') - confidence_reduction)
-                logger.info(f"Applied {confidence_reduction*100:.1f}% confidence reduction due to extreme width")
-        logger.debug("Exiting _validate_spread_parameters")
-        return True
-
-    def _set_first_leg(self, first_leg: Tuple[Contract, int, Snapshot]) -> None:
-        logger.debug("Entering _set_first_leg")
-        self.first_leg_contract, self.first_leg_contract_position, self.first_leg_snapshot = first_leg
-        if self.strategy == StrategyType.CREDIT:
-            self.short_contract = self.first_leg_contract
-            self.short_premium = self.first_leg_snapshot.day.bid
-        elif self.strategy == StrategyType.DEBIT:
-            self.long_contract = self.first_leg_contract
-            self.long_premium = self.first_leg_snapshot.day.ask
-        logger.debug("Exiting _set_first_leg")
-
-    def _set_second_leg(self, second_leg: Tuple[Contract, int, Snapshot]) -> None:
-        logger.debug("Entering _set_second_leg")
-        self.second_leg_contract, self.second_leg_contract_position, self.second_leg_snapshot = second_leg
-        self.distance_between_strikes = self.first_leg_contract.strike_price - self.second_leg_contract.strike_price
-        if self.strategy == StrategyType.CREDIT:
-            self.long_premium = self.second_leg_snapshot.day.ask
-            self.long_contract = self.second_leg_contract
-        elif self.strategy == StrategyType.DEBIT:
-            self.short_contract = self.second_leg_contract
-            self.short_premium = self.second_leg_snapshot.day.bid
-        logger.debug("Exiting _set_second_leg")
-
     def get_net_premium(self):
         logger.debug("Entering get_net_premium")
         result = self.short_premium - self.long_premium
@@ -343,191 +158,382 @@ class VerticalSpread(SpreadDataModel):
         logger.debug("Exiting get_description")
         return result
 
-    def _calculate_spread_metrics(self, days_to_expiration: int) -> bool:
-        logger.debug("Entering _calculate_spread_metrics")
-        """Calculate key metrics for the spread."""
-
-        self.net_premium = self.get_net_premium()
-        if self.net_premium == 0:
-            logger.warning("Second leg candidate has zero premium delta, indicating a potential error in the selection.")
-            logger.debug("Exiting _calculate_spread_metrics")
-            return False
-
-        relative_delta = self.net_premium / self.distance_between_strikes
-        if relative_delta == Decimal(0) or relative_delta < self.MIN_DELTA:
-            logger.debug(f"Skipping second leg candidate due to relative delta {relative_delta} being less than minimum delta {self.MIN_DELTA}.")
-            if not isinstance(self.contract_selector, StandardContractSelector):
-                logger.debug("Continuing with the candidate for test purposes despite low relative delta.")
-                pass  # Continue with the candidate for test purposes
-            else:
-                logger.debug("Exiting _calculate_spread_metrics")
-                return False  # Skip this candidate in production
-
-        self.max_reward = self.get_max_reward()
-        self.max_risk = self.get_max_risk()
-        self.breakeven = self.get_breakeven_price()
-        self.target_price = self.get_target_price()
-        self.stop_price = self.get_stop_price()
-        self.entry_price = self.previous_close
-        self.exit_date = self.get_exit_date()
-        self.contract_type = self.short_contract.contract_type
-        self.probability_of_profit = self._calculate_probability_of_profit(days_to_expiration)
+    def copy(self) -> 'VerticalSpread':
+        """Create a complete deep copy of the vertical spread."""
+        logger.debug("Creating deep copy of vertical spread")
         
-        if self.probability_of_profit is None:
-            logger.warning("Probability of profit calculation failed.")
-            logger.debug("Exiting _calculate_spread_metrics")
-            return False
+        try:
+            # First, create a copy using parent's copy method
+            new_spread:VerticalSpread = super().model_copy()
+            
+            # Get all attributes from SpreadDataModel (parent class)
+            parent_attrs = set(SpreadDataModel.__annotations__.keys())
+            
+            # Deep copy all attributes based on their type
+            for attr_name in parent_attrs:
+                if hasattr(self, attr_name):
+                    value = getattr(self, attr_name)
+                    if value is not None:
+                        if isinstance(value, (Contract, Snapshot)):
+                            # Deep copy Contract and Snapshot objects
+                            setattr(new_spread, attr_name, value.__class__().from_dict(value.to_dict()))
+                        elif isinstance(value, list) and value and isinstance(value[0], DayData):
+                            # Deep copy lists of DayData
+                            setattr(new_spread, attr_name, [DayData().from_dict(x.to_dict()) for x in value])
+                        else:
+                            # Direct copy for primitive types
+                            setattr(new_spread, attr_name, value)
+            
+            # Set instance-specific contract_selector
+            new_spread.contract_selector = self.contract_selector
+            
+            logger.debug(f"Created deep copy of {self.__class__.__name__}")
+            return new_spread
+            
+        except Exception as e:
+            logger.error(f"Error creating vertical spread copy: {str(e)}")
+            raise
 
-        self.reward_risk_ratio = self.max_reward / self.max_risk if self.max_risk != 0 else Decimal('0')
-        logger.debug("Exiting _calculate_spread_metrics")
-        return True
-
-    def _calculate_probability_of_profit(self, days_to_expiration: int) -> Optional[Decimal]:
-        logger.debug("Entering _calculate_probability_of_profit")
-        """Calculate the probability of profit (POP) for the spread."""
-        implied_volatility = self.first_leg_snapshot.implied_volatility * self.second_leg_snapshot.implied_volatility
-        result = Options.calculate_probability_of_profit(self.previous_close, self.breakeven, days_to_expiration, implied_volatility)
-        logger.debug("Exiting _calculate_probability_of_profit")
-        return result
-
-    def _generate_description(self) -> str:
-        logger.debug("Entering _generate_description")
-        """Generate a detailed description of the spread."""
-        description = (
-            f"{self.strategy.value.capitalize()} {self.direction.value.capitalize()} Spread\n"
-            f"Underlying: {self.underlying_ticker}\n"
-            f"Sale: ${self.short_contract.strike_price:.2f}\n"
-            f"Buy: ${self.long_contract.strike_price:.2f}\n"
-            f"Net Premium: ${self.net_premium:.2f}\n"
-            f"Target Price: ${self.target_price:.2f}\n"
-        )
-        logger.debug("Exiting _generate_description")
-        return description
-
-    def _calculate_adjusted_score(self) -> None:
-        logger.debug("Entering _calculate_adjusted_score")
-        """Calculate an adjusted score for the spread based on various metrics."""
-        self.adjusted_score = (
-            self.reward_risk_ratio * self.probability_of_profit
-        )
-        logger.debug(f"Adjusted Score: {self.adjusted_score}")
-        logger.debug("Exiting _calculate_adjusted_score")
-
-    def _update_best_spreads(self, best_spread: Optional[dict], best_spread_width: Optional[dict], best_spread_non_standard: Optional[dict]) -> Tuple[Optional[dict], Optional[dict], Optional[dict]]:
-        logger.debug("Entering _update_best_spreads")
-        """Update the best spread candidates based on the current spread's metrics."""
-        if not best_spread or self.adjusted_score > self.to_decimal(best_spread['adjusted_score']):
-            best_spread = self.to_dict()
-        if self.distance_between_strikes == self.optimal_spread_width:
-            if not best_spread_width or self.adjusted_score > self.to_decimal(best_spread_width['adjusted_score']):
-                best_spread_width = self.to_dict()
-        else:
-            if not best_spread_non_standard or self.adjusted_score > self.to_decimal(best_spread_non_standard['adjusted_score']):
-                best_spread_non_standard = self.to_dict()
-        logger.debug("Exiting _update_best_spreads")
-        return best_spread, best_spread_width, best_spread_non_standard
-
-    def _determine_final_spread(self, best_spread: Optional[dict], best_spread_width: Optional[dict], best_spread_non_standard: Optional[dict]) -> Optional[dict]:
-        logger.debug("Entering _determine_final_spread")
-        """Determine the final spread to use based on the best candidates."""
-        if best_spread_width:
-            logger.debug("Exiting _determine_final_spread")
-            return best_spread_width
-        if best_spread_non_standard:
-            logger.debug("Exiting _determine_final_spread")
-            return best_spread_non_standard
-        logger.debug("Exiting _determine_final_spread")
-        return best_spread
-
+    
 class CreditSpread(VerticalSpread):
+
     ideal_expiration: ClassVar[int] = 45
 
-    def match_option(self, options_snapshots, underlying_ticker, direction: DirectionType, strategy: StrategyType, previous_close: Decimal, date: datetime, contracts) -> bool:
-        logger.debug("Entering CreditSpread.match_option")
-        result = super().match_option(options_snapshots, underlying_ticker, direction, strategy, previous_close, date, contracts)
-        logger.debug("Exiting CreditSpread.match_option")
-        return result
+    def get_max_reward(self):
+        return self.get_net_premium()*100
 
     def get_max_risk(self):
-        logger.debug("Entering CreditSpread.get_max_risk")
-        # For a credit spread, the max risk is:
-        # (Distance between strikes - Net premium) * 100
-        # We need to ensure the calculation is done with Decimal types
-        distance = self.distance_between_strikes
-        net_premium = self.get_net_premium()
-        # Safeguard against calculation errors
-        result = (distance - net_premium) * Decimal('100')
-        logger.debug("Exiting CreditSpread.get_max_risk")
-        return result
-
-    def get_max_reward(self):
-        logger.debug("Entering CreditSpread.get_max_reward")
-        result = self.get_net_premium() * Decimal('100')
-        logger.debug("Exiting CreditSpread.get_max_reward")
-        return result
+        return Decimal((self.distance_between_strikes - self.get_net_premium())*Decimal(100))
 
     def get_breakeven_price(self):
-        logger.debug("Entering CreditSpread.get_breakeven_price")
         net_premium = self.get_net_premium()
-        result = self.previous_close + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
-        logger.debug("Exiting CreditSpread.get_breakeven_price")
-        return result
+        return Decimal(self.short_contract.strike_price) + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
 
     def get_target_price(self):
-        logger.debug("Entering CreditSpread.get_target_price")
         target_reward = (self.get_net_premium() * Decimal(0.8))
-        result = self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
-        logger.debug("Exiting CreditSpread.get_target_price")
-        return result
+        return self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
 
     def get_stop_price(self):
-        logger.debug("Entering CreditSpread.get_stop_price")
         target_stop = (self.get_net_premium() / Decimal(2))
-        result = self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
-        logger.debug("Exiting CreditSpread.get_stop_price")
-        return result
+        return self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
 
 class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
-    def match_option(self, options_snapshots, underlying_ticker, direction: DirectionType, strategy: StrategyType, previous_close: Decimal, date: datetime, contracts) -> bool:
-        logger.debug("Entering DebitSpread.match_option")
-        result = super().match_option(options_snapshots, underlying_ticker, direction, strategy, previous_close, date, contracts)
-        logger.debug("Exiting DebitSpread.match_option")
-        return result
-    
     def get_max_reward(self):
-        logger.debug("Entering DebitSpread.get_max_reward")
-        # For a debit spread, the max reward is the difference between the strike prices
-        # minus the net debit paid
-        result = (self.distance_between_strikes + self.get_net_premium()) * Decimal('100')
-        logger.debug("Exiting DebitSpread.get_max_reward")
-        return result
+        return (self.distance_between_strikes - abs(self.get_net_premium()))*100
 
     def get_max_risk(self):
-        logger.debug("Entering DebitSpread.get_max_risk")
-        # For a debit spread, the max risk is simply the net debit paid
-        result = self.get_net_premium() * Decimal('100')
-        logger.debug("Exiting DebitSpread.get_max_risk")
-        return result
+        return abs(self.get_net_premium()*100)
 
     def get_breakeven_price(self):
-        logger.debug("Entering DebitSpread.get_breakeven_price")
-        net_premium = self.get_net_premium()
-        result = Decimal(self.long_contract.strike_price) + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
-        logger.debug("Exiting DebitSpread.get_breakeven_price")
-        return result
+        net_premium = abs(self.get_net_premium())
+        if self.direction == DirectionType.BULLISH:
+            return Decimal(self.long_contract.strike_price) + net_premium
+        else:
+            return Decimal(self.long_contract.strike_price) - net_premium
 
     def get_target_price(self):
-        logger.debug("Entering DebitSpread.get_target_price")
-        target_reward = ((self.distance_between_strikes + self.get_net_premium()) * Decimal(0.8))
-        result = self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
-        logger.debug("Exiting DebitSpread.get_target_price")
-        return result
+        target_reward = (self.distance_between_strikes * Decimal(0.8))
+        return self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
 
     def get_stop_price(self):
-        logger.debug("Entering DebitSpread.get_stop_price")
-        target_stop = (self.get_net_premium() / Decimal(2))
-        result = self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
-        logger.debug("Exiting DebitSpread.get_stop_price")
+        target_stop = (self.distance_between_strikes / Decimal(2))
+        return self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
+
+class VerticalSpreadMatcher:
+    """Handles the matching and selection of vertical spread contracts."""
+    
+    @staticmethod
+    def match_option(options_snapshots: dict, underlying_ticker: str, 
+                     direction: DirectionType, strategy: StrategyType, previous_close: Decimal, 
+                     date: datetime, contracts: List[Contract]) -> VerticalSpread:
+        """Create and match a vertical spread based on given parameters."""
+        logger.debug("Entering match_option")
+        spread = CreditSpread() if strategy == StrategyType.CREDIT else DebitSpread()
+        VerticalSpreadMatcher._initialize_match_option(spread, underlying_ticker, direction, strategy, previous_close, date, contracts)
+        spread.optimal_spread_width = Options.calculate_optimal_spread_width(spread.to_decimal(previous_close), spread.strategy, spread.direction)
+        
+        days_to_expiration: int = (spread.expiration_date - spread.update_date).days
+        first_leg_candidates = VerticalSpreadMatcher._select_first_leg_candidates(spread, options_snapshots)
+        if not first_leg_candidates:
+            return False
+
+        second_leg_candidates = VerticalSpreadMatcher._select_second_leg_candidates(spread, options_snapshots)
+        if not second_leg_candidates:
+            return False
+
+        final_spread:VerticalSpread = VerticalSpreadMatcher._find_best_spread(spread, first_leg_candidates, second_leg_candidates, 
+                                                          days_to_expiration, spread.optimal_spread_width)
+        
+        return final_spread
+
+    @staticmethod
+    def _initialize_match_option(spread: VerticalSpread, underlying_ticker: str, direction: DirectionType, strategy: StrategyType, 
+                                 previous_close: Decimal, date: datetime, contracts: List[Contract]) -> None:
+        logger.debug("Entering _initialize_match_option")
+        spread.underlying_ticker = underlying_ticker
+        spread.direction = direction
+        spread.strategy = strategy
+        spread.previous_close = previous_close
+        spread.expiration_date = date
+        spread.update_date = datetime.today().date()
+        spread.contracts = contracts
+        logger.debug("Exiting _initialize_match_option")
+
+    @staticmethod
+    def _select_first_leg_candidates(spread: VerticalSpread, options_snapshots: dict) -> List[Tuple[Contract, int, Snapshot]]:
+        logger.debug("Entering _select_first_leg_candidates")
+        result = spread.contract_selector.select_contracts(
+            spread.contracts, 
+            options_snapshots, 
+            spread.underlying_ticker, 
+            TradeStrategy.DIRECTIONAL,
+            spread.strategy,
+            spread.direction,
+            spread.previous_close
+        )
+        logger.debug("Exiting _select_first_leg_candidates")
         return result
+
+    @staticmethod
+    def _select_second_leg_candidates(spread: VerticalSpread, options_snapshots: dict) -> List[Tuple[Contract, int, Snapshot]]:
+        logger.debug("Entering _select_second_leg_candidates")
+        result = spread.contract_selector.select_contracts(
+            spread.contracts, 
+            options_snapshots, 
+            spread.underlying_ticker, 
+            TradeStrategy.HIGH_PROBABILITY,
+            spread.strategy,
+            spread.direction,
+            spread.previous_close
+        )
+        logger.debug("Exiting _select_second_leg_candidates")
+        return result
+
+    @staticmethod
+    def _find_best_spread(spread: VerticalSpread, first_leg_candidates: List[Tuple[Contract, int, Snapshot]], 
+                          second_leg_candidates: List[Tuple[Contract, int, Snapshot]], 
+                          days_to_expiration: int, optimal_spread_width: Decimal) -> Optional[VerticalSpread]:
+        logger.debug("Entering _find_best_spread")
+        best_spread: Optional[VerticalSpread] = None
+        best_spread_width: Optional[VerticalSpread] = None 
+        best_spread_non_standard: Optional[VerticalSpread] = None 
+        found_valid_spread: bool = False
+        final_spread:VerticalSpread = VerticalSpread()
+
+        for first_leg in first_leg_candidates:
+            contract, _, _ = first_leg
+            if not contract.matched:
+                continue
+            
+            VerticalSpreadMatcher._set_first_leg(spread, first_leg)
+            
+            for second_leg in second_leg_candidates:
+                contract, _, _ = second_leg
+                if not contract.matched:
+                    continue
+                    
+                VerticalSpreadMatcher._set_second_leg(spread, second_leg)
+                
+                if not VerticalSpreadMatcher._calculate_spread_metrics(spread, days_to_expiration):
+                    logger.debug("Skipping candidate due to failed spread metrics calculation.")
+                    continue
+                    
+                if not VerticalSpreadMatcher._validate_spread_parameters(spread):
+                    logger.debug("Skipping candidate due to failed spread parameter validation.")
+                    continue
+                    
+                VerticalSpreadMatcher._calculate_adjusted_score(spread)
+
+                spread.matched = True
+                found_valid_spread = True                
+                # Update best spreads with deep copies
+                best_spread, best_spread_width, best_spread_non_standard = VerticalSpreadMatcher._update_best_spreads(
+                    spread, best_spread, best_spread_width, best_spread_non_standard)
+                    
+        if found_valid_spread:
+            final_spread = VerticalSpreadMatcher._determine_final_spread(spread, best_spread_width, best_spread_non_standard)
+            if final_spread:  # Add null check
+                final_spread.description = VerticalSpreadMatcher._generate_description(final_spread)
+                logger.debug("Exiting _find_best_spread with valid spread")
+            else:
+                logger.warning("No valid spread found after determination")
+        else:
+            final_spread.matched = False
+
+        logger.debug("Exiting _find_best_spread without finding valid spread")
+        if final_spread is type(bool):
+            return False
+        return final_spread
+
+    @staticmethod
+    def _set_first_leg(spread: VerticalSpread, first_leg: Tuple[Contract, int, Snapshot]) -> None:
+        logger.debug("Entering _set_first_leg")
+        spread.first_leg_contract, spread.first_leg_contract_position, spread.first_leg_snapshot = first_leg
+        if spread.strategy == StrategyType.CREDIT:
+            spread.short_contract = spread.first_leg_contract
+            spread.short_premium = spread.first_leg_snapshot.day.bid
+        elif spread.strategy == StrategyType.DEBIT:
+            spread.long_contract = spread.first_leg_contract
+            spread.long_premium = spread.first_leg_snapshot.day.ask
+        logger.debug("Exiting _set_first_leg")
+
+    @staticmethod
+    def _set_second_leg(spread: VerticalSpread, second_leg: Tuple[Contract, int, Snapshot]) -> None:
+        logger.debug("Entering _set_second_leg")
+        spread.second_leg_contract, spread.second_leg_contract_position, spread.second_leg_snapshot = second_leg
+        # Calculate absolute distance between strikes
+        spread.distance_between_strikes = abs(spread.first_leg_contract.strike_price - spread.second_leg_contract.strike_price)
+        if spread.strategy == StrategyType.CREDIT:
+            spread.long_contract = spread.second_leg_contract
+            spread.long_premium = spread.second_leg_snapshot.day.ask
+        elif spread.strategy == StrategyType.DEBIT:
+            spread.short_contract = spread.second_leg_contract
+            spread.short_premium = spread.second_leg_snapshot.day.bid
+        logger.debug("Exiting _set_second_leg")
+
+    @staticmethod
+    def _calculate_spread_metrics(spread: VerticalSpread, days_to_expiration: int) -> bool:
+        logger.debug("Entering _calculate_spread_metrics")
+        spread.net_premium = spread.get_net_premium()
+        if spread.net_premium == 0:
+            logger.warning("Second leg candidate has zero premium delta, indicating a potential error in the selection.")
+            logger.debug("Exiting _calculate_spread_metrics")
+            return False
+
+        relative_delta = spread.net_premium / spread.distance_between_strikes
+        if relative_delta == Decimal(0) or relative_delta < spread.MIN_DELTA:
+            logger.debug(f"Skipping second leg candidate due to relative delta {relative_delta} being less than minimum delta {spread.MIN_DELTA}.")
+            return False
+
+        spread.max_reward = spread.get_max_reward()
+        spread.max_risk = spread.get_max_risk()
+        spread.breakeven = spread.get_breakeven_price()
+        spread.target_price = spread.get_target_price()
+        spread.stop_price = spread.get_stop_price()
+        spread.entry_price = spread.previous_close
+        spread.exit_date = spread.get_exit_date()
+        spread.contract_type = spread.short_contract.contract_type
+        spread.probability_of_profit = VerticalSpreadMatcher._calculate_probability_of_profit(spread, days_to_expiration)
+        
+        if spread.probability_of_profit is None:
+            logger.warning("Probability of profit calculation failed.")
+            logger.debug("Exiting _calculate_spread_metrics")
+            return False
+
+        spread.reward_risk_ratio = spread.max_reward / spread.max_risk if spread.max_risk != 0 else Decimal('0')
+        logger.debug("Exiting _calculate_spread_metrics")
+        return True
+
+    @staticmethod
+    def _calculate_probability_of_profit(spread: VerticalSpread, days_to_expiration: int) -> Optional[Decimal]:
+        logger.debug("Entering _calculate_probability_of_profit")
+        implied_volatility = spread.first_leg_snapshot.implied_volatility * spread.second_leg_snapshot.implied_volatility
+        result = Options.calculate_probability_of_profit(spread.previous_close, spread.breakeven, days_to_expiration, implied_volatility)
+        logger.debug("Exiting _calculate_probability_of_profit")
+        return result
+
+    @staticmethod
+    def _generate_description(spread: VerticalSpread) -> str:
+        logger.debug("Entering _generate_description")
+        description = (
+            f"{spread.strategy.value.capitalize()} {spread.direction.value.capitalize()} Spread\n"
+            f"Underlying: {spread.underlying_ticker}\n"
+            f"Sale: ${spread.short_contract.strike_price:.2f}\n"
+            f"Buy: ${spread.long_contract.strike_price:.2f}\n"
+            f"Net Premium: ${spread.net_premium:.2f}\n"
+            f"Target Price: ${spread.target_price:.2f}\n"
+        )
+        logger.debug("Exiting _generate_description")
+        return description
+
+    @staticmethod
+    def _calculate_adjusted_score(spread: VerticalSpread) -> Tuple[Optional[VerticalSpread], Optional[VerticalSpread], Optional[VerticalSpread]]:
+        logger.debug("Entering _calculate_adjusted_score")
+        spread.adjusted_score = spread.reward_risk_ratio * spread.probability_of_profit
+        logger.debug(f"Adjusted Score: {spread.adjusted_score}")
+        logger.debug("Exiting _calculate_adjusted_score")
+
+    @staticmethod
+    def _update_best_spreads(spread: VerticalSpread, best_spread: Optional[VerticalSpread],
+                            best_spread_width: Optional[VerticalSpread],
+                            best_spread_non_standard: Optional[VerticalSpread]) -> Tuple[Optional[VerticalSpread], Optional[VerticalSpread], Optional[VerticalSpread]]:
+        logger.debug("Entering _update_best_spreads")
+        
+        # Create deep copy for best overall spread
+        if not best_spread or (best_spread and spread.adjusted_score > best_spread.adjusted_score):
+            best_spread = spread.copy()
+
+        # Create deep copy for width-based spreads
+        if spread.distance_between_strikes == spread.optimal_spread_width:
+            if not best_spread_width or (best_spread_width and spread.adjusted_score > best_spread_width.adjusted_score):
+                best_spread_width = spread.copy()
+        else:
+            if not best_spread_non_standard or (best_spread_non_standard and spread.adjusted_score > best_spread_non_standard.adjusted_score):
+                best_spread_non_standard = spread.copy()
+
+        logger.debug("Exiting _update_best_spreads")
+        return best_spread, best_spread_width, best_spread_non_standard
+
+    @staticmethod
+    def _determine_final_spread(current_spread: VerticalSpread, best_spread_width: Optional[VerticalSpread], 
+                               best_spread_non_standard: Optional[VerticalSpread]) -> VerticalSpread:
+        logger.debug("Entering _determine_final_spread")
+        if best_spread_width:
+            logger.debug("Exiting _determine_final_spread with best width spread")
+            return best_spread_width
+        if best_spread_non_standard:
+            logger.debug("Exiting _determine_final_spread with best non-standard spread")
+            return best_spread_non_standard
+        logger.debug("Exiting _determine_final_spread with current spread")
+        return current_spread
+
+    @staticmethod
+    def _validate_spread_parameters(spread: VerticalSpread) -> bool:
+        logger.debug("Entering _validate_spread_parameters")
+        """Validate spread parameters to catch potential issues."""
+            
+        # Check for valid premiums
+        if spread.short_premium is None or spread.long_premium is None:
+            logger.error("Missing premium values")
+            logger.debug("Exiting _validate_spread_parameters")
+            return False
+
+        # For credit spread, short premium should generally be higher than long premium
+        # BUT this can be violated in some market conditions, especially with wide spreads
+        if spread.strategy == StrategyType.CREDIT and spread.short_premium <= spread.long_premium:
+            logger.error(f"Unusual credit spread: short premium ({spread.short_premium}) <= long premium ({spread.long_premium})")
+            logger.debug("Exiting _validate_spread_parameters")
+            return False
+            
+        # For debit spread, long premium should be higher than short premium
+        # This is more strict - a debit spread should cost money (pay a debit)
+        if spread.strategy == StrategyType.DEBIT and spread.long_premium <= spread.short_premium:
+            logger.error(f"Unusual debit spread: long premium ({spread.long_premium}) <= short premium ({spread.short_premium})\n"+
+                            f"Spread details: first_leg_contract={spread.first_leg_contract}, second_leg_contract={spread.second_leg_contract}, distance_between_strikes={spread.distance_between_strikes}")
+            logger.debug("Exiting _validate_spread_parameters")
+            return False
+
+        # Check for unreasonable break-evens (too far from current price)
+        breakeven = spread.get_breakeven_price()
+        if breakeven:
+            price_diff_pct = abs((breakeven - spread.previous_close) / spread.previous_close)
+            if price_diff_pct > spread.LARGE_MOVE_THRESHOLD:  # More than threshold move needed
+                logger.warning(f"Breakeven requires large price move: {price_diff_pct*100:.1f}% from current price")
+                # We'll reduce confidence for trades requiring large moves
+                if hasattr(spread, 'confidence_level'):
+                    spread.confidence_level *= Decimal('0.9')
+                
+        # Check for extremely wide spreads compared to optimal width
+        width_ratio = spread.distance_between_strikes / spread.optimal_spread_width
+        if width_ratio > spread.EXTREME_WIDTH_RATIO:
+            logger.warning(f"Spread width ({spread.distance_between_strikes}) is {width_ratio:.1f}x the optimal width ({spread.optimal_spread_width})")
+            # Apply progressive confidence reduction for extremely wide spreads
+            if hasattr(spread, 'confidence_level'):
+                confidence_reduction = min(spread.MAX_CONFIDENCE_REDUCTION, (width_ratio - spread.EXTREME_WIDTH_RATIO) * spread.CONFIDENCE_REDUCTION_STEP)  # Cap at 50% reduction
+                spread.confidence_level *= (Decimal('1.0') - confidence_reduction)
+                logger.info(f"Applied {confidence_reduction*100:.1f}% confidence reduction due to extreme width")
+
+        logger.debug("Exiting _validate_spread_parameters")
+        return True

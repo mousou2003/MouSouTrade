@@ -12,7 +12,7 @@ from decimal import Decimal
 from marketdata_clients.BaseMarketDataClient import MarketDataException, MarketDataStrikeNotFoundException
 from marketdata_clients.PolygonClient import POLYGON_CLIENT_NAME
 from marketdata_clients.MarketDataClient import *
-from engine.VerticalSpread import CreditSpread, DebitSpread
+from engine.VerticalSpread import CreditSpread, DebitSpread, VerticalSpread, VerticalSpreadMatcher
 from engine.Options import *
 from engine.Stocks import Stocks
 from engine.data_model import *
@@ -98,6 +98,7 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
     
     ideal_expiration = datetime.today() + timedelta(weeks=4)    
     target_expiration_date = Options.get_next_friday(ideal_expiration).date()
+    matched_spread = None
 
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
@@ -110,31 +111,45 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
             )
             options_snapshots = build_options_snapshots(market_data_client, contracts, ticker)
 
-            spread_class = DebitSpread if strategy == StrategyType.DEBIT else CreditSpread
-            spread = spread_class()
-
             logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {ticker} for target date {target_expiration_date}")
 
-            matched = spread.match_option(options_snapshots=options_snapshots, underlying_ticker=ticker, 
-                                          direction=direction, strategy=strategy, previous_close=stock['close'], 
-                                          date=target_expiration_date, contracts=contracts)
+            spread_result = VerticalSpreadMatcher.match_option(
+                options_snapshots=options_snapshots, 
+                underlying_ticker=ticker, 
+                direction=direction, 
+                strategy=strategy, 
+                previous_close=stock['close'], 
+                date=target_expiration_date, 
+                contracts=contracts
+            )
+            
+            # Create spread just for persistence
             key = {
-                "ticker": f"{spread.underlying_ticker};{spread.expiration_date.strftime(DataModelBase.DATE_FORMAT)};{spread.update_date.strftime(DataModelBase.DATE_FORMAT)}",
-                "option": json.dumps({"date": target_expiration_date.strftime(DataModelBase.DATE_FORMAT), 
-                                      "direction": direction.value, 
-                                      "strategy": strategy.value}, default=str)
+                "ticker": f"{ticker};{target_expiration_date.strftime(DataModelBase.DATE_FORMAT)};{datetime.today().date().strftime(DataModelBase.DATE_FORMAT)}",
+                "option": json.dumps({
+                    "date": target_expiration_date.strftime(DataModelBase.DATE_FORMAT), 
+                    "direction": direction.value, 
+                    "strategy": strategy.value
+                }, default=str)
             }
-            merged_json = {**key, **{"description": spread.get_description() if matched else f"No match for {ticker}"}, 
-                           **spread.to_dict()}
-            print(f"Match {'found' if matched else 'NOT found'}, and stored in {key}")
+
+            if isinstance(spread_result, VerticalSpread):
+                description = spread_result.get_description()
+                spread_dict = spread_result.to_dict()
+                is_matched = spread_result.matched
+            else:
+                description = f"No match for {ticker}"
+                spread_dict = {"matched": False}
+                is_matched = False
+
+            merged_json = {**key, **{"description": description}, **spread_dict}
+            print(f"Match {'found' if is_matched else 'NOT found'}, and stored in {key}")
             logger.debug(merged_json)
             dynamodb.put_item(item=merged_json)
             response = dynamodb.get_item(key=key)
-            if 'Item' in response:
-                validated_records = spread.from_dict(response['Item']).to_dict()
-                logger.debug(f'Item saved in table:\n{validated_records}')
-            else:
-                raise MarketDataStrikeNotFoundException(f"No item found for ticker {ticker}")
+            if 'Item' in response and is_matched:
+                saved_spread = VerticalSpread().from_dict(response['Item'])
+                logger.debug(f'Item saved in table:\n{saved_spread.to_dict()}')
 
 def wait_for_debugger(host, port, timeout=60):
     start_time = time.time()

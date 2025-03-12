@@ -60,7 +60,7 @@ class StrikePriceType(Enum):
     OTM = 'OTM'
 
 class DataModelBase(BaseModel):
-    EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client']
+    EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client','contract_selector']
     DATE_FORMAT: ClassVar[str] = '%Y-%m-%d'
     
     confidence_level: Optional[Decimal] = Decimal(1.0)
@@ -122,7 +122,7 @@ class DataModelBase(BaseModel):
         elif field_type == Optional[Decimal]:
             return lambda value: Decimal(value) if value else None
         elif field_type == Optional[int]:
-            return lambda value: int(value) if value else 0
+            return lambda value: int(value) if value not in (None, '') else 0
         elif field_type == Optional[str]:
             return lambda value: value if value else ''
         elif field_type == Optional[List[Dict[str, Any]]]:
