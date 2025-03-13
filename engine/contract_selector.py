@@ -16,106 +16,184 @@ The module implements the Strategy Pattern to allow different selection algorith
 to be used without changing the core vertical spread implementation logic.
 """
 
+from datetime import datetime
 import logging
 from typing import List, Tuple, Optional
 from decimal import Decimal
 from abc import ABC, abstractmethod
 
 from engine.data_model import (
-    Contract, Snapshot, DirectionType, StrategyType, ContractType
+    Contract, Snapshot, DirectionType, StrategyType, ContractType, StrikePriceType
 )
 from engine.Options import Options, TradeStrategy
 
 logger = logging.getLogger(__name__)
 
-class ContractSelector(ABC):
-    """Abstract base class for contract selection strategies."""
-    
-    @abstractmethod
-    def select_contracts(self, 
-                         contracts: List[Contract],
-                         options_snapshots: dict,
-                         underlying_ticker: str,
-                         trade_strategy: TradeStrategy,
-                         strategy: StrategyType,
-                         direction: DirectionType) -> List[Tuple[Contract, int, Snapshot]]:
-        """
-        Select contracts based on specific criteria.
+class ContractSelector:
+
+    def _get_price_status(
+        self, 
+        strike: Decimal, 
+        current_price: Decimal, 
+        option_type: ContractType,
+        contract: Contract,
+        snapshot: Snapshot,
+        trade_strategy: TradeStrategy
+    ) -> StrikePriceType:
+        """Determine if an option is ITM, ATM, or OTM based on multiple criteria.
         
         Args:
-            contracts: List of available contracts
-            options_snapshots: Dictionary of option snapshots
-            underlying_ticker: Ticker symbol of the underlying asset
-            trade_strategy: Trading strategy (HIGH_PROBABILITY or DIRECTIONAL)
-            strategy: Strategy type (CREDIT or DEBIT)
-            direction: Market direction (BULLISH or BEARISH)
-            
-        Returns:
-            List of tuples containing (contract, position, snapshot)
+            strike: Strike price of the option
+            current_price: Current price of the underlying
+            option_type: Type of option (CALL/PUT)
+            contract: Full contract object for additional checks
+            snapshot: Option snapshot containing Greeks and other data
+            trade_strategy: Trading strategy for delta range validation
         """
-        pass
+        # Check if we have valid delta data
+        if snapshot and snapshot.greeks and snapshot.greeks.delta:
+            return Options.identify_strike_price_type_by_delta(delta=snapshot.greeks.delta,
+                                                               trade_strategy=trade_strategy)
+        
+        # Fallback to price-based determination if no valid delta
+        if current_price < Decimal('100'):
+            atm_range = Decimal('2')
+        else:
+            atm_range = current_price * Decimal('0.01')
+
+        if abs(strike - current_price) <= atm_range:
+            return StrikePriceType.ATM
+            
+        if option_type == ContractType.CALL:
+            return StrikePriceType.ITM if strike < current_price else StrikePriceType.OTM
+        else:  # PUT
+            return StrikePriceType.ITM if strike > current_price else StrikePriceType.OTM
+
+    def _determine_trade_strategy(self, strategy: StrategyType, direction: DirectionType, is_first_leg: bool) -> TradeStrategy:
+        """Determine appropriate trade strategy based on spread type and leg position.
+        
+        For Debit Spreads:
+            Bull Call: First=DIRECTIONAL (long call), Second=HIGH_PROBABILITY (short call)
+            Bear Put:  First=DIRECTIONAL (long put), Second=HIGH_PROBABILITY (short put)
+            
+        For Credit Spreads:
+            Bull Put: First=HIGH_PROBABILITY (short put), Second=DIRECTIONAL (long put)
+            Bear Call: First=HIGH_PROBABILITY (short call), Second=DIRECTIONAL (long call)
+        """
+        if strategy == StrategyType.DEBIT:
+            # For debit spreads, first leg is directional (long option)
+            return TradeStrategy.HIGH_PROBABILITY if is_first_leg else TradeStrategy.DIRECTIONAL
+        else:  # CREDIT
+            # For credit spreads, first leg is high probability (short option)
+            return TradeStrategy.DIRECTIONAL if is_first_leg else TradeStrategy.HIGH_PROBABILITY
+
+    def _evaluate_contract_match(self, contract: Contract, strategy: StrategyType, 
+                               direction: DirectionType) -> bool:
+        """Evaluate if a contract matches the strategy and direction criteria.
+        
+        Returns:
+            bool: True if contract type matches strategy/direction combination
+        
+        Contract Type Logic:
+            Bull Call (Debit): CALL
+            Bear Put (Debit):  PUT
+            Bull Put (Credit): PUT
+            Bear Call (Credit): CALL
+        """
+        if strategy == StrategyType.DEBIT:
+            if direction == DirectionType.BULLISH:
+                # Bull Call Spread: Call options
+                return contract.contract_type == ContractType.CALL
+            else:  # Bearish
+                # Bear Put Spread: Put options
+                return contract.contract_type == ContractType.PUT
+        else:  # Credit
+            if direction == DirectionType.BULLISH:
+                # Bull Put Spread: Put options
+                return contract.contract_type == ContractType.PUT
+            else:  # Bearish
+                # Bear Call Spread: Call options
+                return contract.contract_type == ContractType.CALL
+
+    def select_contracts(
+        self,
+        contracts: List[Contract],
+        options_snapshots: dict,
+        underlying_ticker: str,
+        strategy: StrategyType,
+        direction: DirectionType,
+        current_price: Decimal,
+        price_status: List[str],
+        is_first_leg: bool = True
+    ) -> List[Tuple[Contract, int, Snapshot]]:
+        
+        trade_strategy:TradeStrategy = self._determine_trade_strategy(strategy, direction, is_first_leg)
+        
+        candidates:List[Tuple[Contract, int, Snapshot]] = []
+        
+        for contract in contracts:
+            snapshot:Snapshot = options_snapshots.get(contract.ticker)
+            if not snapshot:
+                continue
+            if not snapshot.day.close:
+                logger.debug(f"Missing close price for {contract.ticker}. Skipping.")
+                snapshot.confidence_level = 0
+                continue
+                
+            if not snapshot.implied_volatility:
+                logger.debug(f"Missing implied volatility for {contract.ticker}. Skipping.")
+                snapshot.confidence_level = 0
+                continue
+                
+            if not snapshot.greeks.delta:
+                logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
+                snapshot.confidence_level = 0
+                continue
+                
+            # Check for trade data individually and provide fallbacks
+            if not snapshot.day.last_trade:
+                logger.debug(f"Missing last_trade data for {contract.ticker}. Using close price.")
+                snapshot.day.last_trade = snapshot.day.close
+                snapshot.confidence_level *= Decimal(0.8)
+                
+            if not snapshot.day.bid:
+                logger.debug(f"Missing bid data for {contract.ticker}. Using close price.")
+                snapshot.day.bid = snapshot.day.close
+                snapshot.confidence_level *= Decimal(0.8)
+                
+            if not snapshot.day.ask:
+                logger.debug(f"Missing ask data for {contract.ticker}. Using close price.")
+                snapshot.day.ask = snapshot.day.close
+                snapshot.confidence_level *= Decimal(0.8)
+                
+            if not snapshot.day.timestamp:
+                logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
+                snapshot.day.timestamp = datetime.now().timestamp()
+                snapshot.confidence_level *= Decimal(0.9)
+
+            status = self._get_price_status(
+                strike=contract.strike_price,
+                current_price=current_price,
+                option_type=contract.contract_type,
+                contract=contract,
+                snapshot=snapshot,
+                trade_strategy=trade_strategy
+            )
+            
+            if status.name not in price_status:
+                continue
+
+            # Only use is_match from _evaluate_contract_match
+            if self._evaluate_contract_match(contract, strategy, direction):
+                contract.matched = True
+                snapshot.matched = True
+                candidates.append((contract, len(candidates), snapshot))
+
+        return candidates
 
 class StandardContractSelector(ContractSelector):
     """Standard contract selection for production use."""
-    
-    def select_contracts(self, 
-                        contracts: List[Contract],
-                        options_snapshots: dict,
-                        underlying_ticker: str,
-                        trade_strategy: TradeStrategy,
-                        strategy: StrategyType, 
-                        direction: DirectionType,
-                        current_price:Decimal) -> List[Tuple[Contract, int, Snapshot]]:
-        """
-        Select contracts using standard production criteria based on delta values.
-        
-        Production selection logic takes into account:
-        1. Delta values based on the trade strategy (directional or high probability)
-        2. Contract type matching for the strategy and direction
-        3. Liquidity and other quality metrics
-        
-        Args:
-            contracts: Available option contracts
-            options_snapshots: Dictionary of option snapshots
-            underlying_ticker: Ticker symbol of underlying asset
-            trade_strategy: The trading strategy (directional or high probability)
-            strategy: Strategy type (credit or debit)
-            direction: Market direction (bullish or bearish)
-            
-        Returns:
-            List of tuples containing (contract, position, snapshot)
-        """
-        # Get expected contract type (call or put) for this strategy/direction combination
-        expected_contract_type = Options.get_contract_type(strategy, direction)
-        
-        # Filter candidates by contract type first
-        filtered_contracts = []
-        
-        # Pre-filter contracts by type to improve performance
-        for position, contract in enumerate(contracts):
-            if contract.contract_type.value is expected_contract_type.value :
-                if contract.underlying_ticker.lower() == underlying_ticker.lower():
-                    filtered_contracts.append(contract)
 
-                
-        # No matching contracts by type
-        if not filtered_contracts:
-            logger.debug(f"No {expected_contract_type.value} contracts found for {direction.value} {strategy.value} strategy")
-            return []
-        
-        # Reorder filtered contracts using get_order function
-        order = Options.get_order(strategy, direction)
-        reverse_order = (order.lower() == 'desc')
-        filtered_contracts.sort(key=lambda c: c.strike_price, reverse=reverse_order)
-
-        # Now use the Options module's select_contract method with the filtered contracts
-        return Options.select_contract(
-            filtered_contracts, 
-            options_snapshots, 
-            underlying_ticker, 
-            trade_strategy,
-            current_price
-        )
 
 class TestContractSelector(ContractSelector):
     """Contract selection strategy optimized for testing."""

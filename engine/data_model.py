@@ -44,15 +44,14 @@ class DirectionType(Enum):
 class StrategyType(Enum):
     CREDIT = 'credit'
     DEBIT = 'debit'
-
-SPREAD_TYPE = {
-    StrategyType.CREDIT: {DirectionType.BULLISH: 'put', DirectionType.BEARISH: 'call'},
-    StrategyType.DEBIT: {DirectionType.BULLISH: 'call', DirectionType.BEARISH: 'put'}
-}
-
 class ContractType(Enum):
     CALL = 'call'
     PUT = 'put'
+
+SPREAD_TYPE = {
+    StrategyType.CREDIT: {DirectionType.BULLISH: ContractType.PUT, DirectionType.BEARISH: ContractType.CALL},
+    StrategyType.DEBIT: {DirectionType.BULLISH: ContractType.CALL, DirectionType.BEARISH: ContractType.PUT}
+}
 
 class StrikePriceType(Enum):
     ITM = 'ITM'

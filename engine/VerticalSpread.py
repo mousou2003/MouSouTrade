@@ -134,11 +134,27 @@ class VerticalSpread(SpreadDataModel):
     # Make contract_selector an instance attribute instead of ClassVar
     contract_selector: ContractSelector = StandardContractSelector()
     
-    def get_net_premium(self):
+    def get_net_premium(self)-> Decimal:
         logger.debug("Entering get_net_premium")
-        result = self.short_premium - self.long_premium
+        if self.short_premium is None or self.long_premium is None:
+            logger.error("Missing premium values")
+            return Decimal('0')
+        
+        net = self.short_premium - self.long_premium
+        
+        # Validation: Credit spreads should have positive net premium
+        if self.strategy == StrategyType.CREDIT and net <= 0:
+            logger.warning(f"Credit spread has negative or zero net premium: {net}")
+            return Decimal('0')
+            
+        # Validation: Debit spreads should have negative net premium
+        if self.strategy == StrategyType.DEBIT and net >= 0:
+            logger.warning(f"Debit spread has positive or zero net premium: {net}")
+            return Decimal('0')
+            
+        logger.debug(f"Net Premium: {net} (Short: {self.short_premium} - Long: {self.long_premium})")
         logger.debug("Exiting get_net_premium")
-        return result
+        return net
 
     def get_expiration_date(self):
         logger.debug("Entering get_expiration_date")
@@ -203,7 +219,7 @@ class CreditSpread(VerticalSpread):
         return self.get_net_premium()*100
 
     def get_max_risk(self):
-        return Decimal((self.distance_between_strikes - self.get_net_premium())*Decimal(100))
+        return Decimal((abs(self.distance_between_strikes) - self.get_net_premium())*Decimal(100))
 
     def get_breakeven_price(self):
         net_premium = self.get_net_premium()
@@ -221,7 +237,7 @@ class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
     def get_max_reward(self):
-        return (self.distance_between_strikes - abs(self.get_net_premium()))*100
+        return (abs(self.distance_between_strikes) - abs(self.get_net_premium()))*100
 
     def get_max_risk(self):
         return abs(self.get_net_premium()*100)
@@ -245,23 +261,24 @@ class VerticalSpreadMatcher:
     """Handles the matching and selection of vertical spread contracts."""
     
     @staticmethod
-    def match_option(options_snapshots: dict, underlying_ticker: str, 
-                     direction: DirectionType, strategy: StrategyType, previous_close: Decimal, 
-                     date: datetime, contracts: List[Contract]) -> VerticalSpread:
+    def match_option(
+        options_snapshots: dict,
+        underlying_ticker: str,
+        direction: DirectionType,
+        strategy: StrategyType,
+        previous_close: Decimal,
+        date: datetime,
+        contracts: list[Contract]
+    ) -> VerticalSpread:
         """Create and match a vertical spread based on given parameters."""
         logger.debug("Entering match_option")
         spread = CreditSpread() if strategy == StrategyType.CREDIT else DebitSpread()
         VerticalSpreadMatcher._initialize_match_option(spread, underlying_ticker, direction, strategy, previous_close, date, contracts)
-        spread.optimal_spread_width = Options.calculate_optimal_spread_width(spread.to_decimal(previous_close), spread.strategy, spread.direction)
         
         days_to_expiration: int = (spread.expiration_date - spread.update_date).days
         first_leg_candidates = VerticalSpreadMatcher._select_first_leg_candidates(spread, options_snapshots)
-        if not first_leg_candidates:
-            return False
 
         second_leg_candidates = VerticalSpreadMatcher._select_second_leg_candidates(spread, options_snapshots)
-        if not second_leg_candidates:
-            return False
 
         final_spread:VerticalSpread = VerticalSpreadMatcher._find_best_spread(spread, first_leg_candidates, second_leg_candidates, 
                                                           days_to_expiration, spread.optimal_spread_width)
@@ -279,19 +296,22 @@ class VerticalSpreadMatcher:
         spread.expiration_date = date
         spread.update_date = datetime.today().date()
         spread.contracts = contracts
+        spread.optimal_spread_width = Options.calculate_optimal_spread_width(previous_close, spread.strategy, spread.direction)
         logger.debug("Exiting _initialize_match_option")
 
     @staticmethod
     def _select_first_leg_candidates(spread: VerticalSpread, options_snapshots: dict) -> List[Tuple[Contract, int, Snapshot]]:
         logger.debug("Entering _select_first_leg_candidates")
+        price_status = ['ITM', 'ATM'] if spread.strategy == StrategyType.DEBIT else ['OTM']
         result = spread.contract_selector.select_contracts(
             spread.contracts, 
             options_snapshots, 
             spread.underlying_ticker, 
-            TradeStrategy.DIRECTIONAL,
             spread.strategy,
             spread.direction,
-            spread.previous_close
+            spread.previous_close,
+            price_status,
+            is_first_leg=True  # First leg
         )
         logger.debug("Exiting _select_first_leg_candidates")
         return result
@@ -299,14 +319,16 @@ class VerticalSpreadMatcher:
     @staticmethod
     def _select_second_leg_candidates(spread: VerticalSpread, options_snapshots: dict) -> List[Tuple[Contract, int, Snapshot]]:
         logger.debug("Entering _select_second_leg_candidates")
+        price_status = ['ATM', 'OTM'] if spread.strategy == StrategyType.DEBIT else ['ITM', 'ATM']
         result = spread.contract_selector.select_contracts(
             spread.contracts, 
             options_snapshots, 
             spread.underlying_ticker, 
-            TradeStrategy.HIGH_PROBABILITY,
             spread.strategy,
             spread.direction,
-            spread.previous_close
+            spread.previous_close,
+            price_status,
+            is_first_leg=False  # Second leg
         )
         logger.debug("Exiting _select_second_leg_candidates")
         return result
@@ -314,7 +336,7 @@ class VerticalSpreadMatcher:
     @staticmethod
     def _find_best_spread(spread: VerticalSpread, first_leg_candidates: List[Tuple[Contract, int, Snapshot]], 
                           second_leg_candidates: List[Tuple[Contract, int, Snapshot]], 
-                          days_to_expiration: int, optimal_spread_width: Decimal) -> Optional[VerticalSpread]:
+                          days_to_expiration: int, optimal_spread_width: Decimal) -> VerticalSpread:
         logger.debug("Entering _find_best_spread")
         best_spread: Optional[VerticalSpread] = None
         best_spread_width: Optional[VerticalSpread] = None 
@@ -322,38 +344,41 @@ class VerticalSpreadMatcher:
         found_valid_spread: bool = False
         final_spread:VerticalSpread = VerticalSpread()
 
-        for first_leg in first_leg_candidates:
-            contract, _, _ = first_leg
-            if not contract.matched:
-                continue
-            
-            VerticalSpreadMatcher._set_first_leg(spread, first_leg)
-            
-            for second_leg in second_leg_candidates:
-                contract, _, _ = second_leg
+        if not first_leg_candidates or not second_leg_candidates:
+            logger.debug("No valid first or second leg candidates found")
+        else:
+            for first_leg in first_leg_candidates:
+                contract, _, _ = first_leg
                 if not contract.matched:
                     continue
-                    
-                VerticalSpreadMatcher._set_second_leg(spread, second_leg)
                 
-                if not VerticalSpreadMatcher._calculate_spread_metrics(spread, days_to_expiration):
-                    logger.debug("Skipping candidate due to failed spread metrics calculation.")
-                    continue
+                VerticalSpreadMatcher._set_first_leg(spread, first_leg)
+                
+                for second_leg in second_leg_candidates:
+                    contract, _, _ = second_leg
+                    if not contract.matched:
+                        continue
+                        
+                    VerticalSpreadMatcher._set_second_leg(spread, second_leg)
                     
-                if not VerticalSpreadMatcher._validate_spread_parameters(spread):
-                    logger.debug("Skipping candidate due to failed spread parameter validation.")
-                    continue
-                    
-                VerticalSpreadMatcher._calculate_adjusted_score(spread)
+                    if not VerticalSpreadMatcher._calculate_spread_metrics(spread, days_to_expiration):
+                        logger.warning("Skipping candidate due to failed spread metrics calculation.")
+                        continue
+                        
+                    if not VerticalSpreadMatcher._validate_spread_parameters(spread):
+                        logger.warning("Skipping candidate due to failed spread parameter validation.")
+                        continue
+                        
+                    VerticalSpreadMatcher._calculate_adjusted_score(spread)
 
-                spread.matched = True
-                found_valid_spread = True                
-                # Update best spreads with deep copies
-                best_spread, best_spread_width, best_spread_non_standard = VerticalSpreadMatcher._update_best_spreads(
-                    spread, best_spread, best_spread_width, best_spread_non_standard)
-                    
+                    found_valid_spread = True                
+                    # Update best spreads with deep copies
+                    best_spread, best_spread_width, best_spread_non_standard = VerticalSpreadMatcher._update_best_spreads(
+                        spread, best_spread, best_spread_width, best_spread_non_standard)
+                        
         if found_valid_spread:
             final_spread = VerticalSpreadMatcher._determine_final_spread(spread, best_spread_width, best_spread_non_standard)
+            final_spread.matched = True
             if final_spread:  # Add null check
                 final_spread.description = VerticalSpreadMatcher._generate_description(final_spread)
                 logger.debug("Exiting _find_best_spread with valid spread")
@@ -397,16 +422,19 @@ class VerticalSpreadMatcher:
     def _calculate_spread_metrics(spread: VerticalSpread, days_to_expiration: int) -> bool:
         logger.debug("Entering _calculate_spread_metrics")
         spread.net_premium = spread.get_net_premium()
-        if spread.net_premium == 0:
+        if spread.net_premium == 0 or spread.distance_between_strikes == 0:
             logger.warning("Second leg candidate has zero premium delta, indicating a potential error in the selection.")
-            logger.debug("Exiting _calculate_spread_metrics")
             return False
-
-        relative_delta = spread.net_premium / spread.distance_between_strikes
+        
+        # Normalize relative delta calculation for both credit and debit spreads
+        relative_delta = abs(spread.net_premium) / abs(spread.distance_between_strikes)
+        
+        # Validate relative delta threshold
         if relative_delta == Decimal(0) or relative_delta < spread.MIN_DELTA:
             logger.debug(f"Skipping second leg candidate due to relative delta {relative_delta} being less than minimum delta {spread.MIN_DELTA}.")
             return False
 
+        # Calculate all other metrics - these handle negative net premium correctly already
         spread.max_reward = spread.get_max_reward()
         spread.max_risk = spread.get_max_risk()
         spread.breakeven = spread.get_breakeven_price()
@@ -423,6 +451,20 @@ class VerticalSpreadMatcher:
             return False
 
         spread.reward_risk_ratio = spread.max_reward / spread.max_risk if spread.max_risk != 0 else Decimal('0')
+        
+        # Combine confidence levels from legs and snapshots
+        short_confidence = spread.short_contract.confidence_level
+        long_confidence = spread.long_contract.confidence_level
+        first_snapshot_confidence = spread.first_leg_snapshot.confidence_level
+        second_snapshot_confidence = spread.second_leg_snapshot.confidence_level
+        
+        # Overall confidence is the product of individual confidences
+        spread.confidence_level = short_confidence * long_confidence * first_snapshot_confidence * second_snapshot_confidence
+        
+        logger.debug(f"Spread confidence calculation: short={short_confidence}, long={long_confidence}, " +
+                    f"first_snapshot={first_snapshot_confidence}, second_snapshot={second_snapshot_confidence}, " +
+                    f"final={spread.confidence_level}")
+       
         logger.debug("Exiting _calculate_spread_metrics")
         return True
 
@@ -451,7 +493,7 @@ class VerticalSpreadMatcher:
     @staticmethod
     def _calculate_adjusted_score(spread: VerticalSpread) -> Tuple[Optional[VerticalSpread], Optional[VerticalSpread], Optional[VerticalSpread]]:
         logger.debug("Entering _calculate_adjusted_score")
-        spread.adjusted_score = spread.reward_risk_ratio * spread.probability_of_profit
+        spread.adjusted_score = (spread.reward_risk_ratio * Decimal(0.3)) + (spread.probability_of_profit * Decimal(0.3)) + (spread.confidence_level * Decimal(0.4))
         logger.debug(f"Adjusted Score: {spread.adjusted_score}")
         logger.debug("Exiting _calculate_adjusted_score")
 
@@ -523,17 +565,22 @@ class VerticalSpreadMatcher:
                 logger.warning(f"Breakeven requires large price move: {price_diff_pct*100:.1f}% from current price")
                 # We'll reduce confidence for trades requiring large moves
                 if hasattr(spread, 'confidence_level'):
-                    spread.confidence_level *= Decimal('0.9')
+                    spread.confidence_level *= Decimal( spread.CONFIDENCE_REDUCTION_FACTOR )
                 
         # Check for extremely wide spreads compared to optimal width
         width_ratio = spread.distance_between_strikes / spread.optimal_spread_width
+        if spread.optimal_spread_width > width_ratio:
+            logger.warning(f"Spread width ({spread.distance_between_strikes}) is less than the optimal width ({spread.optimal_spread_width})")
+            # reject spreads that are too narrow
+            logger.debug("Exiting _validate_spread_parameters")
+            return False
+        
         if width_ratio > spread.EXTREME_WIDTH_RATIO:
             logger.warning(f"Spread width ({spread.distance_between_strikes}) is {width_ratio:.1f}x the optimal width ({spread.optimal_spread_width})")
             # Apply progressive confidence reduction for extremely wide spreads
-            if hasattr(spread, 'confidence_level'):
-                confidence_reduction = min(spread.MAX_CONFIDENCE_REDUCTION, (width_ratio - spread.EXTREME_WIDTH_RATIO) * spread.CONFIDENCE_REDUCTION_STEP)  # Cap at 50% reduction
-                spread.confidence_level *= (Decimal('1.0') - confidence_reduction)
-                logger.info(f"Applied {confidence_reduction*100:.1f}% confidence reduction due to extreme width")
+            confidence_reduction = Decimal(1-min(spread.MAX_CONFIDENCE_REDUCTION, (width_ratio-spread.EXTREME_WIDTH_RATIO) * spread.CONFIDENCE_REDUCTION_STEP))  # Cap at 50% reduction
+            spread.confidence_level -= confidence_reduction
+            logger.info(f"Applied {confidence_reduction*100:.1f}% confidence reduction due to extreme width")
 
         logger.debug("Exiting _validate_spread_parameters")
         return True

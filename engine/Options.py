@@ -370,8 +370,6 @@ class Options:
         
         return closest_width
         
-        # If no strategy provided, return the base width
-        return base_width
 
     @staticmethod
     def is_standard_width(width: Decimal) -> bool:
@@ -419,68 +417,3 @@ class Options:
             return ContractType.PUT if direction == DirectionType.BEARISH else ContractType.CALL
         else:
             raise ValueError("Invalid strategy or direction.")
-
-    @staticmethod
-    def select_contract(
-        contracts: Contract,  
-        options_snapshots:Snapshot, 
-        underlying_ticker,
-        trade_strategy:TradeStrategy,
-        current_price: Decimal
-    ) -> List[Tuple[Contract, int, Snapshot]]:
-        matching_contracts = []
-        contract:Contract
-        for position, contract in enumerate(contracts):
-            options_snapshot:Snapshot = options_snapshots.get(contract.ticker)
-            if not options_snapshot:
-                continue
-            try:
-                if not options_snapshot.day.close:
-                    logger.debug(f"Missing close price for {contract.ticker}. Skipping.")
-                    options_snapshot.confidence_level = 0
-                    continue
-                    
-                if not options_snapshot.implied_volatility:
-                    logger.debug(f"Missing implied volatility for {contract.ticker}. Skipping.")
-                    options_snapshot.confidence_level = 0
-                    continue
-                    
-                if not options_snapshot.greeks.delta:
-                    logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
-                    options_snapshot.confidence_level = 0
-                    continue
-                    
-                # Check for trade data individually and provide fallbacks
-                if not options_snapshot.day.last_trade:
-                    logger.debug(f"Missing last_trade data for {contract.ticker}. Using close price.")
-                    options_snapshot.day.last_trade = options_snapshot.day.close
-                    options_snapshot.confidence_level *= Decimal(0.8)
-                    
-                if not options_snapshot.day.bid:
-                    logger.debug(f"Missing bid data for {contract.ticker}. Using close price.")
-                    options_snapshot.day.bid = options_snapshot.day.close
-                    options_snapshot.confidence_level *= Decimal(0.8)
-                    
-                if not options_snapshot.day.ask:
-                    logger.debug(f"Missing ask data for {contract.ticker}. Using close price.")
-                    options_snapshot.day.ask = options_snapshot.day.close
-                    options_snapshot.confidence_level *= Decimal(0.8)
-                if not options_snapshot.day.timestamp:
-                    logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
-                    options_snapshot.day.timestamp = datetime.now().timestamp()
-                    options_snapshot.confidence_level *= Decimal(0.9)
-                    
-#                strike_price_type = Options.identify_strike_price_type_by_delta(options_snapshot.greeks.delta, trade_strategy)
-                strike_price_type = Options.identify_strike_price_by_current_price(contract.strike_price, current_price, contract.contract_type, Decimal('0.02'))
-                if (((trade_strategy == TradeStrategy.DIRECTIONAL) 
-                     and (strike_price_type == StrikePriceType.ATM))
-                     or (trade_strategy == TradeStrategy.HIGH_PROBABILITY
-                     and (strike_price_type == StrikePriceType.OTM))): 
-                    logger.info(f"Selected contract {contract.ticker} with delta {options_snapshot.greeks.delta} and strike price type {strike_price_type.value}.")
-                    contract.matched = True
-                    matching_contracts.append((contract, position, options_snapshot))
-            except (MarketDataException, KeyError, TypeError) as e:
-                logger.warning(f"Error processing contract {contract.ticker}: {type(e).__name__} - {e}")
-                continue
-
-        return matching_contracts

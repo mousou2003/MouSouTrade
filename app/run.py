@@ -42,9 +42,11 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-# logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
+# logging.getLogger('engine.ContractSelector').setLevel(logging.DEBUG)
+# logging.getLogger('engine.ContractSelector').addHandler(handler)
+logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
 # logging.getLogger('engine.VerticalSpread').addHandler(handler)
-# logging.getLogger('engine.Options').setLevel(logging.DEBUG)
+# # logging.getLogger('engine.Options').setLevel(logging.DEBUG)
 # logging.getLogger('engine.Options').addHandler(handler)
 # logging.getLogger('engine.Stocks').setLevel(logging.INFO)
 # logging.getLogger('engine.Stocks').addHandler(handler)
@@ -133,14 +135,9 @@ def process_stock(market_data_client, stock, stock_number, number_of_stocks, dyn
                 }, default=str)
             }
 
-            if isinstance(spread_result, VerticalSpread):
-                description = spread_result.get_description()
-                spread_dict = spread_result.to_dict()
-                is_matched = spread_result.matched
-            else:
-                description = f"No match for {ticker}"
-                spread_dict = {"matched": False}
-                is_matched = False
+            description = spread_result.get_description()
+            spread_dict = spread_result.to_dict()
+            is_matched = spread_result.matched
 
             merged_json = {**key, **{"description": description}, **spread_dict}
             print(f"Match {'found' if is_matched else 'NOT found'}, and stored in {key}")
