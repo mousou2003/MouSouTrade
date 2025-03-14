@@ -31,35 +31,20 @@ logger = logging.getLogger(__name__)
 
 class ContractSelector:
 
-    def _get_price_status(
-        self, 
-        strike: Decimal, 
-        current_price: Decimal, 
-        option_type: ContractType,
-        contract: Contract,
-        snapshot: Snapshot,
-        trade_strategy: TradeStrategy
-    ) -> StrikePriceType:
-        """Determine if an option is ITM, ATM, or OTM based on multiple criteria.
+    def _get_price_status(self, strike: Decimal, current_price: Decimal, 
+                         option_type: ContractType, contract: Contract, 
+                         snapshot: Snapshot, trade_strategy: TradeStrategy) -> StrikePriceType:
+        """Determine if an option is ITM, ATM, or OTM based on multiple criteria."""
         
-        Args:
-            strike: Strike price of the option
-            current_price: Current price of the underlying
-            option_type: Type of option (CALL/PUT)
-            contract: Full contract object for additional checks
-            snapshot: Option snapshot containing Greeks and other data
-            trade_strategy: Trading strategy for delta range validation
-        """
-        # Check if we have valid delta data
-        if snapshot and snapshot.greeks and snapshot.greeks.delta:
-            return Options.identify_strike_price_type_by_delta(delta=snapshot.greeks.delta,
-                                                               trade_strategy=trade_strategy)
-        
-        # Fallback to price-based determination if no valid delta
+        # Check if strike is too far (>10%) from current price
+        if abs(strike - current_price) > (current_price * Decimal('0.10')):
+            return StrikePriceType.EXCLUDED
+            
+        # ATM range calculation
         if current_price < Decimal('100'):
-            atm_range = Decimal('2')
+            atm_range = Decimal('2.5')
         else:
-            atm_range = current_price * Decimal('0.01')
+            atm_range = current_price * Decimal('0.025')
 
         if abs(strike - current_price) <= atm_range:
             return StrikePriceType.ATM
@@ -68,6 +53,7 @@ class ContractSelector:
             return StrikePriceType.ITM if strike < current_price else StrikePriceType.OTM
         else:  # PUT
             return StrikePriceType.ITM if strike > current_price else StrikePriceType.OTM
+
 
     def _determine_trade_strategy(self, strategy: StrategyType, direction: DirectionType, is_first_leg: bool) -> TradeStrategy:
         """Determine appropriate trade strategy based on spread type and leg position.
@@ -87,33 +73,34 @@ class ContractSelector:
             # For credit spreads, first leg is high probability (short option)
             return TradeStrategy.DIRECTIONAL if is_first_leg else TradeStrategy.HIGH_PROBABILITY
 
-    def _evaluate_contract_match(self, contract: Contract, strategy: StrategyType, 
-                               direction: DirectionType) -> bool:
-        """Evaluate if a contract matches the strategy and direction criteria.
-        
-        Returns:
-            bool: True if contract type matches strategy/direction combination
-        
-        Contract Type Logic:
-            Bull Call (Debit): CALL
-            Bear Put (Debit):  PUT
-            Bull Put (Credit): PUT
-            Bear Call (Credit): CALL
-        """
+    def _evaluate_contract_match(self, contract: Contract, snapshot: Snapshot, 
+                               strategy: StrategyType, direction: DirectionType, 
+                               trade_strategy: TradeStrategy) -> bool:
+        """Evaluate if a contract matches based on type and delta criteria."""
+        # First check contract type match
+        contract_type_match = False
         if strategy == StrategyType.DEBIT:
             if direction == DirectionType.BULLISH:
-                # Bull Call Spread: Call options
-                return contract.contract_type == ContractType.CALL
+                contract_type_match = contract.contract_type == ContractType.CALL
             else:  # Bearish
-                # Bear Put Spread: Put options
-                return contract.contract_type == ContractType.PUT
+                contract_type_match = contract.contract_type == ContractType.PUT
         else:  # Credit
             if direction == DirectionType.BULLISH:
-                # Bull Put Spread: Put options
-                return contract.contract_type == ContractType.PUT
+                contract_type_match = contract.contract_type == ContractType.PUT
             else:  # Bearish
-                # Bear Call Spread: Call options
-                return contract.contract_type == ContractType.CALL
+                contract_type_match = contract.contract_type == ContractType.CALL
+
+        # Then check delta-based criteria
+        # if snapshot and snapshot.greeks and snapshot.greeks.delta and contract.strike_price_type:
+        #     check_by_delta = Options.identify_strike_price_type_by_delta(
+        #         delta=snapshot.greeks.delta,
+        #         trade_strategy=trade_strategy
+        #     )
+        #     # Contract must match both type and delta criteria
+        #     return contract_type_match and check_by_delta.name == contract.strike_price_type.name
+        
+        # If no delta data or no strike price type, fall back to just contract type matching
+        return contract_type_match
 
     def select_contracts(
         self,
@@ -154,24 +141,24 @@ class ContractSelector:
             if not snapshot.day.last_trade:
                 logger.debug(f"Missing last_trade data for {contract.ticker}. Using close price.")
                 snapshot.day.last_trade = snapshot.day.close
-                snapshot.confidence_level *= Decimal(0.8)
+                snapshot.confidence_level *= Decimal(0.95)
                 
             if not snapshot.day.bid:
                 logger.debug(f"Missing bid data for {contract.ticker}. Using close price.")
                 snapshot.day.bid = snapshot.day.close
-                snapshot.confidence_level *= Decimal(0.8)
+                snapshot.confidence_level *= Decimal(0.95)
                 
             if not snapshot.day.ask:
                 logger.debug(f"Missing ask data for {contract.ticker}. Using close price.")
                 snapshot.day.ask = snapshot.day.close
-                snapshot.confidence_level *= Decimal(0.8)
+                snapshot.confidence_level *= Decimal(0.95)
                 
             if not snapshot.day.timestamp:
                 logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
                 snapshot.day.timestamp = datetime.now().timestamp()
-                snapshot.confidence_level *= Decimal(0.9)
+                snapshot.confidence_level *= Decimal(0.95)
 
-            status = self._get_price_status(
+            contract.strike_price_type = self._get_price_status(
                 strike=contract.strike_price,
                 current_price=current_price,
                 option_type=contract.contract_type,
@@ -180,11 +167,11 @@ class ContractSelector:
                 trade_strategy=trade_strategy
             )
             
-            if status.name not in price_status:
+            if contract.strike_price_type.name not in price_status:
                 continue
 
             # Only use is_match from _evaluate_contract_match
-            if self._evaluate_contract_match(contract, strategy, direction):
+            if self._evaluate_contract_match(contract, snapshot, strategy, direction, trade_strategy):
                 contract.matched = True
                 snapshot.matched = True
                 candidates.append((contract, len(candidates), snapshot))

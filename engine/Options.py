@@ -269,20 +269,25 @@ class Options:
         Identifies if the contract is ITM, ATM, or OTM based on the delta value and trade strategy.
 
         Parameters:
-        delta : Decimal : The delta value of the option
+        delta : Decimal : The delta value of the option (-1 to 1)
         trade_strategy : TradeStrategy : The trading strategy
 
         Returns:
         StrikePriceType : The type of the contract (ITM, ATM, or OTM)
         """
         lower_bound, upper_bound = Options.get_delta_range(trade_strategy)
-        if lower_bound <= abs(delta) <= upper_bound:
-            return StrikePriceType.ATM
-        elif abs(delta) > upper_bound:
+        abs_delta = abs(delta)  # Convert delta to absolute value for comparison
+        
+        # Use absolute delta values for comparison:
+        # Call deltas: 0 to 1 (OTM to ITM)
+        # Put deltas: -1 to 0 (ITM to OTM)
+        if abs_delta >= upper_bound:
             return StrikePriceType.ITM
-        else:
+        elif abs_delta <= lower_bound:  
             return StrikePriceType.OTM
-    
+        else:
+            return StrikePriceType.ATM
+
     @staticmethod
     def identify_strike_price_by_current_price(strike_price: Decimal, current_price: Decimal, contract_type: ContractType, threshold: Decimal = Decimal('0.02')) -> StrikePriceType:
         """

@@ -93,13 +93,13 @@ def build_options_snapshots(market_data_client: IMarketDataClient, contracts: li
             continue
     return options_snapshots
 
-def process_stock(market_data_client, stock, stock_number, number_of_stocks, dynamodb, stage):
+def process_stock(market_data_client: IMarketDataClient, stock:Stocks, stock_number, number_of_stocks, dynamodb, stage):
     ticker = stock['Ticker']
     if not ticker:
         raise KeyError('Ticker')
     
     ideal_expiration = datetime.today() + timedelta(weeks=4)    
-    target_expiration_date = Options.get_next_friday(ideal_expiration).date()
+    target_expiration_date = date(2025,4,11) #Options.get_next_friday(ideal_expiration).date()
     matched_spread = None
 
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:

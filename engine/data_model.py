@@ -57,6 +57,7 @@ class StrikePriceType(Enum):
     ITM = 'ITM'
     ATM = 'ATM'
     OTM = 'OTM'
+    EXCLUDED = 'EXCLUDED'  # Added for strikes too far from current price
 
 class DataModelBase(BaseModel):
     EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client','contract_selector']
@@ -95,7 +96,7 @@ class DataModelBase(BaseModel):
             return cls._process_nested_dict(value)
         elif isinstance(value, list):
             return [cls._process_value(item) for item in value]
-        elif isinstance(value, (ContractType, DirectionType, StrategyType)):
+        elif isinstance(value, (ContractType, DirectionType, StrategyType, StrikePriceType)):
             return value.value
         return value
     
@@ -163,6 +164,7 @@ class Contract(DataModelBase):
         strike_price (Decimal): The strike price of the contract.
         ticker (str): The ticker symbol of the contract.
         underlying_ticker (str): The ticker symbol of the underlying asset.
+        strike_price_type (StrikePriceType): The strike price type of the contract.
     """
     cfi: Optional[str] = ''
     contract_type: Optional[ContractType] = None
@@ -173,6 +175,7 @@ class Contract(DataModelBase):
     strike_price: Optional[Decimal] = None
     ticker: Optional[str] = ''
     underlying_ticker: Optional[str] = ''
+    strike_price_type: Optional[StrikePriceType] = None  # Added field
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Contract':
