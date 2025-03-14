@@ -325,7 +325,8 @@
                                 data-max_reward="${item.max_reward ? Number(item.max_reward).toFixed(2) : 'N/A'}" 
                                 data-probability_of_profit="${item.probability_of_profit ? Number(item.probability_of_profit).toFixed(2) : 'N/A'}"
                                 data-adjusted_score="${item.adjusted_score ? Number(item.adjusted_score).toFixed(2) : 'N/A'}"
-                                data-confidence_level="${item.confidence_level ? Number(item.confidence_level).toFixed(2) : 'N/A'}">Details</button>`);
+                                data-confidence_level="${item.confidence_level ? Number(item.confidence_level).toFixed(2) : 'N/A'}"
+                                data-reward_risk_ratio="${item.reward_risk_ratio ? Number(item.reward_risk_ratio).toFixed(2) : 'N/A'}">Details</button>`);
 
                             row.append($('<td>').append(detailsButton));
                             $('#main-data-container tbody').append(row);
@@ -387,6 +388,7 @@
                                                     <li><strong>Probability of Profit:</strong> <span class="pop-content"></span>%</li>
                                                     <li><strong>Adjusted Score:</strong> <span class="score-content"></span></li>
                                                     <li><strong>Confidence Level:</strong> <span class="confidence-content"></span></li>
+                                                    <li><strong>Reward/Risk Ratio:</strong> <span class="reward-risk-ratio-content"></span></li>
                                                 </ul>
                                             </div>
                                         </div>
@@ -442,6 +444,7 @@
                     detailsRow.find('.pop-content').text($(this).data('probability_of_profit'));
                     detailsRow.find('.score-content').text($(this).data('adjusted_score'));
                     detailsRow.find('.confidence-content').text($(this).data('confidence_level'));
+                    detailsRow.find('.reward-risk-ratio-content').text($(this).data('reward_risk_ratio'));
                     
                     detailsRow.toggle();
                 } catch (error) {
