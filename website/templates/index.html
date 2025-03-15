@@ -286,6 +286,32 @@
                                                 <hr>
                                                 Higher score = better trade opportunity
                                             </span>
+                                            <span class="tooltiptext">
+                                                <strong>Score Components Breakdown:</strong><br>
+                                                <hr>
+                                                1. Probability of Profit (35%)<br>
+                                                Raw POP: ${item.score_pop_raw}%<br>
+                                                Component Score: ${item.score_pop}<br>
+                                                <hr>
+                                                2. Trade Width (15%)<br>
+                                                Width Ratio: ${item.score_width_raw}x optimal<br>
+                                                Component Score: ${item.score_width}<br>
+                                                <hr>
+                                                3. Reward/Risk (20%)<br>
+                                                R/R Ratio: ${item.score_reward_risk_raw}<br>
+                                                Component Score: ${item.score_reward_risk}<br>
+                                                <hr>
+                                                4. Risk Management (10%)<br>
+                                                Risk Used: ${item.score_risk_raw}%<br>
+                                                Component Score: ${item.score_risk}<br>
+                                                <hr>
+                                                5. Liquidity (20%)<br>
+                                                Volume: ${item.score_liquidity_volume}<br>
+                                                Open Interest: ${item.score_liquidity_oi}<br>
+                                                Component Score: ${item.score_liquidity}<br>
+                                                <hr>
+                                                <strong>Final Score: ${item.adjusted_score}</strong>
+                                            </span>
                                         </div>
                                     </td>
                                 `);

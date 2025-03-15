@@ -313,8 +313,7 @@ class DayData(BaseModel):
     osi_key: Optional[str] = None
     time_of_last_trade: Optional[int] = None
     average_volume: Optional[int] = None
-    reward_risk_ratio: Decimal = Decimal('0')
-    
+        
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DayData':
         return cls(**data)
@@ -376,8 +375,21 @@ class SpreadDataModel(DataModelBase):
     underlying_ticker: Optional[str] = None
     update_date: Optional[date] = None
     adjusted_score: Optional[Decimal] = None  # Added field for spread selection scoring
-    reward_risk_ratio: Decimal = Decimal('0')
-
+    reward_risk_ratio: Optional[Decimal] = None
+    # Score component fields with proper initialization
+    score_pop: Optional[Decimal] = None
+    score_width: Optional[Decimal] = None
+    score_reward_risk: Optional[Decimal] = None
+    score_risk: Optional[Decimal] = None
+    score_liquidity: Optional[Decimal] = None
+    
+    # Raw metric storage with proper initialization
+    score_pop_raw: Optional[Decimal] = None
+    score_width_raw: Optional[Decimal] = None
+    score_reward_risk_raw: Optional[Decimal] = None
+    score_risk_raw: Optional[Decimal] = None
+    score_liquidity_volume: Optional[Decimal] = None
+    score_liquidity_oi: Optional[Decimal] = None
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SpreadDataModel':
         return cls(**data)

@@ -136,7 +136,22 @@ class ContractSelector:
                 logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
                 snapshot.confidence_level = 0
                 continue
-                
+
+            # if not snapshot.day.average_volume:
+            #     logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
+            #     snapshot.confidence_level = 0
+            #     continue
+
+            if not snapshot.day.open_interest:
+                logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
+                snapshot.confidence_level = 0
+                continue
+
+            if not snapshot.day.volume:
+                logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
+                snapshot.confidence_level = 0
+                continue
+
             # Check for trade data individually and provide fallbacks
             if not snapshot.day.last_trade:
                 logger.debug(f"Missing last_trade data for {contract.ticker}. Using close price.")

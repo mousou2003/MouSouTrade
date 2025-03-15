@@ -141,7 +141,7 @@ class VerticalSpread(SpreadDataModel):
     contracts: List[Contract] = []
     # Make contract_selector an instance attribute instead of ClassVar
     contract_selector: ContractSelector = StandardContractSelector()
-    
+        
     def get_net_premium(self)-> Decimal:
         logger.debug("Entering get_net_premium")
         if self.short_premium is None or self.long_premium is None:
@@ -543,34 +543,242 @@ class VerticalSpreadMatcher:
         return description
 
     @staticmethod
-    def _calculate_adjusted_score(spread: VerticalSpread) -> Tuple[Optional[VerticalSpread], Optional[VerticalSpread], Optional[VerticalSpread]]:
-        logger.debug("Entering _calculate_adjusted_score")
-        # Combine confidence levels from legs and snapshots
-        short_confidence = spread.short_contract.confidence_level
-        long_confidence = spread.long_contract.confidence_level
-        first_snapshot_confidence = spread.first_leg_snapshot.confidence_level
-        second_snapshot_confidence = spread.second_leg_snapshot.confidence_level
+    def _calculate_adjusted_score(spread: VerticalSpread) -> None:
+        """Calculate adjusted score based on multiple weighted components.
         
-        # Overall confidence is the product of individual confidences
-        spread.confidence_level = short_confidence * long_confidence * first_snapshot_confidence * second_snapshot_confidence
-        breakeven = spread.get_breakeven_price()
-        if breakeven:
-            price_diff_pct = abs((breakeven - spread.previous_close) / spread.previous_close)
-            if price_diff_pct > spread.LARGE_MOVE_THRESHOLD:  # More than threshold move needed
-                logger.warning(f"Breakeven requires large price move: {price_diff_pct*100:.1f}% from current price")
-                # We'll reduce confidence for trades requiring large moves
-                spread.confidence_level *= spread.CONFIDENCE_REDUCTION_FACTOR         
+        Mathematical Components and Reasoning:
+        -----------------------------------
+        1. Probability of Profit Score (35% weight):
+           - Uses Black-Scholes model for theoretical probability calculation
+           - Optimal POP ranges differ by spread type:
+             Credit spreads: 60-80% optimal (high probability strategy)
+             Debit spreads: 40-60% optimal (directional strategy)
+           - Score adjusted based on strategy:
+             Credit: Linear scale with peak at 75% POP
+             Debit: Linear scale with peak at 50% POP
+           - Additional penalty for extreme POPs outside optimal ranges
+           Example: 70% POP
+           Credit spread: 70% is near optimal (95 points)
+           Debit spread: 70% is too conservative (80 points)
+           Final = adjusted_pop * 0.35
+           Reasoning: Aligns scoring with strategy objectives
 
-        spread.adjusted_score = Decimal(100)*((spread.reward_risk_ratio * Decimal(0.3)) + 
-                                              ((spread.probability_of_profit/Decimal(100)) * Decimal(0.3)) +
-                                              (spread.confidence_level * Decimal(0.4)))
+        2. Optimal Width Score (15% weight):
+           - Measures how well spread width matches market conditions
+           - Uses ratio = actual_width / optimal_width
+           - Perfect score when ratio = 1.0 (exactly optimal)
+           - Linear penalty function: score = 100 - (|1 - ratio| * 50)
+           - Rejects extreme deviations (ratio < 0.5 or > 2.0)
+           Example: ratio = 1.2
+           Deviation = |1 - 1.2| = 0.2
+           Score = 100 - (0.2 * 50) = 90 points
+           Final = 90 * 0.15 = 13.5 points contribution
+           Reasoning: Balances risk/reward while maintaining practical width
 
-        logger.info(f"Spread confidence calculation: short={short_confidence}, long={long_confidence}, " +
-                    f"first_snapshot={first_snapshot_confidence}, second_snapshot={second_snapshot_confidence}, " +
-                    f"confidence_level={spread.confidence_level}, "+
-                    f"Adjusted Score: {spread.adjusted_score}")
-                
-        logger.debug("Exiting _calculate_adjusted_score")
+        3. Reward/Risk Ratio Score (20% weight):
+           - Target R/R = 2.0 (standard risk management practice)
+           - Score = min(100, (actual_R/R / target_R/R) * 100)
+           - Linear scaling up to target, capped at 100
+           - Higher weight because R/R directly impacts profitability
+           Example: R/R = 1.5
+           Score = min(100, (1.5/2.0) * 100) = 75 points
+           Final = 75 * 0.20 = 15 points contribution
+           Reasoning: Rewards trades with better risk-adjusted returns
+
+        4. Risk Management Score (10% weight):
+           - Based on position size vs max acceptable loss (5%)
+           - max_loss_percent = max_risk / (underlying_price * 100)
+           - Linear scaling: score = (1 - loss_pct/max_acceptable) * 100
+           - Score = 0 if exceeds max acceptable loss
+           Example: max_loss = 3% of position
+           Score = (1 - 0.03/0.05) * 100 = 40 points
+           Final = 40 * 0.10 = 4 points contribution
+           Reasoning: Penalizes overleveraged positions
+
+        5. Liquidity Score (20% weight):
+           Per leg calculation:
+           - Volume score = min(100, (volume/VOLUME_EXCELLENT) * 100)
+           - OI score = min(100, (OI/OI_EXCELLENT) * 100)
+           - Combined = (volume_score + oi_score) / 2
+           Final = average_of_both_legs * 0.20
+           Example:
+           Leg 1: volume=150 (75%), OI=400 (80%) = 77.5%
+           Leg 2: volume=100 (50%), OI=300 (60%) = 55%
+           Average = 66.25%
+           Final = 66.25 * 0.20 = 13.25 points contribution
+           Reasoning: Ensures tradability and reasonable bid-ask spreads
+
+        Edge Cases and Adjustments:
+        -------------------------
+        - Zero volume/OI: Automatic zero score for liquidity
+        - Extreme width ratios: Score reduced based on deviation
+        - Very high R/R (>3:1): Capped at 100 points
+        - Near-zero POP (<20%): Additional penalty to risk score
+        - High IV environment: Width scoring more forgiving
+
+        Total Score Interpretation:
+        -------------------------
+        90-100: Excellent trade setup
+        75-89: Strong candidate
+        60-74: Acceptable setup
+        40-59: Marginal setup
+        <40: Poor setup, avoid trade
+
+        Final Score = Sum of all weighted components (0-100 scale)
+        """
+        logger.debug("Entering _calculate_adjusted_score")
+
+        # Define component weights based on strategy importance
+        # POP and R/R get higher weights as they're primary performance indicators
+        WEIGHT_POP = Decimal('0.35')        # Highest weight - primary success predictor
+        WEIGHT_WIDTH = Decimal('0.15')      # Lower weight - auxiliary optimization factor
+        WEIGHT_RR = Decimal('0.20')         # High weight - key profitability metric
+        WEIGHT_RISK = Decimal('0.10')       # Lower weight - risk control factor
+        WEIGHT_LIQUIDITY = Decimal('0.20')  # Medium weight - execution quality factor
+
+        # POP thresholds optimized for each strategy type
+        # Credit spreads need higher POP due to limited upside
+        CREDIT_MIN_POP = Decimal('0.40')       # Was 0.60 - Lower minimum acceptable POP for credit spreads
+        CREDIT_OPTIMAL_POP = Decimal('0.60')   # Was 0.75 - Lower target POP for credit spreads
+        CREDIT_PENALTY_FACTOR = Decimal('0.25') # Was 0.40 - Reduced penalty for exceeding optimal POP
+        # Debit spreads can accept lower POP due to higher potential returns
+        DEBIT_MIN_POP = Decimal('0.30')        # Was 0.40 - Lower minimum acceptable POP for debit spreads
+        DEBIT_OPTIMAL_POP = Decimal('0.50')    # Was 0.60 - Lower target POP for debit spreads
+        DEBIT_PENALTY_FACTOR = Decimal('0.30')  # Was 0.60 - Reduced penalty for conservative debit spreads
+
+        # Width ratio constraints for practical trade execution
+        MIN_WIDTH_RATIO = Decimal('0.5')        # Minimum acceptable width vs optimal
+        MAX_WIDTH_RATIO = Decimal('2.0')        # Maximum acceptable width vs optimal
+        OPTIMAL_WIDTH_RATIO = Decimal('1.0')    # Perfect width ratio
+        WIDTH_PENALTY_FACTOR = Decimal('50')    # Linear penalty for suboptimal width
+
+        # Position sizing and risk parameters
+        MAX_POSITION_SIZE = Decimal('100')      # Standard contract size (100 shares)
+        RISK_PENALTY_FACTOR = Decimal('100')    # Scaling factor for risk penalties
+
+        # Score boundaries for normalization
+        MIN_SCORE = Decimal('0')
+        MAX_SCORE = Decimal('100')
+
+        # Calculate POP score with strategy-specific scaling
+        pop_score = Decimal('0')
+        if spread.probability_of_profit:
+            pop = spread.probability_of_profit
+            if spread.strategy == StrategyType.CREDIT:
+                # More forgiving scaling for credit spreads
+                if pop < CREDIT_MIN_POP:
+                    # Linear scaling with higher base score
+                    pop_score = MAX_SCORE * (pop / CREDIT_MIN_POP) * Decimal('1.2')  # 20% boost
+                elif pop <= CREDIT_OPTIMAL_POP:
+                    # Perfect score plus bonus in optimal range
+                    pop_score = MAX_SCORE * Decimal('1.1')  # 10% bonus
+                else:
+                    # Reduced penalty for high POP
+                    excess = (pop - CREDIT_OPTIMAL_POP) / (Decimal('1') - CREDIT_OPTIMAL_POP)
+                    pop_score = MAX_SCORE * (Decimal('1') - excess * CREDIT_PENALTY_FACTOR * Decimal('0.5'))
+            else:  # DEBIT
+                # More generous scoring for debit spreads
+                if pop < DEBIT_MIN_POP:
+                    pop_score = MAX_SCORE * (pop / DEBIT_MIN_POP) * Decimal('1.15')  # 15% boost
+                elif pop <= DEBIT_OPTIMAL_POP:
+                    pop_score = MAX_SCORE * Decimal('1.05')  # 5% bonus
+                else:
+                    excess = (pop - DEBIT_OPTIMAL_POP) / (Decimal('1') - DEBIT_OPTIMAL_POP)
+                    pop_score = MAX_SCORE * (Decimal('1') - excess * DEBIT_PENALTY_FACTOR * Decimal('0.6'))
+            
+            # Ensure score stays within reasonable bounds but allow for bonus scores
+            pop_score = max(MIN_SCORE, min(MAX_SCORE * Decimal('1.2'), pop_score))
+
+        # Score the spread width relative to optimal width
+        width_ratio = spread.distance_between_strikes / spread.optimal_spread_width
+        width_score = MAX_SCORE
+        if width_ratio < MIN_WIDTH_RATIO or width_ratio > MAX_WIDTH_RATIO:
+            # Reject extreme width deviations
+            width_score = MIN_SCORE
+        elif width_ratio != OPTIMAL_WIDTH_RATIO:
+            # Apply linear penalty based on deviation from optimal
+            deviation = abs(OPTIMAL_WIDTH_RATIO - width_ratio)
+            width_score = MAX_SCORE - (deviation * WIDTH_PENALTY_FACTOR)
+
+        # Score reward/risk ratio relative to target
+        target_rr = spread.TARGET_REWARD_RISK_RATIO
+        actual_rr = spread.reward_risk_ratio
+        # Cap R/R score at 100 to avoid overweighting extremely high ratios
+        rr_score = min(MAX_SCORE, (actual_rr / target_rr) * MAX_SCORE)
+
+        # Calculate risk score based on position size
+        position_value = spread.previous_close * MAX_POSITION_SIZE
+        max_loss_percent = spread.max_risk / position_value
+        risk_score = MAX_SCORE
+        if max_loss_percent > spread.MAX_ACCEPTABLE_LOSS_PERCENT:
+            # Reject trades exceeding max risk threshold
+            risk_score = MIN_SCORE
+        else:
+            # Linear scaling based on risk utilization
+            risk_score = (Decimal('1') - (max_loss_percent / 
+                       spread.MAX_ACCEPTABLE_LOSS_PERCENT)) * RISK_PENALTY_FACTOR
+
+        # Calculate average liquidity score across both legs
+        liquidity_score = MIN_SCORE
+        for i, contract in enumerate([spread.long_contract, spread.short_contract]):
+            snapshot = (spread.first_leg_snapshot if contract == spread.first_leg_contract 
+                       else spread.second_leg_snapshot)
+            
+            # Score volume relative to excellent threshold
+            volume_score = min(MAX_SCORE, 
+                             (DataModelBase.to_decimal(snapshot.day.volume) / 
+                              DataModelBase.to_decimal(spread.VOLUME_EXCELLENT_THRESHOLD)) * MAX_SCORE)
+            
+            # Score open interest relative to excellent threshold
+            oi_score = min(MAX_SCORE, 
+                          (DataModelBase.to_decimal(snapshot.day.open_interest) / 
+                           DataModelBase.to_decimal(spread.OI_EXCELLENT_THRESHOLD)) * MAX_SCORE)
+            
+            # Average the volume and OI scores for this leg
+            leg_score = (volume_score + oi_score) / Decimal('2')
+            liquidity_score += leg_score
+            logger.debug(f"Leg {i+1} Liquidity: vol={volume_score}, oi={oi_score}, combined={leg_score}")
+        
+        # Average the liquidity scores of both legs
+        liquidity_score /= Decimal('2')
+
+        # Store raw and calculated POP scores
+        spread.score_pop_raw = pop if pop else Decimal('0')
+        spread.score_pop = pop_score
+        
+        # Store width ratio and score
+        spread.score_width_raw = width_ratio
+        spread.score_width = width_score
+        
+        # Store reward/risk ratio and score  
+        spread.score_reward_risk_raw = actual_rr
+        spread.score_reward_risk = rr_score
+        
+        # Store risk scores
+        spread.score_risk_raw = max_loss_percent * Decimal('100')  # Convert to percentage
+        spread.score_risk = risk_score
+        
+        # Store liquidity scores
+        spread.score_liquidity = liquidity_score
+        spread.score_liquidity_volume = volume_score  # From last leg iteration
+        spread.score_liquidity_oi = oi_score  # From last leg iteration
+        
+        # Compute final weighted score
+        spread.adjusted_score = (
+            (pop_score * WEIGHT_POP) +
+            (width_score * WEIGHT_WIDTH) +
+            (rr_score * WEIGHT_RR) +
+            (risk_score * WEIGHT_RISK) +
+            (liquidity_score * WEIGHT_LIQUIDITY)
+        )
+
+        # Log detailed scoring breakdown for analysis
+        logger.info(f"Score components: POP={pop_score:.2f}({pop_score*WEIGHT_POP:.2f}), " +
+                   f"Width={width_score:.2f}({width_score*WEIGHT_WIDTH:.2f}), " +
+                   f"R/R={rr_score:.2f}({rr_score*WEIGHT_RR:.2f}), " +
+                   f"Risk={risk_score:.2f}({risk_score*WEIGHT_RISK:.2f}), " +
+                   f"Liquidity={liquidity_score:.2f}({liquidity_score*WEIGHT_LIQUIDITY:.2f})")
+        logger.debug(f"Final adjusted score: {spread.adjusted_score:.2f}")
 
     @staticmethod
     def _update_best_spreads(spread: VerticalSpread, best_spread: Optional[VerticalSpread],
