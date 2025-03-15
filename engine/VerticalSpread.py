@@ -127,9 +127,16 @@ class VerticalSpread(SpreadDataModel):
     LONG_TERM_THRESHOLD: ClassVar[int] = 30  # Threshold for long-term options
     CONFIDENCE_REDUCTION_FACTOR: ClassVar[Decimal] = Decimal('0.7')  # Confidence reduction factor
     LARGE_MOVE_THRESHOLD: ClassVar[Decimal] = Decimal('0.1')  # Threshold for large price moves
-    EXTREME_WIDTH_RATIO: ClassVar[Decimal] = Decimal('5.0')  # Ratio for extremely wide spreads
     MAX_CONFIDENCE_REDUCTION: ClassVar[Decimal] = Decimal('0.5')  # Maximum confidence reduction
     CONFIDENCE_REDUCTION_STEP: ClassVar[Decimal] = Decimal('0.1')  # Step for confidence reduction
+
+    # Replace single EXTREME_WIDTH_RATIO with specific ratios
+    EXTREME_WIDTH_RATIO_DEBIT: ClassVar[Decimal] = Decimal('4.0')  # More conservative for debit spreads
+    EXTREME_WIDTH_RATIO_CREDIT: ClassVar[Decimal] = Decimal('6.0')  # More flexible for credit spreads
+    EXTREME_WIDTH_RATIO_HIGH_VOL: ClassVar[Decimal] = Decimal('3.0')  # More conservative in high volatility
+    EXTREME_WIDTH_RATIO_LOW_VOL: ClassVar[Decimal] = Decimal('7.0')  # More flexible in low volatility
+    VOL_THRESHOLD_HIGH: ClassVar[Decimal] = Decimal('0.3')  # 30% IV threshold for high volatility
+    VOL_THRESHOLD_LOW: ClassVar[Decimal] = Decimal('0.15')  # 15% IV threshold for low volatility
 
     contracts: List[Contract] = []
     # Make contract_selector an instance attribute instead of ClassVar
@@ -632,10 +639,23 @@ class VerticalSpreadMatcher:
             logger.debug("Exiting _validate_spread_parameters")
             return False
 
+        # Determine the appropriate extreme width ratio based on spread type and volatility
+        implied_volatility = (spread.first_leg_snapshot.implied_volatility + spread.second_leg_snapshot.implied_volatility) / 2
+
+        if implied_volatility > spread.VOL_THRESHOLD_HIGH:
+            base_ratio = spread.EXTREME_WIDTH_RATIO_HIGH_VOL
+        elif implied_volatility < spread.VOL_THRESHOLD_LOW:
+            base_ratio = spread.EXTREME_WIDTH_RATIO_LOW_VOL
+        else:
+            base_ratio = (spread.EXTREME_WIDTH_RATIO_DEBIT 
+                         if spread.strategy == StrategyType.DEBIT 
+                         else spread.EXTREME_WIDTH_RATIO_CREDIT)
+
         # Check for extremely wide spreads compared to optimal width
         width_ratio = spread.distance_between_strikes / spread.optimal_spread_width
-        if width_ratio > spread.EXTREME_WIDTH_RATIO:
-            logger.debug(f"Spread width ({spread.distance_between_strikes}) is {width_ratio:.1f}x the optimal width ({spread.optimal_spread_width})")
+        if width_ratio > base_ratio:
+            logger.debug(f"Spread width ({spread.distance_between_strikes}) is {width_ratio:.1f}x " +
+                        f"the optimal width ({spread.optimal_spread_width}) - exceeds ratio {base_ratio}")
             logger.debug("Exiting _validate_spread_parameters")
             return False
         
