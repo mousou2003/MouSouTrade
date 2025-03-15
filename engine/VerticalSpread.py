@@ -641,6 +641,7 @@ class VerticalSpreadMatcher:
         CREDIT_MIN_POP = Decimal('0.40')       # Was 0.60 - Lower minimum acceptable POP for credit spreads
         CREDIT_OPTIMAL_POP = Decimal('0.60')   # Was 0.75 - Lower target POP for credit spreads
         CREDIT_PENALTY_FACTOR = Decimal('0.25') # Was 0.40 - Reduced penalty for exceeding optimal POP
+
         # Debit spreads can accept lower POP due to higher potential returns
         DEBIT_MIN_POP = Decimal('0.30')        # Was 0.40 - Lower minimum acceptable POP for debit spreads
         DEBIT_OPTIMAL_POP = Decimal('0.50')    # Was 0.60 - Lower target POP for debit spreads
@@ -663,31 +664,46 @@ class VerticalSpreadMatcher:
         # Calculate POP score with strategy-specific scaling
         pop_score = Decimal('0')
         if spread.probability_of_profit:
-            pop = spread.probability_of_profit
+            # Convert POP from percentage to decimal form (e.g., 68.57240% -> 0.6857240)
+            pop = spread.probability_of_profit / Decimal('100')
             if spread.strategy == StrategyType.CREDIT:
-                # More forgiving scaling for credit spreads
                 if pop < CREDIT_MIN_POP:
-                    # Linear scaling with higher base score
-                    pop_score = MAX_SCORE * (pop / CREDIT_MIN_POP) * Decimal('1.2')  # 20% boost
+                    # Scale linearly from 0 to MAX_SCORE
+                    pop_score = MAX_SCORE * (pop / CREDIT_MIN_POP)
                 elif pop <= CREDIT_OPTIMAL_POP:
-                    # Perfect score plus bonus in optimal range
-                    pop_score = MAX_SCORE * Decimal('1.1')  # 10% bonus
+                    # Scale linearly from MIN_POP to OPTIMAL_POP
+                    pop_range = CREDIT_OPTIMAL_POP - CREDIT_MIN_POP
+                    pop_above_min = pop - CREDIT_MIN_POP
+                    pop_score = MAX_SCORE * (Decimal('0.8') + (Decimal('0.2') * (pop_above_min / pop_range)))
                 else:
-                    # Reduced penalty for high POP
-                    excess = (pop - CREDIT_OPTIMAL_POP) / (Decimal('1') - CREDIT_OPTIMAL_POP)
-                    pop_score = MAX_SCORE * (Decimal('1') - excess * CREDIT_PENALTY_FACTOR * Decimal('0.5'))
+                    # Handle POP values that exceed optimal
+                    pop_above_optimal = pop - CREDIT_OPTIMAL_POP
+                    remaining_range = Decimal('1') - CREDIT_OPTIMAL_POP
+                    if remaining_range <= Decimal('0'):
+                        pop_score = MIN_SCORE
+                    else:
+                        excess = pop_above_optimal / remaining_range
+                        pop_score = MAX_SCORE * (Decimal('1') - excess * CREDIT_PENALTY_FACTOR)
             else:  # DEBIT
-                # More generous scoring for debit spreads
                 if pop < DEBIT_MIN_POP:
-                    pop_score = MAX_SCORE * (pop / DEBIT_MIN_POP) * Decimal('1.15')  # 15% boost
+                    pop_score = MAX_SCORE * (pop / DEBIT_MIN_POP)
                 elif pop <= DEBIT_OPTIMAL_POP:
-                    pop_score = MAX_SCORE * Decimal('1.05')  # 5% bonus
+                    # Scale linearly from MIN_POP to OPTIMAL_POP
+                    pop_range = DEBIT_OPTIMAL_POP - DEBIT_MIN_POP
+                    pop_above_min = pop - DEBIT_MIN_POP
+                    pop_score = MAX_SCORE * (Decimal('0.8') + (Decimal('0.2') * (pop_above_min / pop_range)))
                 else:
-                    excess = (pop - DEBIT_OPTIMAL_POP) / (Decimal('1') - DEBIT_OPTIMAL_POP)
-                    pop_score = MAX_SCORE * (Decimal('1') - excess * DEBIT_PENALTY_FACTOR * Decimal('0.6'))
+                    # Handle POP values that exceed optimal
+                    pop_above_optimal = pop - DEBIT_OPTIMAL_POP
+                    remaining_range = Decimal('1') - DEBIT_OPTIMAL_POP
+                    if remaining_range <= Decimal('0'):
+                        pop_score = MIN_SCORE
+                    else:
+                        excess = pop_above_optimal / remaining_range
+                        pop_score = MAX_SCORE * (Decimal('1') - excess * DEBIT_PENALTY_FACTOR)
             
-            # Ensure score stays within reasonable bounds but allow for bonus scores
-            pop_score = max(MIN_SCORE, min(MAX_SCORE * Decimal('1.2'), pop_score))
+            # Keep score within standard bounds
+            pop_score = max(MIN_SCORE, min(MAX_SCORE, pop_score))
 
         # Score the spread width relative to optimal width
         width_ratio = spread.distance_between_strikes / spread.optimal_spread_width
