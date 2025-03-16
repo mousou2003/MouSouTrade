@@ -93,14 +93,13 @@ def build_options_snapshots(market_data_client: IMarketDataClient, contracts: li
             continue
     return options_snapshots
 
-def process_stock(market_data_client: IMarketDataClient, stock:Stocks, stock_number, number_of_stocks, dynamodb, stage):
+def process_stock(market_data_client: IMarketDataClient, stock:Stocks, stock_number, number_of_stocks, dynamodb:DynamoDB, stage):
     ticker = stock['Ticker']
     if not ticker:
         raise KeyError('Ticker')
     
     ideal_expiration = datetime.today() + timedelta(weeks=4)    
-    target_expiration_date = date(2025,4,11) #Options.get_next_friday(ideal_expiration).date()
-    matched_spread = None
+    target_expiration_date = date(2025,4,11)
 
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
@@ -125,28 +124,17 @@ def process_stock(market_data_client: IMarketDataClient, stock:Stocks, stock_num
                 contracts=contracts
             )
             
-            # Create spread just for persistence
-            key = {
-                "ticker": f"{ticker};{target_expiration_date.strftime(DataModelBase.DATE_FORMAT)};{datetime.today().date().strftime(DataModelBase.DATE_FORMAT)}",
-                "option": json.dumps({
-                    "date": target_expiration_date.strftime(DataModelBase.DATE_FORMAT), 
-                    "direction": direction.value, 
-                    "strategy": strategy.value
-                }, default=str)
-            }
-
-            description = spread_result.get_description()
-            spread_dict = spread_result.to_dict()
-            is_matched = spread_result.matched
-
-            merged_json = {**key, **{"description": description}, **spread_dict}
-            print(f"Match {'found' if is_matched else 'NOT found'}, and stored in {key}")
-            logger.debug(merged_json)
-            dynamodb.put_item(item=merged_json)
-            response = dynamodb.get_item(key=key)
-            if 'Item' in response and is_matched:
-                saved_spread = VerticalSpread().from_dict(response['Item'])
-                logger.debug(f'Item saved in table:\n{saved_spread.to_dict()}')
+            update_date=datetime.today().date()
+            success, guid = dynamodb.set_spreads(update_date=update_date, spread=spread_result)            
+            
+            # Verify the spread was saved correctly using GUID
+            if success:
+                if dynamodb.verify_spread(guid):
+                    logger.debug(f'Spread {guid} saved and verified in table')
+                else:
+                    logger.warning(f'Failed to verify spread {guid} for {ticker}')
+            else:
+                logger.warning(f'Failed to save spread for {ticker}')
 
 def wait_for_debugger(host, port, timeout=60):
     start_time = time.time()
@@ -179,6 +167,14 @@ def main():
         
         stage = env_vars['MOUSOUTRADE_STAGE']
         dynamodb = DynamoDB(stage)
+        
+        # Clear existing data
+        initial_count = dynamodb.count_items()
+        logger.info(f"Found {initial_count} existing items in table")
+        if initial_count > 0 and stage == 'Alpha':
+            logger.info("Flushing existing data...")
+            dynamodb.flush_table()
+        
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
         
