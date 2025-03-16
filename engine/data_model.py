@@ -86,7 +86,7 @@ class DataModelBase(BaseModel):
 
     @classmethod
     def _process_value(cls, value: Any) -> Any:
-        if isinstance(value, date):
+        if isinstance(value, (date,datetime)):
             return value.strftime(cls.DATE_FORMAT)
         elif isinstance(value, (Decimal, float)):
             return cls._format_decimal(value)
@@ -193,69 +193,7 @@ class Greeks(BaseModel):
         return cls(**data)
 
 class DayData(BaseModel):
-    """
-    Represents daily market data with various attributes such as
-    timestamp, open price, high price, low price, close price, and volume.
-
-    Attributes:
-        timestamp (datetime): The timestamp of the data.
-        open (Decimal): The opening price at the timestamp.
-        high (Decimal): The highest price at the timestamp.
-        low (Decimal): The lowest price at the timestamp.
-        close (Decimal): The closing price at the timestamp.
-        volume (int): The trading volume at the timestamp.
-        adjusted_flag (Optional[bool]): The adjusted flag.
-        ask (Optional[Decimal]): The ask price.
-        ask_size (Optional[int]): The ask size.
-        ask_time (Optional[datetime]): The ask time.
-        bid (Optional[Decimal]): The bid price.
-        bid_exchange (Optional[str]): The bid exchange.
-        bid_size (Optional[int]): The bid size.
-        bid_time (Optional[datetime]): The bid time.
-        change_close (Optional[Decimal]): The change close.
-        change_close_percentage (Optional[Decimal]): The change close percentage.
-        company_name (Optional[str]): The company name.
-        days_to_expiration (Optional[int]): The days to expiration.
-        dir_last (Optional[str]): The dir last.
-        dividend (Optional[Decimal]): The dividend.
-        eps (Optional[Decimal]): The EPS.
-        est_earnings (Optional[Decimal]): The estimated earnings.
-        ex_dividend_date (Optional[int]): The ex-dividend date.
-        high52 (Optional[Decimal]): The 52-week high.
-        last_trade (Optional[Decimal]): The last trade.
-        low52 (Optional[Decimal]): The 52-week low.
-        open_interest (Optional[int]): The open interest.
-        option_style (Optional[str]): The option style.
-        option_underlier (Optional[str]): The option underlier.
-        option_underlier_exchange (Optional[str]): The option underlier exchange.
-        previous_close (Optional[Decimal]): The previous close.
-        previous_day_volume (Optional[int]): The previous day volume.
-        primary_exchange (Optional[str]): The primary exchange.
-        symbol_description (Optional[str]): The symbol description.
-        total_volume (Optional[int]): The total volume.
-        upc (Optional[int]): The UPC.
-        cash_deliverable (Optional[Decimal]): The cash deliverable.
-        market_cap (Optional[Decimal]): The market cap.
-        shares_outstanding (Optional[int]): The shares outstanding.
-        next_earning_date (Optional[str]): The next earning date.
-        beta (Optional[Decimal]): The beta.
-        yield_: Optional[Decimal] = None
-        declared_dividend (Optional[Decimal]): The declared dividend.
-        dividend_payable_date (Optional[int]): The dividend payable date.
-        pe (Optional[Decimal]): The PE.
-        week52_low_date (Optional[int]): The 52-week low date.
-        week52_hi_date (Optional[int]): The 52-week high date.
-        intrinsic_value (Optional[Decimal]): The intrinsic value.
-        time_premium (Optional[Decimal]): The time premium.
-        option_multiplier (Optional[Decimal]): The option multiplier.
-        contract_size (Optional[Decimal]): The contract size.
-        expiration_date (Optional[int]): The expiration date.
-        option_previous_bid_price (Optional[Decimal]): The option previous bid price.
-        option_previous_ask_price (Optional[Decimal]): The option previous ask price.
-        osi_key (Optional[str]): The OSI key.
-        time_of_last_trade (Optional[int]): The time of last trade.
-        average_volume (Optional[int]): The average volume.
-    """
+    """Represents daily market data"""
     timestamp: Optional[datetime] = None
     open: Optional[Decimal] = None
     high: Optional[Decimal] = None
@@ -313,10 +251,9 @@ class DayData(BaseModel):
     osi_key: Optional[str] = None
     time_of_last_trade: Optional[int] = None
     average_volume: Optional[int] = None
-        
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'DayData':
-        return cls(**data)
+
+    class Config:
+        populate_by_name = True  # Updated from allow_population_by_field_name
 
 class Snapshot(DataModelBase):
     """
@@ -344,52 +281,79 @@ class SpreadDataModel(DataModelBase):
     class Config:
         arbitrary_types_allowed = True
 
-    breakeven: Optional[Decimal] = None
-    contract_type: Optional[ContractType] = None
-    daily_bars: Optional[List[DayData]] = None
-    description: Optional[str] = None
+    # Basic spread information
+    spread_guid: Optional[str] = None
+    underlying_ticker: Optional[str] = None
     direction: Optional[DirectionType] = None
-    distance_between_strikes: Optional[Decimal] = None
-    entry_price: Optional[Decimal] = None
-    exit_date: Optional[date] = None
-    expiration_date: Optional[date] = None
+    strategy: Optional[StrategyType] = None
+    contract_type: Optional[ContractType] = None
+    description: Optional[str] = None
+
+    # Contract details
     first_leg_contract: Optional[Contract] = None
     first_leg_contract_position: Optional[int] = None
     first_leg_snapshot: Optional[Snapshot] = None
-    long_contract: Optional[Contract] = None
-    long_premium: Optional[Decimal] = None
-    max_reward: Optional[Decimal] = None
-    max_risk: Optional[Decimal] = None
-    net_premium: Optional[Decimal] = None
-    optimal_spread_width: Optional[Decimal] = None  # Added field for storing optimal spread width
-    previous_close: Optional[Decimal] = None
-    probability_of_profit: Optional[Decimal] = None
     second_leg_contract: Optional[Contract] = None
     second_leg_contract_position: Optional[int] = None
     second_leg_snapshot: Optional[Snapshot] = None
+    long_contract: Optional[Contract] = None
     short_contract: Optional[Contract] = None
+
+    # Premium and price information
+    long_premium: Optional[Decimal] = None
     short_premium: Optional[Decimal] = None
-    stop_price: Optional[Decimal] = None
-    strategy: Optional[StrategyType] = None
+    net_premium: Optional[Decimal] = None
+    previous_close: Optional[Decimal] = None
+    entry_price: Optional[Decimal] = None
     target_price: Optional[Decimal] = None
-    underlying_ticker: Optional[str] = None
-    update_date: Optional[date] = None
-    adjusted_score: Optional[Decimal] = None  # Added field for spread selection scoring
+    stop_price: Optional[Decimal] = None
+    breakeven: Optional[Decimal] = None
+    distance_between_strikes: Optional[Decimal] = None
+    optimal_spread_width: Optional[Decimal] = None
+
+    # Risk metrics
+    max_reward: Optional[Decimal] = None
+    max_risk: Optional[Decimal] = None
+    optimal_profit: Optional[Decimal] = None
+    optimal_loss: Optional[Decimal] = None
+    profit_factor: Optional[Decimal] = None
+    probability_of_profit: Optional[Decimal] = None
     reward_risk_ratio: Optional[Decimal] = None
-    # Score component fields with proper initialization
+
+    # Dates
+    update_date: Optional[date] = None
+    expiration_date: Optional[date] = None
+    exit_date: Optional[date] = None
+
+    # Market data
+    daily_bars: Optional[List[DayData]] = None
+
+    # Scoring components
+    adjusted_score: Optional[Decimal] = None
     score_pop: Optional[Decimal] = None
     score_width: Optional[Decimal] = None
     score_reward_risk: Optional[Decimal] = None
     score_risk: Optional[Decimal] = None
     score_liquidity: Optional[Decimal] = None
-    
-    # Raw metric storage with proper initialization
+
+    # Raw metrics
     score_pop_raw: Optional[Decimal] = None
     score_width_raw: Optional[Decimal] = None
     score_reward_risk_raw: Optional[Decimal] = None
     score_risk_raw: Optional[Decimal] = None
     score_liquidity_volume: Optional[Decimal] = None
     score_liquidity_oi: Optional[Decimal] = None
+
+    # Agent trading data
+    agent_status: Optional[str] = None  # 'pending', 'active', 'completed'
+    entry_timestamp: Optional[datetime] = None
+    exit_timestamp: Optional[datetime] = None
+    trade_outcome: Optional[str] = None  # 'profit', 'loss'
+    actual_entry_price: Optional[Decimal] = None
+    actual_exit_price: Optional[Decimal] = None
+    realized_pnl: Optional[Decimal] = None
+    is_processed: Optional[bool] = False
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SpreadDataModel':
         return cls(**data)

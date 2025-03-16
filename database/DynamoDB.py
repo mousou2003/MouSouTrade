@@ -207,11 +207,12 @@ class DynamoDB:
             for item in all_items:
                 try:
                     spread = VerticalSpread().from_dict(item)
+                    spread.spread_guid = item.get('guid')  # Set the guid from the database item
                     spreads.append(spread)
                 except Exception as e:
                     logger.warning(f"Failed to parse spread: {e}")
                     continue
-                    
+            
             logger.debug(f"Returning {len(spreads)} matched spreads")
             return spreads
 

@@ -505,6 +505,24 @@ class VerticalSpreadMatcher:
         spread.breakeven = spread.get_breakeven_price()
         spread.target_price = spread.get_target_price()
         spread.stop_price = spread.get_stop_price()
+        
+        # Calculate optimal profit and loss
+        contracts = Decimal('100')  # Standard contract size
+        if spread.strategy == StrategyType.CREDIT:
+            # Credit spread optimal scenarios
+            spread.optimal_profit = spread.net_premium * contracts  # Max profit at target
+            spread.optimal_loss = (spread.distance_between_strikes - spread.net_premium) * contracts  # Max loss at stop
+        else:
+            # Debit spread optimal scenarios
+            spread.optimal_profit = (spread.distance_between_strikes - abs(spread.net_premium)) * contracts  # Max profit at target
+            spread.optimal_loss = abs(spread.net_premium) * contracts  # Max loss at stop
+            
+        # Calculate profit factor (ratio of optimal profit to optimal loss)
+        if spread.optimal_loss and spread.optimal_loss != 0:
+            spread.profit_factor = abs(spread.optimal_profit / spread.optimal_loss)
+        else:
+            spread.profit_factor = Decimal('0')
+            
         spread.entry_price = spread.previous_close
         spread.exit_date = spread.get_exit_date()
         spread.contract_type = spread.short_contract.contract_type

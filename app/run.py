@@ -8,6 +8,7 @@ import socket
 from requests import ReadTimeout
 from colorama import Fore, Style
 from decimal import Decimal
+from datetime import date, datetime, timedelta
 
 from marketdata_clients.BaseMarketDataClient import MarketDataException, MarketDataStrikeNotFoundException
 from marketdata_clients.PolygonClient import POLYGON_CLIENT_NAME
@@ -18,6 +19,7 @@ from engine.Stocks import Stocks
 from engine.data_model import *
 from database.DynamoDB import DynamoDB
 from config.ConfigLoader import ConfigLoader
+from agents.trading_agent import TradingAgent
 
 logger = logging.getLogger(__name__)
 debug_mode = os.getenv("DEBUG_MODE")
@@ -93,14 +95,17 @@ def build_options_snapshots(market_data_client: IMarketDataClient, contracts: li
             continue
     return options_snapshots
 
-def process_stock(market_data_client: IMarketDataClient, stock:Stocks, stock_number, number_of_stocks, dynamodb:DynamoDB, stage):
+def process_stock(market_data_client: IMarketDataClient, stock: Stocks, 
+                 stock_number: int, number_of_stocks: int,
+                 target_expiration_date: date, agent: TradingAgent, 
+                 dynamodb: DynamoDB) -> List[VerticalSpread]:
+    """Process stock and return list of spreads"""
     ticker = stock['Ticker']
     if not ticker:
         raise KeyError('Ticker')
-    
-    ideal_expiration = datetime.today() + timedelta(weeks=4)    
-    target_expiration_date = date(2025,4,11)
 
+    spreads = []
+    # Generate spreads for this stock
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
             contracts = market_data_client.get_option_contracts(
@@ -124,17 +129,24 @@ def process_stock(market_data_client: IMarketDataClient, stock:Stocks, stock_num
                 contracts=contracts
             )
             
-            update_date=datetime.today().date()
-            success, guid = dynamodb.set_spreads(update_date=update_date, spread=spread_result)            
-            
-            # Verify the spread was saved correctly using GUID
-            if success:
-                if dynamodb.verify_spread(guid):
-                    logger.debug(f'Spread {guid} saved and verified in table')
-                else:
-                    logger.warning(f'Failed to verify spread {guid} for {ticker}')
-            else:
-                logger.warning(f'Failed to save spread for {ticker}')
+            if spread_result and spread_result.matched:
+                # Save initial spread to DynamoDB
+                success, guid = dynamodb.set_spreads(
+                    update_date=datetime.today().date(), 
+                    spread=spread_result
+                )
+                if success:
+                    spreads.append(spread_result)
+
+    # Process spreads through trading agent
+    if spreads:
+        agent.run(spreads)
+        # Update spreads in DynamoDB after agent processing
+        for spread in spreads:
+            # Fix: Use date.today() instead of datetime.date.now()
+            dynamodb.set_spreads(update_date=date.today(), spread=spread)
+
+    return spreads
 
 def wait_for_debugger(host, port, timeout=60):
     start_time = time.time()
@@ -166,14 +178,6 @@ def main():
             raise ConfigurationFileException("No configuration file provided and MOUSOUTRADE_CONFIG_FILE environment variable is not set.")
         
         stage = env_vars['MOUSOUTRADE_STAGE']
-        dynamodb = DynamoDB(stage)
-        
-        # Clear existing data
-        initial_count = dynamodb.count_items()
-        logger.info(f"Found {initial_count} existing items in table")
-        if initial_count > 0 and stage == 'Alpha':
-            logger.info("Flushing existing data...")
-            dynamodb.flush_table()
         
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
@@ -182,26 +186,50 @@ def main():
         market_data_client = MarketDataClient(config_file='./config/SecurityKeys.json', stage=stage, client_name=clients)
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 
+        # Set target date once
+        target_expiration_date = date(2025, 4, 11)
+
+        # Initialize trading agent without DynamoDB dependency
+        agent = TradingAgent()
+        all_spreads = []
+
+        # Create DynamoDB instance for persistence
+        dynamodb = DynamoDB(stage)
+        initial_count = dynamodb.count_items()
+
+        # Process stocks and collect spreads
         for stock_number, stock in enumerate(stocks, start=1):
             ticker = stock.get('Ticker')
             if ticker in marketdata_stocks.stocks_data:
                 try:
                     stock.update(marketdata_stocks.stocks_data[ticker])
-                    process_stock(market_data_client=market_data_client, stock=stock, 
-                                  stock_number=stock_number, number_of_stocks=number_of_stocks, 
-                                  dynamodb=dynamodb, stage=stage)
-                except ReadTimeout as e:
-                    logger.warning(f"Read timeout for {ticker}: {e}")
-                except ConnectionRefusedError as e:
-                    logger.exception(f"Connection refused for {ticker}: {e}")
-                    raise e
-                except (KeyError, MarketDataException) as e:
-                    logger.exception(f"Error processing stock {stock_number}/{number_of_stocks} ({ticker}): {e}")
-            else:
-                logger.warning(f"Stock {stock_number}/{number_of_stocks} ({ticker}) not found in market")
-        print(f"Number of stocks in initial config file: {number_of_stocks}")
-        print(f"Number of stocks found in marketdata_stocks: {len(marketdata_stocks.stocks_data)}")
-        print(f"Processed {number_of_stocks} stocks")
+                    stock_spreads = process_stock(
+                        market_data_client=market_data_client, 
+                        stock=stock, 
+                        stock_number=stock_number, 
+                        number_of_stocks=number_of_stocks,
+                        target_expiration_date=target_expiration_date,
+                        agent=agent,
+                        dynamodb=dynamodb  # Pass DynamoDB instance
+                    )
+                    all_spreads.extend(stock_spreads)
+                except Exception as e:
+                    logger.error(f"Error processing {ticker}: {e}")
+
+        # Save final performance metrics
+        daily_performance = {
+            "date": date.today(),
+            "total_spreads": len(all_spreads),
+            "active_trades": len(agent.active_spreads),
+            "completed_trades": len(agent.completed_spreads)
+        }
+        dynamodb.update_daily_performance(daily_performance)
+
+        # Print summary
+        logger.info(f"Total spreads generated: {len(all_spreads)}")
+        logger.info(f"Active trades: {len(agent.active_spreads)}")
+        logger.info(f"Completed trades: {len(agent.completed_spreads)}")
+        
         return 0
     except FileNotFoundError:
         logger.error("Input file not found.")

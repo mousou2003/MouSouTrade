@@ -352,7 +352,15 @@
                                 data-probability_of_profit="${item.probability_of_profit ? Number(item.probability_of_profit).toFixed(2) : 'N/A'}"
                                 data-adjusted_score="${item.adjusted_score ? Number(item.adjusted_score).toFixed(2) : 'N/A'}"
                                 data-confidence_level="${item.confidence_level ? Number(item.confidence_level).toFixed(2) : 'N/A'}"
-                                data-reward_risk_ratio="${item.reward_risk_ratio ? Number(item.reward_risk_ratio).toFixed(2) : 'N/A'}">Details</button>`);
+                                data-reward_risk_ratio="${item.reward_risk_ratio ? Number(item.reward_risk_ratio).toFixed(2) : 'N/A'}"
+                                data-agent_status="${item.agent_status || 'N/A'}"
+                                data-entry_timestamp="${item.entry_timestamp || 'N/A'}"
+                                data-exit_timestamp="${item.exit_timestamp || 'N/A'}"
+                                data-actual_entry_price="${item.actual_entry_price ? Number(item.actual_entry_price).toFixed(2) : 'N/A'}"
+                                data-actual_exit_price="${item.actual_exit_price ? Number(item.actual_exit_price).toFixed(2) : 'N/A'}"
+                                data-realized_pnl="${item.realized_pnl ? Number(item.realized_pnl).toFixed(2) : 'N/A'}"
+                                data-trade_outcome="${item.trade_outcome || 'N/A'}"
+                                data-is_processed="${item.is_processed ? 'Yes' : 'No'}">Details</button>`);
 
                             row.append($('<td>').append(detailsButton));
                             $('#main-data-container tbody').append(row);
@@ -417,6 +425,20 @@
                                                     <li><strong>Reward/Risk Ratio:</strong> <span class="reward-risk-ratio-content"></span></li>
                                                 </ul>
                                             </div>
+                                            
+                                            <div class="column">
+                                                <h4>Agent Trading Data</h4>
+                                                <ul>
+                                                    <li><strong>Status:</strong> <span class="agent-status-content"></span></li>
+                                                    <li><strong>Entry Time:</strong> <span class="entry-timestamp-content"></span></li>
+                                                    <li><strong>Exit Time:</strong> <span class="exit-timestamp-content"></span></li>
+                                                    <li><strong>Entry Price:</strong> <span class="actual-entry-price-content"></span></li>
+                                                    <li><strong>Exit Price:</strong> <span class="actual-exit-price-content"></span></li>
+                                                    <li><strong>Realized P&L:</strong> <span class="realized-pnl-content"></span></li>
+                                                    <li><strong>Trade Outcome:</strong> <span class="trade-outcome-content"></span></li>
+                                                    <li><strong>Processed:</strong> <span class="is-processed-content"></span></li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -471,6 +493,16 @@
                     detailsRow.find('.score-content').text($(this).data('adjusted_score'));
                     detailsRow.find('.confidence-content').text($(this).data('confidence_level'));
                     detailsRow.find('.reward-risk-ratio-content').text($(this).data('reward_risk_ratio'));
+                    
+                    // Agent Trading Data
+                    detailsRow.find('.agent-status-content').text($(this).data('agent_status'));
+                    detailsRow.find('.entry-timestamp-content').text($(this).data('entry_timestamp'));
+                    detailsRow.find('.exit-timestamp-content').text($(this).data('exit_timestamp'));
+                    detailsRow.find('.actual-entry-price-content').text($(this).data('actual_entry_price'));
+                    detailsRow.find('.actual-exit-price-content').text($(this).data('actual_exit_price'));
+                    detailsRow.find('.realized-pnl-content').text($(this).data('realized_pnl'));
+                    detailsRow.find('.trade-outcome-content').text($(this).data('trade_outcome'));
+                    detailsRow.find('.is-processed-content').text($(this).data('is_processed'));
                     
                     detailsRow.toggle();
                 } catch (error) {
