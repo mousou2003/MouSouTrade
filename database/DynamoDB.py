@@ -6,8 +6,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from engine.VerticalSpread import VerticalSpread
-from engine.data_model import DataModelBase, DirectionType, SpreadDataModel, StrategyType
+from engine.data_model import DirectionType, SpreadDataModel, StrategyType
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +199,7 @@ class DynamoDB:
         """Query spread opportunities with optional filters"""
         try:
             all_items = []
-            if guid:
+            if guid:  # Remove unnecessary parentheses
                 # If GUID is provided, use it for direct lookup
                 response = self.table.query(
                     IndexName='guid-index',
@@ -241,7 +240,7 @@ class DynamoDB:
             spreads = []
             for item in all_items:
                 try:
-                    spread = VerticalSpread().from_dict(item)
+                    spread = SpreadDataModel.from_dict(item)
                     spread.spread_guid = item.get('guid')  # Set the guid from the database item
                     spreads.append(spread)
                 except Exception as e:
@@ -256,7 +255,7 @@ class DynamoDB:
             logger.exception(e)
             return []
 
-    def set_spreads(self, spread: VerticalSpread) -> tuple[bool, str]:
+    def set_spreads(self, spread: SpreadDataModel) -> tuple[bool, str]:
         """Store spread results in database
         Returns:
             tuple: (success: bool, guid: str) - Returns success status and GUID if successful
