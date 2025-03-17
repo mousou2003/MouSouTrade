@@ -19,6 +19,14 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo Services deployed successfully.
 
+echo Checking if website is accessible...
+curl -f http://localhost:%WEBSITE_PORT% >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo Website is not accessible at http://localhost:%WEBSITE_PORT%
+    echo Please make sure the website is running before pushing images.
+    exit /b 1
+)
+
 REM Test network connectivity
 docker exec -it app ping dynamodb-local -c 4
 if %ERRORLEVEL% NEQ 0 (
