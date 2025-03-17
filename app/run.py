@@ -105,7 +105,16 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stocks,
         raise KeyError('Ticker')
 
     spreads = []
-    # Generate spreads for this stock
+    today = datetime.today().date()
+    
+    # First get existing spreads for this ticker and expiration
+    existing_spreads = dynamodb.query_spreads(
+        ticker=ticker, 
+        expiration_date=target_expiration_date
+    )
+
+    # Get option snapshots first as they're needed for both new spreads and trading
+    all_snapshots = {}
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
             contracts = market_data_client.get_option_contracts(
@@ -115,36 +124,57 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stocks,
                 contract_type=Options.get_contract_type(strategy, direction),
                 order=Options.get_order(strategy=strategy, direction=direction)
             )
-            options_snapshots = build_options_snapshots(market_data_client, contracts, ticker)
+            snapshots = build_options_snapshots(market_data_client, contracts, ticker)
+            all_snapshots.update(snapshots)
 
-            logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {ticker} for target date {target_expiration_date}")
+    if not existing_spreads:
+        # Generate new spreads for this stock
+        for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
+            for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
+                logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {ticker} for target date {target_expiration_date}")
 
-            spread_result = VerticalSpreadMatcher.match_option(
-                options_snapshots=options_snapshots, 
-                underlying_ticker=ticker, 
-                direction=direction, 
-                strategy=strategy, 
-                previous_close=stock['close'], 
-                date=target_expiration_date, 
-                contracts=contracts
-            )
-            
-            if spread_result and spread_result.matched:
-                # Save initial spread to DynamoDB
-                success, guid = dynamodb.set_spreads(
-                    update_date=datetime.today().date(), 
-                    spread=spread_result
+                contracts = market_data_client.get_option_contracts(
+                    underlying_ticker=ticker,
+                    expiration_date_gte=target_expiration_date,
+                    expiration_date_lte=target_expiration_date,
+                    contract_type=Options.get_contract_type(strategy, direction),
+                    order=Options.get_order(strategy=strategy, direction=direction)
                 )
-                if success:
-                    spreads.append(spread_result)
+
+                spread_result = VerticalSpreadMatcher.match_option(
+                    options_snapshots=all_snapshots, 
+                    underlying_ticker=ticker, 
+                    direction=direction, 
+                    strategy=strategy, 
+                    previous_close=stock['close'], 
+                    date=target_expiration_date, 
+                    contracts=contracts
+                )
+                
+                if spread_result and spread_result.matched:
+                    success, guid = dynamodb.set_spreads(spread=spread_result)
+                    if success:
+                        spreads.append(spread_result)
+    else:
+        # Use existing spreads but update their snapshots
+        for spread in existing_spreads:
+            # Update snapshots for both legs if contracts exist
+            if spread.first_leg_contract:
+                first_leg_snapshot = all_snapshots.get(spread.first_leg_contract.ticker)
+                if first_leg_snapshot:
+                    spread.first_leg_snapshot = first_leg_snapshot
+            if spread.second_leg_contract:
+                second_leg_snapshot = all_snapshots.get(spread.second_leg_contract.ticker)
+                if second_leg_snapshot:
+                    spread.second_leg_snapshot = second_leg_snapshot
+            spreads.append(spread)
 
     # Process spreads through trading agent
     if spreads:
         agent.run(spreads)
         # Update spreads in DynamoDB after agent processing
         for spread in spreads:
-            # Fix: Use date.today() instead of datetime.date.now()
-            dynamodb.set_spreads(update_date=date.today(), spread=spread)
+            dynamodb.set_spreads(spread=spread)
 
     return spreads
 
@@ -216,9 +246,9 @@ def main():
                 except Exception as e:
                     logger.error(f"Error processing {ticker}: {e}")
 
-        # Save final performance metrics
+        # Save final performance metrics with date as string
         daily_performance = {
-            "date": date.today(),
+            "date": date.today().strftime('%Y-%m-%d'),  # Convert date to string
             "total_spreads": len(all_spreads),
             "active_trades": len(agent.active_spreads),
             "completed_trades": len(agent.completed_spreads)

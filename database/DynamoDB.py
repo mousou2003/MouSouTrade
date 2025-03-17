@@ -30,7 +30,7 @@ class DynamoDB:
             self.table.load()
             logger.debug("Table exists %s" % table_name)
         except ClientError as err:
-            if err.response['Error']['Code'] == 'ResourceNotFoundException':
+            if (err.response['Error']['Code'] == 'ResourceNotFoundException'):
                 logger.debug("Create the DynamoDB table.")
                 self.table = dynamodb.create_table(
                     TableName=table_name,
@@ -140,17 +140,18 @@ class DynamoDB:
     def update_daily_performance(self, metrics: dict):
         """Store daily performance metrics"""
         try:
+            # The date is already a string at this point, so no need for isoformat()
             self.table.put_item(
                 Item={
                     'type': 'daily_performance',
-                    'date': metrics['date'].isoformat(),
+                    'date': metrics['date'],  # Already a string from run.py
                     'metrics': metrics
                 }
             )
         except Exception as e:
             logger.error(f"Failed to update daily performance: {e}")
 
-    def query_spreads(self, ticker, update_date, expiration_date, 
+    def query_spreads(self, ticker, expiration_date, 
                      direction: DirectionType = None, strategy: StrategyType = None,
                      guid: str = None):
         """Query spread opportunities with optional filters"""
@@ -166,37 +167,28 @@ class DynamoDB:
                 all_items = response.get('Items', [])
                 logger.debug(f"GUID query returned {len(all_items)} items")
             else:
-                if ticker is None or update_date is None or expiration_date is None:
+                if ticker is None or expiration_date is None:
                     logger.warning("Required parameters missing for querying spreads")
                     return []
 
-                composite_key = self._create_composite_key(
-                    ticker,
-                    expiration_date,
-                    update_date
-                )
-
-                # Build the query with KeyConditionExpression for both hash and range keys
+                # Use ticker directly instead of composite key
                 query_kwargs = {
                     'KeyConditionExpression': 'ticker = :t',
                     'ExpressionAttributeValues': {
-                        ':t': composite_key
+                        ':t': ticker  # Use ticker directly
                     }
                 }
 
-                # If direction or strategy is specified, we need to search for matching option values
+                # If direction or strategy is specified, add to option pattern
                 if direction or strategy:
-                    # Create the option JSON pattern to match
                     option_pattern = json.dumps({
-                        "date": expiration_date.strftime(DataModelBase.DATE_FORMAT),
                         "direction": direction.value if direction else None,
                         "strategy": strategy.value if strategy else None
                     }, default=str)
                     
-                    # Add begins_with condition for the option sort key
                     query_kwargs['KeyConditionExpression'] += ' AND begins_with(#opt, :opt_pattern)'
                     query_kwargs['ExpressionAttributeNames'] = {'#opt': 'option'}
-                    query_kwargs['ExpressionAttributeValues'][':opt_pattern'] = option_pattern[:10]  # Use partial match
+                    query_kwargs['ExpressionAttributeValues'][':opt_pattern'] = option_pattern[:10]
 
                 response = self.table.query(**query_kwargs)
                 all_items = response.get('Items', [])
@@ -221,7 +213,7 @@ class DynamoDB:
             logger.exception(e)
             return []
 
-    def set_spreads(self, update_date: datetime, spread: VerticalSpread) -> tuple[bool, str]:
+    def set_spreads(self, spread: VerticalSpread) -> tuple[bool, str]:
         """Store spread results in database
         Returns:
             tuple: (success: bool, guid: str) - Returns success status and GUID if successful
@@ -230,13 +222,8 @@ class DynamoDB:
             spread_guid = str(uuid.uuid4())
             
             key = {
-                "ticker": self._create_composite_key(
-                    spread.underlying_ticker, 
-                    spread.expiration_date,
-                    update_date
-                ),
+                "ticker": spread.first_leg_contract.ticker,  # Use first leg ticker directly
                 "option": json.dumps({
-                    "date": spread.expiration_date.strftime(DataModelBase.DATE_FORMAT), 
                     "direction": spread.direction.value, 
                     "strategy": spread.strategy.value
                 }, default=str),
@@ -293,15 +280,3 @@ class DynamoDB:
         except Exception as e:
             logger.error(f"Failed to count items: {e}")
             return -1
-
-    def _create_composite_key(self, ticker: str, expiration_date: datetime, update_date: datetime) -> str:
-        """Create a safe composite key with escaped special characters"""
-        return f"{ticker};{expiration_date.strftime(DataModelBase.DATE_FORMAT)};{update_date.strftime(DataModelBase.DATE_FORMAT)}"
-
-    def _parse_composite_key(self, composite_key: str) -> tuple:
-        """Parse composite key back into components"""
-        parts = composite_key.split(';')  # Changed from '##' to ';'
-        if len(parts) == 3:
-            return (parts[0], datetime.strptime(parts[1], DataModelBase.DATE_FORMAT).date(),
-                   datetime.strptime(parts[2], DataModelBase.DATE_FORMAT).date())
-        return None
