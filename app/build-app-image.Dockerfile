@@ -6,6 +6,7 @@ COPY ./app .
 COPY ./engine engine 
 COPY ./marketdata_clients marketdata_clients 
 COPY ./database database 
+COPY ./agents agents
 COPY ./config config 
 COPY ./app/crontab /etc/cron.d/app-cron 
 COPY ./.aws /root/.aws/
