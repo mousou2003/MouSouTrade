@@ -8,6 +8,7 @@ COPY ./website/templates ./templates
 COPY ./.aws /root/.aws/
 COPY ./engine ./engine
 COPY ./marketdata_clients ./marketdata_clients
+COPY ./database ./database
 
 # Define build arguments
 ARG AWS_PROFILE
