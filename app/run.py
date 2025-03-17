@@ -95,13 +95,12 @@ def build_options_snapshots(market_data_client: IMarketDataClient, contracts: li
             continue
     return options_snapshots
 
-def process_stock(market_data_client: IMarketDataClient, stock: Stocks, 
+def process_stock(market_data_client: IMarketDataClient, stock: Stock,
                  stock_number: int, number_of_stocks: int,
                  target_expiration_date: date, agent: TradingAgent, 
                  dynamodb: DynamoDB) -> List[VerticalSpread]:
     """Process stock and return list of spreads"""
-    ticker = stock['Ticker']
-    if not ticker:
+    if not stock.ticker:
         raise KeyError('Ticker')
 
     spreads = []
@@ -109,7 +108,7 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stocks,
     
     # First get existing spreads for this ticker and expiration
     existing_spreads = dynamodb.query_spreads(
-        ticker=ticker, 
+        ticker=stock.ticker, 
         expiration_date=target_expiration_date
     )
 
@@ -118,23 +117,23 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stocks,
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
             contracts = market_data_client.get_option_contracts(
-                underlying_ticker=ticker,
+                underlying_ticker=stock.ticker,
                 expiration_date_gte=target_expiration_date,
                 expiration_date_lte=target_expiration_date,
                 contract_type=Options.get_contract_type(strategy, direction),
                 order=Options.get_order(strategy=strategy, direction=direction)
             )
-            snapshots = build_options_snapshots(market_data_client, contracts, ticker)
+            snapshots = build_options_snapshots(market_data_client, contracts, stock.ticker)
             all_snapshots.update(snapshots)
 
     if not existing_spreads:
         # Generate new spreads for this stock
         for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
             for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
-                logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {ticker} for target date {target_expiration_date}")
+                logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {stock.ticker} for target date {target_expiration_date}")
 
                 contracts = market_data_client.get_option_contracts(
-                    underlying_ticker=ticker,
+                    underlying_ticker=stock.ticker,
                     expiration_date_gte=target_expiration_date,
                     expiration_date_lte=target_expiration_date,
                     contract_type=Options.get_contract_type(strategy, direction),
@@ -143,21 +142,23 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stocks,
 
                 spread_result = VerticalSpreadMatcher.match_option(
                     options_snapshots=all_snapshots, 
-                    underlying_ticker=ticker, 
+                    underlying_ticker=stock.ticker, 
                     direction=direction, 
                     strategy=strategy, 
-                    previous_close=stock['close'], 
-                    date=target_expiration_date, 
+                    previous_close=stock.close,
+                    date=target_expiration_date,
                     contracts=contracts
                 )
                 
                 if spread_result and spread_result.matched:
+                    spread_result.stock = stock  # Set stock data after creation
                     success, guid = dynamodb.set_spreads(spread=spread_result)
                     if success:
                         spreads.append(spread_result)
     else:
         # Use existing spreads but update their snapshots
         for spread in existing_spreads:
+            spread.stock_data = stock
             # Update snapshots for both legs if contracts exist
             if spread.first_leg_contract:
                 first_leg_snapshot = all_snapshots.get(spread.first_leg_contract.ticker)
@@ -228,21 +229,23 @@ def main():
         initial_count = dynamodb.count_items()
 
         # Process stocks and collect spreads
-        for stock_number, stock in enumerate(stocks, start=1):
-            ticker = stock.get('Ticker')
-            if ticker in marketdata_stocks.stocks_data:
+        for stock_number, stock_config in enumerate(stocks, start=1):
+            ticker = stock_config.get('Ticker')
+            if ticker:
                 try:
-                    stock.update(marketdata_stocks.stocks_data[ticker])
-                    stock_spreads = process_stock(
-                        market_data_client=market_data_client, 
-                        stock=stock, 
-                        stock_number=stock_number, 
-                        number_of_stocks=number_of_stocks,
-                        target_expiration_date=target_expiration_date,
-                        agent=agent,
-                        dynamodb=dynamodb  # Pass DynamoDB instance
-                    )
-                    all_spreads.extend(stock_spreads)
+                    stocks = marketdata_stocks.get_daily_bars(ticker)
+                    if stocks:  # Check if we got any data back
+                        current_stock = stocks[0]  # Get most recent data
+                        stock_spreads = process_stock(
+                            market_data_client=market_data_client, 
+                            stock=current_stock,  # Renamed parameter
+                            stock_number=stock_number, 
+                            number_of_stocks=number_of_stocks,
+                            target_expiration_date=target_expiration_date,
+                            agent=agent,
+                            dynamodb=dynamodb
+                        )
+                        all_spreads.extend(stock_spreads)
                 except Exception as e:
                     logger.error(f"Error processing {ticker}: {e}")
 

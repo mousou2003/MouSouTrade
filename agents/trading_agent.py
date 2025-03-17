@@ -48,17 +48,16 @@ class TradingAgent(BaseModel):
     def _process_trade(self, spread: VerticalSpread) -> Optional[str]:
         """Process trade state transitions and returns new state if changed"""
         try:
-            # Get price data
-            prices = []
-            if spread.first_leg_snapshot and spread.first_leg_snapshot.day:
-                day_data = spread.first_leg_snapshot.day
-                price_data = [
-                    (day_data.open, 'open'),
-                    (day_data.high, 'high'),
-                    (day_data.low, 'low'),
-                    (day_data.close, 'close')
-                ]
-                prices.extend([(Decimal(str(p)), t) for p, t in price_data if p is not None])
+            if not spread.stock:  # Renamed from stock_data
+                return None
+
+            prices = [
+                (spread.stock.open, 'open'),  # Renamed from stock_data
+                (spread.stock.high, 'high'),
+                (spread.stock.low, 'low'),
+                (spread.stock.close, 'close')
+            ]
+            prices = [(Decimal(str(p)), t) for p, t in prices if p is not None]
             
             if not prices:
                 return None

@@ -150,6 +150,7 @@
                                 </span>
                             </div>
                         </th>
+                        <th>Stock Data</th>
                         <th>Description</th>
                         <th>Details</th>
                     </tr>
@@ -265,6 +266,19 @@
                             row.append(`<td>$${Number(item.max_risk).toFixed(2)}</td>`);
                             row.append(`<td>$${Number(item.max_reward).toFixed(2)}</td>`);
                             
+                            // Add the stock data column
+                            const stockData = item.stock || {};
+                            row.append(`
+                                <td>
+                                    <strong>Open:</strong> $${stockData.open ? Number(stockData.open).toFixed(2) : 'N/A'}<br>
+                                    <strong>High:</strong> $${stockData.high ? Number(stockData.high).toFixed(2) : 'N/A'}<br>
+                                    <strong>Low:</strong> $${stockData.low ? Number(stockData.low).toFixed(2) : 'N/A'}<br>
+                                    <strong>Close:</strong> $${stockData.close ? Number(stockData.close).toFixed(2) : 'N/A'}<br>
+                                    <strong>Volume:</strong> ${stockData.volume ? Number(stockData.volume).toLocaleString() : 'N/A'}<br>
+                                    <strong>Date:</strong> ${stockData.date || 'N/A'}
+                                </td>
+                            `);
+
                             // Add the adjusted score cell with color coding
                             const score = item.adjusted_score ? Number(item.adjusted_score).toFixed(2) : 'N/A';
                             if (score !== 'N/A') {

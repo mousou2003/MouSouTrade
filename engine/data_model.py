@@ -277,6 +277,20 @@ class Snapshot(DataModelBase):
     def from_dict(cls, data: Dict[str, Any]) -> 'Snapshot':
         return cls(**data)
 
+class Stock(DataModelBase):
+    """Represents a stock's daily market data"""
+    ticker: Optional[str] = ''
+    date: Optional[date]
+    open: Optional[Decimal] = None
+    high: Optional[Decimal] = None
+    low: Optional[Decimal] = None
+    close: Optional[Decimal] = None
+    volume: Optional[Decimal] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Stock':
+        return cls(**data)
+
 class SpreadDataModel(DataModelBase):
     class Config:
         arbitrary_types_allowed = True
@@ -326,6 +340,7 @@ class SpreadDataModel(DataModelBase):
     exit_date: Optional[date] = None
 
     # Market data
+    stock: Optional[Stock] = None  # Renamed from stock_data
     daily_bars: Optional[List[DayData]] = None
 
     # Scoring components
