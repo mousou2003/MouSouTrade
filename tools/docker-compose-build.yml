@@ -18,6 +18,7 @@ services:
         - WEBSITE_PORT
         - DYNAMODB_PORT
         - PROJECT_NAME
+        - MOUSOUTRADE_CLIENTS
     image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:latest
 
   website:
