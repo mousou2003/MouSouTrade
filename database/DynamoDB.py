@@ -7,7 +7,7 @@ import os
 import uuid
 from datetime import datetime
 from engine.VerticalSpread import VerticalSpread
-from engine.data_model import DataModelBase, DirectionType, StrategyType
+from engine.data_model import DataModelBase, DirectionType, SpreadDataModel, StrategyType
 
 logger = logging.getLogger(__name__)
 
@@ -280,3 +280,19 @@ class DynamoDB:
         except Exception as e:
             logger.error(f"Failed to count items: {e}")
             return -1
+
+    def scan_spreads(self)-> list[SpreadDataModel]:
+        """Scan all spread records from the table"""
+        logger.info("Scanning all spread records")
+        try:
+            items = []
+            paginator = self.table.meta.client.get_paginator('scan')
+            for page in paginator.paginate(TableName=self.table.name):
+                items.extend(page['Items'])
+            return [SpreadDataModel.from_dict(record) for record in items]
+        except ClientError as e:
+            logger.error(f"Unable to scan the DynamoDB table: {e.response['Error']['Message']}")
+            raise
+        except Exception as e:
+            logger.error(f"Error scanning table: {e}")
+            raise
