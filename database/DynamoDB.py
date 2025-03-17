@@ -42,7 +42,7 @@ class DynamoDB:
                         {
                             'AttributeName': 'option',
                             'KeyType': 'RANGE'
-                        },
+                        }
                     ],
                     AttributeDefinitions=[
                         {
@@ -56,6 +56,14 @@ class DynamoDB:
                         {
                             'AttributeName': 'guid',
                             'AttributeType': 'S'
+                        },
+                        {
+                            'AttributeName': 'type',
+                            'AttributeType': 'S'
+                        },
+                        {
+                            'AttributeName': 'date',
+                            'AttributeType': 'S'
                         }
                     ],
                     GlobalSecondaryIndexes=[
@@ -65,6 +73,26 @@ class DynamoDB:
                                 {
                                     'AttributeName': 'guid',
                                     'KeyType': 'HASH'
+                                }
+                            ],
+                            'Projection': {
+                                'ProjectionType': 'ALL'
+                            },
+                            'ProvisionedThroughput': {
+                                'ReadCapacityUnits': 5,
+                                'WriteCapacityUnits': 5
+                            }
+                        },
+                        {
+                            'IndexName': 'type-date-index',
+                            'KeySchema': [
+                                {
+                                    'AttributeName': 'type',
+                                    'KeyType': 'HASH'
+                                },
+                                {
+                                    'AttributeName': 'date',
+                                    'KeyType': 'RANGE'
                                 }
                             ],
                             'Projection': {
@@ -111,26 +139,39 @@ class DynamoDB:
                 err)
             raise
 
-    def update_portfolio(self, portfolio: dict):
-        """Update portfolio positions in database"""
+    # Add constants for record types at class level
+    RECORD_TYPE_SPREAD = "SPREAD"
+    RECORD_TYPE_PERFORMANCE = "PERFORMANCE"
+    RECORD_TYPE_PORTFOLIO = "PORTFOLIO"
+
+    def update_portfolio(self, portfolio: dict, spread_guid: str):
+        """Update portfolio positions in database with spread reference"""
         try:
+            date = datetime.now().date().isoformat()
             self.table.put_item(
                 Item={
+                    'ticker': f"{self.RECORD_TYPE_PORTFOLIO}",
+                    'option': f"positions_{date}",
+                    'spread_guid': spread_guid,  # Reference to spread
                     'type': 'portfolio',
-                    'date': datetime.now().date().isoformat(),
+                    'date': date,
                     'positions': portfolio
                 }
             )
         except Exception as e:
             logger.error(f"Failed to update portfolio: {e}")
 
-    def update_performance(self, performance: dict):
-        """Store trade performance records"""
+    def update_performance(self, performance: dict, spread_guid: str):
+        """Store trade performance records with spread reference"""
         try:
+            date = datetime.now().date().isoformat()
             self.table.put_item(
                 Item={
+                    'ticker': f"{self.RECORD_TYPE_PERFORMANCE}",
+                    'option': f"trades_{date}",
+                    'spread_guid': spread_guid,  # Reference to spread
                     'type': 'performance',
-                    'date': datetime.now().date().isoformat(), 
+                    'date': date,
                     'trades': performance
                 }
             )
@@ -140,11 +181,13 @@ class DynamoDB:
     def update_daily_performance(self, metrics: dict):
         """Store daily performance metrics"""
         try:
-            # The date is already a string at this point, so no need for isoformat()
+            performance_date = metrics['date']
             self.table.put_item(
                 Item={
+                    'ticker': f"PERFORMANCE;{performance_date}",  # Primary key
+                    'option': 'daily_metrics',  # Sort key
                     'type': 'daily_performance',
-                    'date': metrics['date'],  # Already a string from run.py
+                    'date': performance_date,
                     'metrics': metrics
                 }
             )
@@ -222,7 +265,7 @@ class DynamoDB:
             spread_guid = str(uuid.uuid4())
             
             key = {
-                "ticker": spread.first_leg_contract.ticker,  # Use first leg ticker directly
+                "ticker": f"{self.RECORD_TYPE_SPREAD};{spread.first_leg_contract.ticker}",
                 "option": json.dumps({
                     "direction": spread.direction.value, 
                     "strategy": spread.strategy.value
@@ -287,7 +330,13 @@ class DynamoDB:
         try:
             items = []
             paginator = self.table.meta.client.get_paginator('scan')
-            for page in paginator.paginate(TableName=self.table.name):
+            
+            # Filter for spread records only
+            for page in paginator.paginate(
+                TableName=self.table.name,
+                FilterExpression='begins_with(ticker, :prefix)',
+                ExpressionAttributeValues={':prefix': self.RECORD_TYPE_SPREAD}
+            ):
                 items.extend(page['Items'])
             return [SpreadDataModel.from_dict(record) for record in items]
         except ClientError as e:
@@ -296,3 +345,35 @@ class DynamoDB:
         except Exception as e:
             logger.error(f"Error scanning table: {e}")
             raise
+
+    def query_by_spread_guid(self, spread_guid: str) -> dict:
+        """Query all records related to a specific spread by its GUID"""
+        try:
+            # First get the spread using GUID index
+            spreads = self.query_spreads(None, None, guid=spread_guid)
+            if not spreads:
+                return {}
+
+            # Then get related records by filtering on spread_guid
+            response = self.table.scan(
+                FilterExpression='spread_guid = :guid',
+                ExpressionAttributeValues={':guid': spread_guid}
+            )
+            items = response.get('Items', [])
+            
+            result = {
+                'spread': spreads[0],
+                'performance': [],
+                'portfolio': []
+            }
+            
+            for item in items:
+                if item['type'] == 'performance':
+                    result['performance'].append(item)
+                elif item['type'] == 'portfolio':
+                    result['portfolio'].append(item)
+                
+            return result
+        except Exception as e:
+            logger.error(f"Failed to query by spread GUID: {e}")
+            return {}
