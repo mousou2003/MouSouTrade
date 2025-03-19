@@ -20,9 +20,9 @@ if %ERRORLEVEL% NEQ 0 (
 echo Services deployed successfully.
 
 echo Checking if website is accessible...
-curl -f http://localhost:%WEBSITE_PORT% >nul 2>&1
+curl -f http://%WEBSITE_CONTAINER_NAME%:%WEBSITE_PORT% >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo Website is not accessible at http://localhost:%WEBSITE_PORT%
+    echo Website is not accessible at http://%WEBSITE_CONTAINER_NAME%:%WEBSITE_PORT%
     echo Please make sure the website is running before pushing images.
     exit /b 1
 )
