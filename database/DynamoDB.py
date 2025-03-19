@@ -261,7 +261,12 @@ class DynamoDB:
             tuple: (success: bool, guid: str) - Returns success status and GUID if successful
         """
         try:
-            spread_guid = str(uuid.uuid4())
+            if spread.spread_guid:
+                # Update existing spread
+                spread_guid = spread.spread_guid
+            else:
+                # Generate new GUID for spread
+                spread_guid = str(uuid.uuid4())
             
             key = {
                 "ticker": f"{self.RECORD_TYPE_SPREAD};{spread.first_leg_contract.ticker}",
