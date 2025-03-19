@@ -128,6 +128,12 @@
             <input type="checkbox" id="filter-by-score" checked /> Show only records with score above 
         </label>
         <input type="number" id="min-score-threshold" value="60" min="0" max="100" step="1" style="width: 50px;">
+        <label>
+            <input type="checkbox" id="filter-completed" /> Show only completed trades
+        </label>
+        <label>
+            <input type="checkbox" id="filter-mag7" /> Show only Magnificent Seven stocks
+        </label>
     </div>
     
     <div class="data-container">
@@ -164,6 +170,9 @@
         $(document).ready(function() {
             let previousData = [];
             let sortOrders = [];
+            
+            // Add Magnificent Seven tickers constant
+            const MAG7_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA'];
 
             // Function to get color for score based on a gradient
             function getScoreColor(score) {
@@ -227,9 +236,22 @@
 
                 const filterByScore = $('#filter-by-score').is(':checked');
                 const minScoreThreshold = parseFloat($('#min-score-threshold').val()) || 0;
-                const filteredData = filterByScore ? 
-                    data.filter(item => item.adjusted_score && parseFloat(item.adjusted_score) >= minScoreThreshold) : 
-                    data;
+                const filterCompleted = $('#filter-completed').is(':checked');
+                const filterMag7 = $('#filter-mag7').is(':checked');
+                
+                let filteredData = data;
+                
+                if (filterByScore) {
+                    filteredData = filteredData.filter(item => item.adjusted_score && parseFloat(item.adjusted_score) >= minScoreThreshold);
+                }
+                
+                if (filterCompleted) {
+                    filteredData = filteredData.filter(item => item.agent_status === "completed");
+                }
+
+                if (filterMag7) {
+                    filteredData = filteredData.filter(item => MAG7_TICKERS.includes(item.underlying_ticker));
+                }
 
                 const sortedData = filteredData.sort((a, b) => {
                     for (const { column, order } of sortOrders) {
@@ -537,7 +559,7 @@
                 }
             });
 
-            $('#filter-by-score, #min-score-threshold').on('change', function() {
+            $('#filter-by-score, #min-score-threshold, #filter-completed, #filter-mag7').on('change', function() {
                 try {
                     renderData(previousData);
                 } catch (error) {
