@@ -374,6 +374,8 @@ class SpreadDataModel(DataModelBase):
     actual_exit_price: Optional[Decimal] = None
     realized_pnl: Optional[Decimal] = None
     is_processed: Optional[bool] = False
+    target_reward: Optional[Decimal] = None  # Target reward percentage of max potential
+    target_stop: Optional[Decimal] = None    # Target stop percentage of max potential
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SpreadDataModel':

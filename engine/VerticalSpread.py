@@ -218,7 +218,31 @@ class VerticalSpread(SpreadDataModel):
             logger.error(f"Error creating vertical spread copy: {str(e)}")
             raise
 
-    
+    @staticmethod
+    def get_current_profit(spread: 'SpreadDataModel') -> Decimal:
+        """Calculate current profit/loss for a spread."""
+        if not spread.stock or not spread.actual_entry_price:
+            return Decimal('0')
+        
+        current_price = spread.stock.close
+        net_premium = spread.net_premium * 100  # Convert to points
+
+        if current_price > spread.short_contract.strike_price:
+            # Both legs are ITM
+            final_value = spread.short_contract.strike_price - spread.long_contract.strike_price
+        elif current_price > spread.long_contract.strike_price:
+            # Long leg is ITM, short leg expires worthless
+            final_value = current_price - spread.long_contract.strike_price
+        else:
+            # Both legs are OTM
+            final_value = 0
+
+        # For credit spreads, add premium received, for debit spreads subtract premium paid
+        current_pnl = final_value + (net_premium if spread.strategy == StrategyType.CREDIT else -net_premium)
+        
+        # Ensure we don't exceed max profit/loss bounds
+        return max(-spread.target_stop, min(spread.target_reward, current_pnl))
+
 class CreditSpread(VerticalSpread):
 
     ideal_expiration: ClassVar[int] = 45
@@ -234,12 +258,12 @@ class CreditSpread(VerticalSpread):
         return Decimal(self.short_contract.strike_price) + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
 
     def get_target_price(self):
-        target_reward = (self.get_net_premium() * Decimal(0.8))
-        return self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
+        self.target_reward = (self.get_net_premium() * Decimal(0.8))
+        return self.previous_close + (self.target_reward if self.direction == DirectionType.BULLISH else -self.target_reward)
 
     def get_stop_price(self):
-        target_stop = (self.get_net_premium() / Decimal(2))
-        return self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
+        self.target_stop = (self.get_net_premium() / Decimal(2))
+        return self.previous_close - (self.target_stop if self.direction == DirectionType.BULLISH else -self.target_stop)
 
 class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
@@ -258,12 +282,12 @@ class DebitSpread(VerticalSpread):
             return Decimal(self.long_contract.strike_price) - net_premium
 
     def get_target_price(self):
-        target_reward = (self.distance_between_strikes * Decimal(0.8))
-        return self.previous_close + (target_reward if self.direction == DirectionType.BULLISH else -target_reward)
+        self.target_reward = (self.distance_between_strikes * Decimal(0.8))
+        return self.previous_close + (self.target_reward if self.direction == DirectionType.BULLISH else -self.target_reward)
 
     def get_stop_price(self):
-        target_stop = (self.distance_between_strikes / Decimal(2))
-        return self.previous_close - (target_stop if self.direction == DirectionType.BULLISH else -target_stop)
+        self.target_stop = (self.distance_between_strikes / Decimal(2))
+        return self.previous_close - (self.target_stop if self.direction == DirectionType.BULLISH else -self.target_stop)
 
 class VerticalSpreadMatcher:
     """Handles the matching and selection of vertical spread contracts."""

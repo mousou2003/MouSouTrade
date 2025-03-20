@@ -19,7 +19,6 @@ class TradingAgent(BaseModel):
     completed_spreads: List[VerticalSpread] = []
     processed_trades: Set[str] = set()
     spread_states: Dict[str, TradeState] = {}  # Track states by spread GUID
-    active_spread_guids: Set[str] = set()  # Track active spreads by GUID
     
     # Performance tracking
     total_trades: int = 0
@@ -61,22 +60,24 @@ class TradingAgent(BaseModel):
             for spread in spreads:
                 logger.debug(f"Processing spread {spread.spread_guid} - Current agent_status: {spread.agent_status}")
                 
-                # Get current tracked state (or NONE if new)
-                current_state = self.spread_states.get(spread.spread_guid, TradeState.NONE)
-                # Ensure agent_status is a TradeState
-                if isinstance(spread.agent_status, str):
-                    spread.agent_status = current_state
-                elif spread.agent_status is None:
+                    # Ensure agent_status is a TradeState
+                if spread.agent_status is None:
                     spread.agent_status = TradeState.NONE
-                    logger.debug(f"Current tracked state: {current_state}")
+                    logger.warning(f"State not defined for: {spread.spread_guid}")
+                
+                # Get current tracked state
+                if spread.spread_guid not in self.spread_states:
+                    self.spread_states[spread.spread_guid] = spread.agent_status
+                current_state = self.spread_states.get(spread.spread_guid)
+
                 
                 # Process completed trades into our stats
                 if current_state == TradeState.COMPLETED:
-                    if spread.spread_guid not in self.active_spread_guids:
+                    if not any(s.spread_guid == spread.spread_guid for s in self.active_spreads):
                         self.completed_spreads.append(spread)
                         if spread.trade_outcome == "profit":
                             self.winning_trades += 1
-                        self.total_pnl += spread.realized_pnl
+                        self.total_pnl += spread.realized_pnl if spread.realized_pnl else Decimal('0')
                     logger.debug(f"Skipping completed spread {spread.spread_guid}")
                     self.completed_spreads.append(spread)
                     continue
@@ -86,10 +87,12 @@ class TradingAgent(BaseModel):
                 
                 # Handle error cases
                 if new_state == TradeState.NONE:
-                    logger.error(f"Error processing spread {spread.spread_guid}: Invalid state transition")
+                    logger.warning(f"Error processing spread {spread.spread_guid}: Invalid state transition")
                     # Reset spread state to avoid getting stuck
-                    if spread.agent_status != TradeState.COMPLETED:
-                        spread.agent_status = TradeState.NONE
+                    if spread.is_processed:
+                        spread.agent_status = TradeState.COMPLETED
+                    elif spread.entry_price is not None:
+                        spread.agent_status = TradeState.ACTIVE
                     modified_spreads.append(spread)
                     continue
 
@@ -97,31 +100,22 @@ class TradingAgent(BaseModel):
                 if new_state != current_state:
                     logger.info(f"State change for {spread.spread_guid}: {current_state} -> {new_state}")
                     self.spread_states[spread.spread_guid] = new_state
-                    
+                    modified_spreads.append(spread)
                     if new_state == TradeState.ACTIVE:
-                        # New active trade
-                        if spread.spread_guid not in self.active_spread_guids:
-                            logger.info(f"Adding new active spread {spread.spread_guid}")
-                            self.active_spreads.append(spread)
-                            self.active_spread_guids.add(spread.spread_guid)
-                            self.total_trades += 1
-                            modified_spreads.append(spread)
+                        logger.info(f"Adding new active spread {spread.spread_guid}")
+                        self.active_spreads.append(spread)
+                        self.total_trades += 1
                             
                     elif new_state == TradeState.COMPLETED:
-                        # Trade completed - move to completed list
-                        if spread.spread_guid in self.active_spread_guids:
-                            logger.info(f"Completing spread {spread.spread_guid}")
-                            self.active_spreads = [s for s in self.active_spreads if s.spread_guid != spread.spread_guid]
-                            self.active_spread_guids.remove(spread.spread_guid)
-                            self.completed_spreads.append(spread)
-                            
-                            # Update performance metrics
-                            if spread.trade_outcome == "profit":
-                                self.winning_trades += 1
-                            self.total_pnl += spread.realized_pnl
-                            
-                            modified_spreads.append(spread)
-                            
+                        logger.info(f"Completing spread {spread.spread_guid}")
+                        self.active_spreads = [s for s in self.active_spreads if s.spread_guid != spread.spread_guid]
+                        self.completed_spreads.append(spread)                        
+                    else:
+                        logger.error(f"Error processing spread {spread.spread_guid}: Invalid state transition")  
+                # Update performance metrics
+                if spread.trade_outcome == "profit":
+                    self.winning_trades += 1
+                self.total_pnl += spread.realized_pnl                          
         except Exception as e:
             logger.error(f"Error in trading loop: {e}", exc_info=True)
         
@@ -139,43 +133,39 @@ class TradingAgent(BaseModel):
         """Process trade state transitions and returns new state"""
         try:
             if not spread.stock:
-                return TradeState.NONE
+                raise ValueError("Stock data not available for spread")
+            if spread.agent_status == TradeState.COMPLETED:
+                raise ValueError("Spread already completed")
+            # Simplified price handling
+            prices = [
+                price for price in [
+                    spread.stock.open,
+                    spread.stock.high, 
+                    spread.stock.low,
+                    spread.stock.close
+                ] if price is not None
+            ]
+            if not prices:
+                raise ValueError("No valid prices available for spread")
+
+            spread.realized_pnl = VerticalSpread.get_current_profit(spread)
 
             # Check if spread has reached exit date
-            if spread.exit_date and spread.exit_date <= date.today():
-                logger.info(f"Spread {spread.spread_guid} reached exit date {spread.exit_date}")
-                if spread.agent_status == TradeState.ACTIVE:
+            if spread.exit_date <= date.today() and spread.agent_status == TradeState.ACTIVE:
                     # Force exit at current price
                     spread.agent_status = TradeState.COMPLETED
                     spread.exit_timestamp = datetime.now()
                     spread.actual_exit_price = spread.stock.close
-                    spread.realized_pnl = (spread.actual_exit_price - spread.actual_entry_price) * 100
-                    if spread.strategy == StrategyType.CREDIT:
-                        spread.realized_pnl = -spread.realized_pnl
-                    spread.trade_outcome = "profit" if spread.realized_pnl > 0 else "loss"
                     spread.is_processed = True
-                    return TradeState.COMPLETED
-
-            prices = [
-                (spread.stock.open, 'open'),
-                (spread.stock.high, 'high'),
-                (spread.stock.low, 'low'),
-                (spread.stock.close, 'close')
-            ]
-            prices = [(Decimal(str(p)), t) for p, t in prices if p is not None]
-            
-            if not prices:
-                return TradeState.NONE
-
-            # Check state transitions
-            if spread.agent_status == TradeState.NONE:
+            elif spread.agent_status == TradeState.NONE:
                 valid_prices = []
+                entry_price = spread.entry_price
                 if spread.direction == DirectionType.BULLISH:
-                    valid_prices = [p for p, _ in prices if p >= spread.entry_price]
+                    valid_prices = [p for p in prices if p >= spread.entry_price]
                     if valid_prices:
                         entry_price = min(valid_prices)
                 else:
-                    valid_prices = [p for p, _ in prices if p <= spread.entry_price]
+                    valid_prices = [p for p in prices if p <= spread.entry_price]
                     if valid_prices:
                         entry_price = max(valid_prices)
 
@@ -184,40 +174,29 @@ class TradingAgent(BaseModel):
                     spread.entry_timestamp = datetime.now()
                     spread.actual_entry_price = entry_price
                     logger.debug(f"Spread {spread.spread_guid} entered at {spread.actual_entry_price}")
-                    return TradeState.ACTIVE
 
-            elif spread.agent_status == TradeState.ACTIVE:
-                # Check exit conditions
-                stop_hit = target_hit = False
-
-                # Calculate actual profit/loss percentage relative to max potential
-                current_pnl = (spread.stock.close - spread.actual_entry_price) * 100
-                if spread.strategy == StrategyType.CREDIT:
-                    current_pnl = -current_pnl
-                    
-                # Default target reward is 80% of max profit if not set
-                target_reward = spread.target_reward or Decimal('0.8')
-                # Default stop loss is 120% of credit received if not set
-                target_stop = spread.target_stop or Decimal('1.2')
-
+            elif spread.agent_status == TradeState.ACTIVE:   
+                valid_prices = []
+                exit_price = spread.stop_price
                 if spread.direction == DirectionType.BULLISH:
-                    stop_hit = current_pnl <= -spread.max_risk * target_stop
-                    target_hit = current_pnl >= spread.max_reward * target_reward
+                    valid_prices = [p for p in prices if p >= spread.target_price or p <= spread.stop_price]
+                    if valid_prices:
+                        exit_price = max(valid_prices)
                 else:
-                    stop_hit = current_pnl <= -spread.max_risk * target_stop
-                    target_hit = current_pnl >= spread.max_reward * target_reward
+                    valid_prices = [p for p in prices if p <= spread.target_price or p >= spread.stop_price]
+                    if valid_prices:
+                        exit_price = min(valid_prices)        
+                target_reward = spread.target_reward if spread.target_reward else spread.max_reward *Decimal('0.8')
+                target_stop = spread.target_stop if spread.target_stop else spread.max_risk * Decimal('0.5')
 
-                if stop_hit or target_hit:
-                    is_profit = target_hit
+                if spread.realized_pnl >= target_reward or spread.realized_pnl <= -target_stop:
                     spread.agent_status = TradeState.COMPLETED
                     spread.exit_timestamp = datetime.now()
-                    spread.actual_exit_price = spread.stock.close
-                    spread.realized_pnl = current_pnl
-                    spread.trade_outcome = "profit" if is_profit else "loss"
+                    spread.actual_exit_price = exit_price
                     spread.is_processed = True
-                    return TradeState.COMPLETED
-
-            return self.spread_states.get(spread.spread_guid, TradeState.NONE)
+            
+            spread.trade_outcome = "profit" if spread.realized_pnl > 0 else "loss"
+            return spread.agent_status
                 
         except Exception as e:
             logger.error(f"Error processing trade: {e}")
