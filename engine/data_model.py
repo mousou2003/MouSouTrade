@@ -59,6 +59,12 @@ class StrikePriceType(Enum):
     OTM = 'OTM'
     EXCLUDED = 'EXCLUDED'  # Added for strikes too far from current price
 
+class TradeState(str, Enum):
+    """Enum for trade states"""
+    NONE = "none"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+
 class DataModelBase(BaseModel):
     EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client','contract_selector']
     DATE_FORMAT: ClassVar[str] = '%Y-%m-%d'
@@ -360,7 +366,7 @@ class SpreadDataModel(DataModelBase):
     score_liquidity_oi: Optional[Decimal] = None
 
     # Agent trading data
-    agent_status: Optional[str] = None  # 'pending', 'active', 'completed'
+    agent_status: Optional[str] = TradeState.NONE
     entry_timestamp: Optional[datetime] = None
     exit_timestamp: Optional[datetime] = None
     trade_outcome: Optional[str] = None  # 'profit', 'loss'

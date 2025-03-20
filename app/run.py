@@ -98,13 +98,15 @@ def build_options_snapshots(market_data_client: IMarketDataClient, contracts: li
 def process_stock(market_data_client: IMarketDataClient, stock: Stock,
                  stock_number: int, number_of_stocks: int,
                  target_expiration_date: date, agent: TradingAgent, 
-                 dynamodb: DynamoDB) -> List[VerticalSpread]:
-    """Process stock and return list of spreads"""
+                 dynamodb: DynamoDB) -> Tuple[List[VerticalSpread], int, int]:
+    """Process stock and return (spreads, generated_count, updated_count)"""
+    generated_count = 0
+    updated_count = 0
+    spreads = []
     logger.info(f"Starting to process stock {stock.ticker} ({stock_number}/{number_of_stocks})")
     if not stock.ticker:
         raise KeyError('Ticker')
 
-    spreads = []
     today = datetime.today().date()
     
     logger.info(f"Querying existing spreads for {stock.ticker} expiring on {target_expiration_date}")
@@ -159,11 +161,12 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
                     if success:
                         logger.info(f"Successfully saved spread {guid} to database")
                         spreads.append(spread_result)
+                        generated_count += 1
     else:
         logger.info(f"Updating {len(existing_spreads)} existing spreads for {stock.ticker}")
         # Use existing spreads but update their snapshots
         for spread in existing_spreads:
-            spread.stock_data = stock
+            spread.stock = stock
             # Update snapshots for both legs if contracts exist
             if spread.first_leg_contract:
                 first_leg_snapshot = all_snapshots.get(spread.first_leg_contract.ticker)
@@ -174,15 +177,17 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
                 if second_leg_snapshot:
                     spread.second_leg_snapshot = second_leg_snapshot
             spreads.append(spread)
+        updated_count = len(existing_spreads)
 
-    # Process spreads through trading agent
+    # Process all spreads at once through trading agent
     if spreads:
-        agent.run(spreads)
-        # Update spreads in DynamoDB after agent processing
-        for spread in spreads:
+        modified_spreads = agent.run(spreads)
+        # Only update spreads that were modified by the agent
+        for spread in modified_spreads:
             dynamodb.set_spreads(spread=spread)
+            logger.debug(f"Updated spread {spread.spread_guid} status: {spread.agent_status}")
 
-    return spreads
+    return spreads, generated_count, updated_count
 
 def wait_for_debugger(host, port, timeout=60):
     start_time = time.time()
@@ -235,7 +240,13 @@ def main():
         logger.info("Initializing trading agent and DynamoDB")
         # Initialize trading agent without DynamoDB dependency
         agent = TradingAgent()
+        
+        # Initialize counters
+        generated_spreads = 0
+        updated_spreads = 0
         all_spreads = []
+        total_generated = 0
+        total_updated = 0
 
         # Create DynamoDB instance for persistence
         dynamodb = DynamoDB(stage)
@@ -251,16 +262,19 @@ def main():
                     stocks = marketdata_stocks.get_daily_bars(ticker)
                     if stocks:  # Check if we got any data back
                         current_stock = stocks[0]  # Get most recent data
-                        stock_spreads = process_stock(
+                        stock_spreads, generated, updated = process_stock(
                             market_data_client=market_data_client, 
-                            stock=current_stock,  # Renamed parameter
+                            stock=current_stock,
                             stock_number=stock_number, 
                             number_of_stocks=number_of_stocks,
                             target_expiration_date=target_expiration_date,
                             agent=agent,
                             dynamodb=dynamodb
                         )
-                        all_spreads.extend(stock_spreads)
+                        if stock_spreads:
+                            all_spreads.extend(stock_spreads)
+                            total_generated += generated
+                            total_updated += updated
                 except Exception as e:
                     logger.error(f"Error processing {ticker}: {e}")
                     logger.debug(f"Stack trace for {ticker}:", exc_info=True)
@@ -268,19 +282,20 @@ def main():
         final_count = dynamodb.count_items()
         logger.info(f"Database items change: {final_count - initial_count} new items")
         
-        # Save final performance metrics with date as string
-        daily_performance = {
-            "date": date.today().strftime('%Y-%m-%d'),  # Convert date to string
+        # Get daily performance from trading agent
+        daily_performance = agent.get_daily_performance()
+        # Add generated/updated counts
+        daily_performance.update({
             "total_spreads": len(all_spreads),
-            "active_trades": len(agent.active_spreads),
-            "completed_trades": len(agent.completed_spreads)
-        }
+            "generated_spreads": total_generated,
+            "updated_spreads": total_updated,
+        })
         dynamodb.update_daily_performance(daily_performance)
 
-        # Print summary
-        logger.info(f"Total spreads generated: {len(all_spreads)}")
-        logger.info(f"Active trades: {len(agent.active_spreads)}")
-        logger.info(f"Completed trades: {len(agent.completed_spreads)}")
+        # Print updated summary using agent metrics
+        logger.info("Daily Performance Summary:")
+        for key, value in daily_performance.items():
+            logger.info(f"{key}: {value}")
         
         return 0
     except FileNotFoundError:

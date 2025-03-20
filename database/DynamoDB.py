@@ -7,6 +7,7 @@ import os
 import uuid
 from datetime import datetime
 from engine.data_model import DirectionType, SpreadDataModel, StrategyType
+from typing import Dict, List, Optional, Any, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ class DynamoDB:
                     err.response['Error']['Code'], err.response['Error']['Message'])
                 raise err
 
-    def get_item(self, key):
+    def get_item(self, key) -> Optional[Dict[str, Any]]:
         try:
             return self.table.get_item(Key=key)
         except botocore.exceptions.EndpointConnectionError as err:
@@ -128,7 +129,7 @@ class DynamoDB:
                 err)
             raise
 
-    def put_item(self, item):
+    def put_item(self, item) -> Dict[str, Any]:
         try:
             return self.table.put_item(Item=item)
         except botocore.exceptions.EndpointConnectionError as err:
@@ -143,7 +144,7 @@ class DynamoDB:
     RECORD_TYPE_PERFORMANCE = "PERFORMANCE"
     RECORD_TYPE_PORTFOLIO = "PORTFOLIO"
 
-    def update_portfolio(self, portfolio: dict, spread_guid: str):
+    def update_portfolio(self, portfolio: dict, spread_guid: str) -> None:
         """Update portfolio positions in database with spread reference"""
         try:
             date = datetime.now().date().isoformat()
@@ -160,7 +161,7 @@ class DynamoDB:
         except Exception as e:
             logger.error(f"Failed to update portfolio: {e}")
 
-    def update_performance(self, performance: dict, spread_guid: str):
+    def update_performance(self, performance: dict, spread_guid: str) -> None:
         """Store trade performance records with spread reference"""
         try:
             date = datetime.now().date().isoformat()
@@ -177,7 +178,7 @@ class DynamoDB:
         except Exception as e:
             logger.error(f"Failed to update performance: {e}")
 
-    def update_daily_performance(self, metrics: dict):
+    def update_daily_performance(self, metrics: dict) -> None:
         """Store daily performance metrics"""
         try:
             performance_date = metrics['date']
@@ -195,7 +196,7 @@ class DynamoDB:
 
     def query_spreads(self, ticker, expiration_date=None, 
                      direction: DirectionType = None, strategy: StrategyType = None,
-                     guid: str = None):
+                     guid: str = None) -> List[SpreadDataModel]:
         """Query spread opportunities with optional filters"""
         try:
             if guid:
@@ -241,7 +242,7 @@ class DynamoDB:
                 logger.debug(f"Scan returned {len(all_items)} items")
 
             # Convert to spreads
-            spreads = []
+            spreads = []  # Use list() or [] to create a list instance
             for item in all_items:
                 try:
                     spread = SpreadDataModel.from_dict(item)
@@ -259,7 +260,7 @@ class DynamoDB:
             logger.exception(e)
             return []
 
-    def set_spreads(self, spread: SpreadDataModel) -> tuple[bool, str]:
+    def set_spreads(self, spread: SpreadDataModel) -> Tuple[bool, str]:
         """Store spread results in database
         Returns:
             tuple: (success: bool, guid: str) - Returns success status and GUID if successful
@@ -284,7 +285,6 @@ class DynamoDB:
             # Store critical fields as top-level attributes for querying
             merged_json = {
                 **key,
-                "description": spread.get_description(),
                 **spread.to_dict()
             }
             
@@ -310,7 +310,7 @@ class DynamoDB:
             logger.error(f"Failed to verify spread: {e}")
             return False
 
-    def flush_table(self):
+    def flush_table(self) -> bool:
         """Delete all items from the table"""
         try:
             scan = self.table.scan()
@@ -337,7 +337,7 @@ class DynamoDB:
             logger.error(f"Failed to count items: {e}")
             return -1
 
-    def scan_spreads(self)-> list[SpreadDataModel]:
+    def scan_spreads(self) -> List[SpreadDataModel]:
         """Scan all spread records from the table"""
         logger.info("Scanning all spread records")
         try:
@@ -359,7 +359,7 @@ class DynamoDB:
             logger.error(f"Error scanning table: {e}")
             raise
 
-    def query_by_spread_guid(self, spread_guid: str) -> dict:
+    def query_by_spread_guid(self, spread_guid: str) -> Dict[str, Any]:
         """Query all records related to a specific spread by its GUID"""
         try:
             # First get the spread using GUID index
