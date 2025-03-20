@@ -193,14 +193,12 @@ class DynamoDB:
         except Exception as e:
             logger.error(f"Failed to update daily performance: {e}")
 
-    def query_spreads(self, ticker, expiration_date, 
+    def query_spreads(self, ticker, expiration_date=None, 
                      direction: DirectionType = None, strategy: StrategyType = None,
                      guid: str = None):
         """Query spread opportunities with optional filters"""
         try:
-            all_items = []
-            if guid:  # Remove unnecessary parentheses
-                # If GUID is provided, use it for direct lookup
+            if guid:
                 response = self.table.query(
                     IndexName='guid-index',
                     KeyConditionExpression='guid = :g',
@@ -209,32 +207,38 @@ class DynamoDB:
                 all_items = response.get('Items', [])
                 logger.debug(f"GUID query returned {len(all_items)} items")
             else:
-                if ticker is None or expiration_date is None:
-                    logger.warning("Required parameters missing for querying spreads")
+                if ticker is None:
+                    logger.warning("Ticker parameter is required for querying spreads")
                     return []
 
-                # Use ticker directly instead of composite key
-                query_kwargs = {
-                    'KeyConditionExpression': 'ticker = :t',
+                # Use scan with filter expressions since we need prefix and contains
+                scan_kwargs = {
+                    'FilterExpression': 'begins_with(ticker, :prefix) and contains(ticker, :t)',
                     'ExpressionAttributeValues': {
-                        ':t': ticker  # Use ticker directly
+                        ':prefix': self.RECORD_TYPE_SPREAD,
+                        ':t': ticker
                     }
                 }
 
-                # If direction or strategy is specified, add to option pattern
-                if direction or strategy:
-                    option_pattern = json.dumps({
-                        "direction": direction.value if direction else None,
-                        "strategy": strategy.value if strategy else None
-                    }, default=str)
-                    
-                    query_kwargs['KeyConditionExpression'] += ' AND begins_with(#opt, :opt_pattern)'
-                    query_kwargs['ExpressionAttributeNames'] = {'#opt': 'option'}
-                    query_kwargs['ExpressionAttributeValues'][':opt_pattern'] = option_pattern[:10]
+                # Add additional filters if provided
+                filter_conditions = []
+                if expiration_date:
+                    filter_conditions.append('expiration_date = :exp_date')
+                    scan_kwargs['ExpressionAttributeValues'][':exp_date'] = expiration_date.isoformat()
+                if direction:
+                    filter_conditions.append('direction = :dir')
+                    scan_kwargs['ExpressionAttributeValues'][':dir'] = direction.value
+                if strategy:
+                    filter_conditions.append('strategy = :strat')
+                    scan_kwargs['ExpressionAttributeValues'][':strat'] = strategy.value
 
-                response = self.table.query(**query_kwargs)
+                if filter_conditions:
+                    scan_kwargs['FilterExpression'] += ' and ' + ' and '.join(filter_conditions)
+
+                logger.debug(f"Scanning with params: {scan_kwargs}")
+                response = self.table.scan(**scan_kwargs)
                 all_items = response.get('Items', [])
-                logger.debug(f"Query returned {len(all_items)} items")
+                logger.debug(f"Scan returned {len(all_items)} items")
 
             # Convert to spreads
             spreads = []
@@ -270,14 +274,19 @@ class DynamoDB:
             
             key = {
                 "ticker": f"{self.RECORD_TYPE_SPREAD};{spread.first_leg_contract.ticker}",
-                "option": json.dumps({
-                    "direction": spread.direction.value, 
-                    "strategy": spread.strategy.value
-                }, default=str),
-                "guid": spread_guid
+                "option": spread.first_leg_contract.ticker,  # Use option ticker directly for range key
+                "guid": spread_guid,
+                "direction": spread.direction.value,
+                "strategy": spread.strategy.value,
+                "expiration_date": spread.first_leg_contract.expiration_date.isoformat() if spread.first_leg_contract else None
             }
 
-            merged_json = {**key, **{"description": spread.get_description()}, **spread.to_dict()}
+            # Store critical fields as top-level attributes for querying
+            merged_json = {
+                **key,
+                "description": spread.get_description(),
+                **spread.to_dict()
+            }
             
             response = self.put_item(item=merged_json)
             success = response.get('ResponseMetadata')['HTTPStatusCode'] == 200

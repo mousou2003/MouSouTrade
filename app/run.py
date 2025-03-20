@@ -26,7 +26,7 @@ debug_mode = os.getenv("DEBUG_MODE")
 if (debug_mode and debug_mode.lower() == "true"):
     loglevel = logging.DEBUG
 else:
-    loglevel = logging.WARNING
+    loglevel = logging.INFO
 logging.basicConfig(level=loglevel)
 class ColorFormatter(logging.Formatter):
     def format(self, record):
@@ -100,19 +100,20 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
                  target_expiration_date: date, agent: TradingAgent, 
                  dynamodb: DynamoDB) -> List[VerticalSpread]:
     """Process stock and return list of spreads"""
+    logger.info(f"Starting to process stock {stock.ticker} ({stock_number}/{number_of_stocks})")
     if not stock.ticker:
         raise KeyError('Ticker')
 
     spreads = []
     today = datetime.today().date()
     
-    # First get existing spreads for this ticker and expiration
+    logger.info(f"Querying existing spreads for {stock.ticker} expiring on {target_expiration_date}")
     existing_spreads = dynamodb.query_spreads(
-        ticker=stock.ticker, 
-        expiration_date=target_expiration_date
+        ticker=stock.ticker
     )
+    logger.info(f"Found {len(existing_spreads) if existing_spreads else 0} existing spreads")
 
-    # Get option snapshots first as they're needed for both new spreads and trading
+    logger.info(f"Fetching option snapshots for {stock.ticker}")
     all_snapshots = {}
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
@@ -127,6 +128,7 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
             all_snapshots.update(snapshots)
 
     if not existing_spreads:
+        logger.info(f"No existing spreads found for {stock.ticker}, generating new ones")
         # Generate new spreads for this stock
         for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
             for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
@@ -152,10 +154,13 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
                 
                 if spread_result and spread_result.matched:
                     spread_result.stock = stock  # Set stock data after creation
+                    logger.info(f"Found matching {strategy.value} {direction.value} spread for {stock.ticker}")
                     success, guid = dynamodb.set_spreads(spread=spread_result)
                     if success:
+                        logger.info(f"Successfully saved spread {guid} to database")
                         spreads.append(spread_result)
     else:
+        logger.info(f"Updating {len(existing_spreads)} existing spreads for {stock.ticker}")
         # Use existing spreads but update their snapshots
         for spread in existing_spreads:
             spread.stock_data = stock
@@ -194,8 +199,11 @@ def wait_for_debugger(host, port, timeout=60):
 
 def main():
     if os.getenv("DEBUG_MODE") == "true":
+        logger.info("Debug mode enabled, waiting for debugger...")
         wait_for_debugger("localhost", 5678)
+
     try:
+        logger.info("Starting MouSouTrade application")
         required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 
                              'MOUSOUTRADE_CONFIG_FILE', 'MOUSOUTRADE_STAGE',
                              'MOUSOUTRADE_CLIENTS']
@@ -210,16 +218,21 @@ def main():
         
         stage = env_vars['MOUSOUTRADE_STAGE']
         
+        logger.info(f"Loading configuration from {config_file}")
         stocks = load_configuration_file(config_file)
         number_of_stocks = len(stocks)
+        logger.info(f"Found {number_of_stocks} stocks to process")
         
         clients = env_vars['MOUSOUTRADE_CLIENTS']
+        logger.info(f"Initializing market data client with {clients}")
         market_data_client = MarketDataClient(config_file='./config/SecurityKeys.json', stage=stage, client_name=clients)
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 
         # Set target date once
         target_expiration_date = date(2025, 4, 11)
+        logger.info(f"Target expiration date set to {target_expiration_date}")
 
+        logger.info("Initializing trading agent and DynamoDB")
         # Initialize trading agent without DynamoDB dependency
         agent = TradingAgent()
         all_spreads = []
@@ -227,11 +240,13 @@ def main():
         # Create DynamoDB instance for persistence
         dynamodb = DynamoDB(stage)
         initial_count = dynamodb.count_items()
+        logger.info(f"Initial database count: {initial_count} items")
 
         # Process stocks and collect spreads
         for stock_number, stock_config in enumerate(stocks, start=1):
             ticker = stock_config.get('Ticker')
             if ticker:
+                logger.info(f"\n{'='*50}\nProcessing stock {ticker} ({stock_number}/{number_of_stocks})\n{'='*50}")
                 try:
                     stocks = marketdata_stocks.get_daily_bars(ticker)
                     if stocks:  # Check if we got any data back
@@ -248,7 +263,11 @@ def main():
                         all_spreads.extend(stock_spreads)
                 except Exception as e:
                     logger.error(f"Error processing {ticker}: {e}")
+                    logger.debug(f"Stack trace for {ticker}:", exc_info=True)
 
+        final_count = dynamodb.count_items()
+        logger.info(f"Database items change: {final_count - initial_count} new items")
+        
         # Save final performance metrics with date as string
         daily_performance = {
             "date": date.today().strftime('%Y-%m-%d'),  # Convert date to string
