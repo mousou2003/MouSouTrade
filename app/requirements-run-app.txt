@@ -1,10 +1,11 @@
 # filepath: /c:/Users/mouso/Documents/GitHub/MouSouTrade/requirements.txt
-requests
+requests==2.31.0
 colorama
-boto3
+boto3==1.34.11
 botocore
 polygon
 pydantic
 scipy
 numpy
 rauth
+python-dotenv==1.0.0

@@ -1,2 +1,2 @@
-# Run the script every 15 minutes
-*/15 * * * * python /app/run.py $MOUSOUTRADE_CONFIG_FILE >> /var/log/cron.log 2>&1
+# Run the script at 2 AM PST on business days (Monday-Friday)
+0 2 * * 1-5 python /app/run.py $MOUSOUTRADE_CONFIG_FILE >> /var/log/cron.log 2>&1

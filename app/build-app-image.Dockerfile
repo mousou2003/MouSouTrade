@@ -2,14 +2,13 @@ FROM python:3.12.9-slim
 
 WORKDIR /app
 
-COPY ./app . 
-COPY ./engine engine 
-COPY ./marketdata_clients marketdata_clients 
-COPY ./database database 
-COPY ./agents agents
-COPY ./config config 
+# Copy requirements first for better caching
+COPY ./app/requirements-run-app.txt .
+
+# Infrequently changed files
 COPY ./app/crontab /etc/cron.d/app-cron 
 COPY ./.aws /root/.aws/
+COPY ./config config 
 
 # Define build arguments
 ARG AWS_PROFILE
@@ -42,28 +41,49 @@ ENV PROJECT_NAME=$PROJECT_NAME
 ENV TZ="America/Los_Angeles"
 ENV MOUSOUTRADE_CLIENTS=$MOUSOUTRADE_CLIENTS
 
-# Update the package lists for APT
-RUN apt-get update
+# System setup and create non-root user
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    python3-pip \
+    cron \
+    iputils-ping \
+    vim \
+    net-tools && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -s /usr/bin/python3 /usr/bin/python && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone && \
+    useradd -m -r appuser && \
+    chown -R appuser:appuser /app
 
-RUN pip install --upgrade pip
+# Switch to non-root user for pip
+USER appuser
 
-# Install required packages
-RUN apt-get install -y cron iputils-ping vim net-tools
+# Application setup with pip
+RUN python -m venv /app/venv && \
+    . /app/venv/bin/activate && \
+    pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-run-app.txt
 
-# Install the required Python packages
-RUN pip install -r requirements-run-app.txt
+# Switch back to root for cron operations
+USER root
 
-# Set the timezone
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+# Cron setup
+RUN chmod 0644 /etc/cron.d/app-cron && \
+    crontab /etc/cron.d/app-cron && \
+    touch /var/log/cron.log
 
-# Give execution rights on the cron job
-RUN chmod 0644 /etc/cron.d/app-cron
+# Frequently changed application code
+COPY ./app . 
+COPY ./engine engine 
+COPY ./marketdata_clients marketdata_clients 
+COPY ./database database 
+COPY ./agents agents
 
-# Apply the cron job
-RUN crontab /etc/cron.d/app-cron
-
-# Create the log file to be able to run tail
-RUN touch /var/log/cron.log
+# Set PATH to include venv
+ENV PATH="/app/venv/bin:$PATH"
 
 # Run the script immediately and then start cron
 CMD python /app/run.py && cron && tail -f /var/log/cron.log
