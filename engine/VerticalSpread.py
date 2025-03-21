@@ -772,9 +772,12 @@ class VerticalSpreadMatcher:
             # Reject trades exceeding max risk threshold
             risk_score = MIN_SCORE
         else:
-            # Linear scaling based on risk utilization
-            risk_score = (Decimal('1') - (max_loss_percent / 
-                       spread.MAX_ACCEPTABLE_LOSS_PERCENT)) * RISK_PENALTY_FACTOR
+            # Linear scaling based on risk utilization (higher score for lower risk)
+            risk_utilization = max_loss_percent / spread.MAX_ACCEPTABLE_LOSS_PERCENT
+            risk_score = MAX_SCORE * (Decimal('1') - risk_utilization)
+
+        # Score can't be negative
+        risk_score = max(MIN_SCORE, risk_score)
 
         # Calculate average liquidity score across both legs
         liquidity_score = MIN_SCORE
