@@ -1,14 +1,16 @@
-FROM python:3.12.9-slim
+FROM python:3.12.9-slim AS builder
 
 WORKDIR /app
 
+# Copy only requirements first to leverage Docker cache
 COPY ./website/requirements-website.txt requirements.txt
-COPY ./website/website.py . 
-COPY ./website/templates ./templates
-COPY ./.aws /root/.aws/
-COPY ./engine ./engine
-COPY ./marketdata_clients ./marketdata_clients
-COPY ./database ./database
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir --upgrade boto3
+
+FROM python:3.12.9-slim
+
+WORKDIR /app
 
 # Define build arguments
 ARG AWS_PROFILE
@@ -39,10 +41,23 @@ ENV DYNAMODB_PORT=$DYNAMODB_PORT
 ENV PROJECT_NAME=$PROJECT_NAME
 ENV TZ="America/Los_Angeles"
 
-RUN apt-get update && apt-get install -y cron iputils-ping && \
-    pip install --upgrade pip && \
-    pip install -r requirements.txt && \
-    pip install --upgrade boto3 && \
+# Install only necessary packages and clean up in one layer
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends cron iputils-ping && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
+
+# Copy application files
+COPY ./website/website.py .
+COPY ./website/templates ./templates
+COPY ./.aws /root/.aws/
+COPY ./engine ./engine
+COPY ./marketdata_clients ./marketdata_clients
+COPY ./database ./database
+
+# Use exec form of CMD for better signal handling
 CMD ["sh", "-c", "while true; do python website.py; sleep 10; done"]
