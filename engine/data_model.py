@@ -65,6 +65,12 @@ class TradeState(str, Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
 
+class TradeOutcome(str, Enum):
+    """Enum for trade outcomes"""
+    NONE = "none"
+    PROFIT = "profit"
+    LOSS = "loss"
+
 class DataModelBase(BaseModel):
     EXCLUDE_FIELDS: ClassVar[List[str]] = ['market_data_client','contract_selector']
     DATE_FORMAT: ClassVar[str] = '%Y-%m-%d'
