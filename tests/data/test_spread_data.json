@@ -1,0 +1,216 @@
+{
+    "credit_spread": {
+        "spread_guid": "test-credit-001",
+        "underlying_ticker": "SPY",
+        "direction": "bullish",
+        "strategy": "credit",
+        "contract_type": "put",
+        "entry_price": 430.00,
+        "target_price": 435.00,
+        "stop_price": 425.00,
+        "target_reward": 0.75,
+        "target_stop": 0.25,
+        "max_reward": 1.50,
+        "max_risk": 3.50,
+        "agent_status": "none",
+        "is_processed": false,
+        "realized_pnl": 0.00,
+        "expiration_date": "2024-04-19",
+        "short_contract": {
+            "ticker": "SPY240419P425",
+            "strike_price": 425.00,
+            "contract_type": "put",
+            "expiration_date": "2024-04-19",
+            "actual_entry_price": null,
+            "actual_exit_price": null
+        },
+        "long_contract": {
+            "ticker": "SPY240419P420",
+            "strike_price": 420.00,
+            "contract_type": "put",
+            "expiration_date": "2024-04-19",
+            "actual_entry_price": null,
+            "actual_exit_price": null
+        },
+        "snapshots": {
+            "entry": {
+                "short": { 
+                    "bid": 1.50, 
+                    "ask": 1.55,
+                    "implied_volatility": 0.20,
+                    "volume": 500,
+                    "open_interest": 1000
+                },
+                "long": { 
+                    "bid": 0.75, 
+                    "ask": 0.80,
+                    "implied_volatility": 0.22,
+                    "volume": 300,
+                    "open_interest": 800
+                }
+            },
+            "exit_profit": {
+                "short": { 
+                    "bid": 0.25, 
+                    "ask": 0.30,
+                    "implied_volatility": 0.18,
+                    "volume": 450,
+                    "open_interest": 950
+                },
+                "long": { 
+                    "bid": 0.10, 
+                    "ask": 0.15,
+                    "implied_volatility": 0.19,
+                    "volume": 250,
+                    "open_interest": 750
+                }
+            },
+            "exit_loss": {
+                "short": { 
+                    "bid": 3.50, 
+                    "ask": 3.55,
+                    "implied_volatility": 0.35,
+                    "volume": 800,
+                    "open_interest": 1200
+                },
+                "long": { 
+                    "bid": 2.00, 
+                    "ask": 2.05,
+                    "implied_volatility": 0.38,
+                    "volume": 600,
+                    "open_interest": 1000
+                }
+            }
+        },
+        "test_scenarios": {
+            "entry": {
+                "expected_entry_price": 430.00,
+                "expected_short_price": 1.50,
+                "expected_long_price": 0.80
+            },
+            "exit_profit": {
+                "expected_pnl": 50.00,
+                "expected_exit_price": 435.50,
+                "expected_short_exit": 0.30,
+                "expected_long_exit": 0.10
+            }
+        }
+    },
+    "debit_spread": {
+        "spread_guid": "test-debit-001",
+        "underlying_ticker": "SPY",
+        "direction": "bullish",
+        "strategy": "debit",
+        "contract_type": "call",
+        "entry_price": 430.00,
+        "target_price": 440.00,
+        "stop_price": 425.00,
+        "target_reward": 4.00,
+        "target_stop": 1.50,
+        "max_reward": 5.00,
+        "max_risk": 2.50,
+        "agent_status": "none",
+        "is_processed": false,
+        "realized_pnl": 0.00,
+        "expiration_date": "2024-04-19",
+        "long_contract": {
+            "ticker": "SPY240419C430",
+            "strike_price": 430.00,
+            "contract_type": "call",
+            "expiration_date": "2024-04-19",
+            "actual_entry_price": null,
+            "actual_exit_price": null
+        },
+        "short_contract": {
+            "ticker": "SPY240419C435",
+            "strike_price": 435.00,
+            "contract_type": "call",
+            "expiration_date": "2024-04-19",
+            "actual_entry_price": null,
+            "actual_exit_price": null
+        },
+        "snapshots": {
+            "entry": {
+                "long": { 
+                    "bid": 4.90, 
+                    "ask": 5.00,
+                    "implied_volatility": 0.21,
+                    "volume": 600,
+                    "open_interest": 1200
+                },
+                "short": { 
+                    "bid": 2.40, 
+                    "ask": 2.50,
+                    "implied_volatility": 0.20,
+                    "volume": 400,
+                    "open_interest": 900
+                }
+            },
+            "exit_profit": {
+                "long": { 
+                    "bid": 8.90, 
+                    "ask": 9.00,
+                    "implied_volatility": 0.25,
+                    "volume": 800,
+                    "open_interest": 1500
+                },
+                "short": { 
+                    "bid": 5.90, 
+                    "ask": 6.00,
+                    "implied_volatility": 0.24,
+                    "volume": 650,
+                    "open_interest": 1100
+                }
+            },
+            "exit_loss": {
+                "long": { 
+                    "bid": 1.90,
+                    "ask": 2.00,
+                    "implied_volatility": 0.18,
+                    "volume": 400,
+                    "open_interest": 1000
+                },
+                "short": { 
+                    "bid": 0.90,
+                    "ask": 1.00,
+                    "implied_volatility": 0.17,
+                    "volume": 300,
+                    "open_interest": 800
+                }
+            }
+        },
+        "test_scenarios": {
+            "entry": {
+                "expected_entry_price": 430.00,
+                "expected_long_price": 5.00,
+                "expected_short_price": 2.40
+            },
+            "exit_loss": {
+                "expected_pnl": -170.00,
+                "expected_exit_price": 424.50,
+                "expected_long_exit": 1.90,
+                "expected_short_exit": 1.00
+            }
+        }
+    },
+    "stock_data": {
+        "entry": {
+            "open": 429.50,
+            "high": 431.00,
+            "low": 429.00,
+            "close": 430.50
+        },
+        "profit_target": {
+            "open": 434.50,
+            "high": 436.00,
+            "low": 434.00,
+            "close": 435.50
+        },
+        "stop_loss": {
+            "open": 425.50,
+            "high": 426.00,
+            "low": 424.00,
+            "close": 424.50
+        }
+    }
+}

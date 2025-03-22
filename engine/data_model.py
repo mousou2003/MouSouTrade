@@ -171,6 +171,8 @@ class Contract(DataModelBase):
         ticker (str): The ticker symbol of the contract.
         underlying_ticker (str): The ticker symbol of the underlying asset.
         strike_price_type (StrikePriceType): The strike price type of the contract.
+        actual_entry_price (Decimal): The actual entry price of the contract.
+        actual_exit_price (Decimal): The actual exit price of the contract.
     """
     cfi: Optional[str] = ''
     contract_type: Optional[ContractType] = None
@@ -182,6 +184,8 @@ class Contract(DataModelBase):
     ticker: Optional[str] = ''
     underlying_ticker: Optional[str] = ''
     strike_price_type: Optional[StrikePriceType] = None  # Added field
+    actual_entry_price: Optional[Decimal] = None
+    actual_exit_price: Optional[Decimal] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Contract':
@@ -298,6 +302,8 @@ class Stock(DataModelBase):
         return cls(**data)
 
 class SpreadDataModel(DataModelBase):
+    #todo: see if we can remove the optional from the fields
+    #todo: see if we can remove config class
     class Config:
         arbitrary_types_allowed = True
 

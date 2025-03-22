@@ -167,15 +167,7 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
         # Use existing spreads but update their snapshots
         for spread in existing_spreads:
             spread.stock = stock
-            # Update snapshots for both legs if contracts exist
-            if spread.first_leg_contract:
-                first_leg_snapshot = all_snapshots.get(spread.first_leg_contract.ticker)
-                if first_leg_snapshot:
-                    spread.first_leg_snapshot = first_leg_snapshot
-            if spread.second_leg_contract:
-                second_leg_snapshot = all_snapshots.get(spread.second_leg_contract.ticker)
-                if second_leg_snapshot:
-                    spread.second_leg_snapshot = second_leg_snapshot
+            VerticalSpread.update_snapshots(spread,all_snapshots)
             spreads.append(spread)
         updated_count = len(existing_spreads)
 

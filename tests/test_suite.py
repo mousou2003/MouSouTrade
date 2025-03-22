@@ -22,6 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import all test cases
 from tests.test_vertical_spread_selection import TestVerticalSpreadStrikeSelection
 from tests.test_strategy_validator import TestStrategyValidator
+from tests.test_trading_agent import TestTradingAgent  # Add new import
 
 def create_test_suite():
     """Create a test suite that includes all tests."""
@@ -34,6 +35,9 @@ def create_test_suite():
     
     # Add tests from TestStrategyValidator
     test_suite.addTest(loader.loadTestsFromTestCase(TestStrategyValidator))
+    
+    # Add tests from TestTradingAgent
+    test_suite.addTest(loader.loadTestsFromTestCase(TestTradingAgent))
     
     return test_suite
 

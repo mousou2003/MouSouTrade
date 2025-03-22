@@ -142,13 +142,39 @@ class VerticalSpread(SpreadDataModel):
     # Make contract_selector an instance attribute instead of ClassVar
     contract_selector: ContractSelector = StandardContractSelector()
         
-    def get_net_premium(self)-> Decimal:
-        logger.debug("Entering get_net_premium")
-        if self.short_premium is None or self.long_premium is None:
-            logger.error("Missing premium values")
-            return Decimal('0')
+    def calculate_net_premium(self) -> Decimal:
+        """Calculate net premium based on actual prices or snapshot values."""
+        logger.debug("Calculating net premium")
         
-        net = self.short_premium - self.long_premium
+        if (self.short_contract and self.short_contract.actual_entry_price and 
+            self.long_contract and self.long_contract.actual_entry_price):
+            # Use actual entry prices if available
+            short_price = self.short_contract.actual_entry_price
+            long_price = self.long_contract.actual_entry_price
+            logger.debug("Using actual contract prices")
+        elif (self.first_leg_snapshot and self.first_leg_snapshot.day and 
+              self.second_leg_snapshot and self.second_leg_snapshot.day):
+            # Use snapshot values
+            if self.strategy == StrategyType.CREDIT:
+                short_price = self.first_leg_snapshot.day.bid
+                long_price = self.second_leg_snapshot.day.ask
+            else:  # DEBIT
+                short_price = self.second_leg_snapshot.day.bid
+                long_price = self.first_leg_snapshot.day.ask
+            logger.debug("Using snapshot prices")
+        else:
+            logger.warning("No valid prices available for net premium calculation")
+            return Decimal('0')
+            
+        net = short_price - long_price
+        logger.debug(f"Calculated net premium: {net}")
+        return net
+        
+    def get_net_premium(self) -> Decimal:
+        """Get net premium with validation."""
+        logger.debug("Entering get_net_premium")
+        
+        net = self.calculate_net_premium()
         
         # Validation: Credit spreads should have positive net premium
         if self.strategy == StrategyType.CREDIT and net <= 0:
@@ -160,7 +186,7 @@ class VerticalSpread(SpreadDataModel):
             logger.warning(f"Debit spread has positive or zero net premium: {net}")
             return Decimal('0')
             
-        logger.debug(f"Net Premium: {net} (Short: {self.short_premium} - Long: {self.long_premium})")
+        logger.debug(f"Net Premium: {net}")
         logger.debug("Exiting get_net_premium")
         return net
 
@@ -218,30 +244,46 @@ class VerticalSpread(SpreadDataModel):
             logger.error(f"Error creating vertical spread copy: {str(e)}")
             raise
 
+    def update_snapshots(self, snapshots: dict) -> None:
+        """Update spread snapshots with latest market data."""
+        if self.first_leg_contract and self.first_leg_contract.ticker in snapshots:
+            self.first_leg_snapshot = snapshots[self.first_leg_contract.ticker]
+        if self.second_leg_contract and self.second_leg_contract.ticker in snapshots:
+            self.second_leg_snapshot = snapshots[self.second_leg_contract.ticker]
+
     @staticmethod
     def get_current_profit(spread: 'SpreadDataModel') -> Decimal:
         """Calculate current profit/loss for a spread."""
         if not spread.stock or not spread.actual_entry_price:
             return Decimal('0')
         
+        # For completed trades, calculate P&L from actual contract prices
+        if spread.agent_status == TradeState.COMPLETED:
+            # Use actual entry prices
+            entry_net = abs(spread.short_contract.actual_entry_price - spread.long_contract.actual_entry_price)
+            # Use snapshot prices for exit to simulate market prices
+            if spread.strategy == StrategyType.CREDIT:
+                exit_net = abs(spread.first_leg_snapshot.day.ask - spread.second_leg_snapshot.day.bid)
+                pnl = (entry_net - exit_net) * 100  # Credit spread: want to exit for less than collected
+            else:  # DEBIT
+                exit_net = abs(spread.first_leg_snapshot.day.bid - spread.second_leg_snapshot.day.ask)
+                pnl = (exit_net - entry_net) * 100  # Debit spread: want to exit for more than paid
+            return pnl
+
+        # For active trades, calculate based on current market price
         current_price = spread.stock.close
-        net_premium = spread.net_premium * 100  # Convert to points
-
-        if current_price > spread.short_contract.strike_price:
-            # Both legs are ITM
-            final_value = spread.short_contract.strike_price - spread.long_contract.strike_price
-        elif current_price > spread.long_contract.strike_price:
-            # Long leg is ITM, short leg expires worthless
-            final_value = current_price - spread.long_contract.strike_price
-        else:
-            # Both legs are OTM
-            final_value = 0
-
-        # For credit spreads, add premium received, for debit spreads subtract premium paid
-        current_pnl = final_value + (net_premium if spread.strategy == StrategyType.CREDIT else -net_premium)
+        if spread.strategy == StrategyType.CREDIT:
+            net_premium = abs(spread.first_leg_snapshot.day.bid - spread.second_leg_snapshot.day.ask) * 100
+            pnl = net_premium - abs(spread.actual_entry_price - current_price)
+        else:  # DEBIT
+            net_premium = abs(spread.first_leg_snapshot.day.bid - spread.second_leg_snapshot.day.ask) * 100
+            pnl = abs(current_price - spread.actual_entry_price) - net_premium
         
         # Ensure we don't exceed max profit/loss bounds
-        return max(-spread.target_stop, min(spread.target_reward, current_pnl))
+        target_stop = spread.target_stop if spread.target_stop is not None else (spread.max_risk * Decimal('0.5'))
+        target_reward = spread.target_reward if spread.target_reward is not None else (spread.max_reward * Decimal('0.8'))
+        
+        return max(-target_stop, min(target_reward, pnl))
 
 class CreditSpread(VerticalSpread):
 
@@ -834,7 +876,7 @@ class VerticalSpreadMatcher:
         )
 
         # Log detailed scoring breakdown for analysis
-        logger.info(f"Score components: POP={pop_score:.2f}({pop_score*WEIGHT_POP:.2f}), " +
+        logger.debug(f"Score components: POP={pop_score:.2f}({pop_score*WEIGHT_POP:.2f}), " +
                    f"Width={width_score:.2f}({width_score*WEIGHT_WIDTH:.2f}), " +
                    f"R/R={rr_score:.2f}({rr_score*WEIGHT_RR:.2f}), " +
                    f"Risk={risk_score:.2f}({risk_score*WEIGHT_RISK:.2f}), " +
