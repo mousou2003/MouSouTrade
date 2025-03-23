@@ -22,102 +22,98 @@ class DynamoDB:
             raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_env_vars)}")
 
         endpoint_url = os.getenv('DYNAMODB_ENDPOINT_URL', 'http://localhost:8000')
-        dynamodb = boto3.Session().resource('dynamodb', endpoint_url=endpoint_url)
+        self.dynamodb = boto3.Session().resource('dynamodb', endpoint_url=endpoint_url)
+        self.client = self.dynamodb.meta.client
         logger.debug("Dynamo client created at endpoint %s" % endpoint_url)
 
-        try:
-            self.table = dynamodb.Table(table_name)
-            self.table.load()
+        # Check if table exists
+        existing_tables = self.client.list_tables()['TableNames']
+        if table_name in existing_tables:
+            self.table = self.dynamodb.Table(table_name)
             logger.debug("Table exists %s" % table_name)
-        except ClientError as err:
-            if (err.response['Error']['Code'] == 'ResourceNotFoundException'):
-                logger.debug("Create the DynamoDB table.")
-                self.table = dynamodb.create_table(
-                    TableName=table_name,
-                    KeySchema=[
-                        {
-                            'AttributeName': 'ticker',
-                            'KeyType': 'HASH'
-                        },
-                        {
-                            'AttributeName': 'option',
-                            'KeyType': 'RANGE'
-                        }
-                    ],
-                    AttributeDefinitions=[
-                        {
-                            'AttributeName': 'ticker',
-                            'AttributeType': 'S'
-                        },
-                        {
-                            'AttributeName': 'option',
-                            'AttributeType': 'S'
-                        },
-                        {
-                            'AttributeName': 'guid',
-                            'AttributeType': 'S'
-                        },
-                        {
-                            'AttributeName': 'type',
-                            'AttributeType': 'S'
-                        },
-                        {
-                            'AttributeName': 'date',
-                            'AttributeType': 'S'
-                        }
-                    ],
-                    GlobalSecondaryIndexes=[
-                        {
-                            'IndexName': 'guid-index',
-                            'KeySchema': [
-                                {
-                                    'AttributeName': 'guid',
-                                    'KeyType': 'HASH'
-                                }
-                            ],
-                            'Projection': {
-                                'ProjectionType': 'ALL'
-                            },
-                            'ProvisionedThroughput': {
-                                'ReadCapacityUnits': 5,
-                                'WriteCapacityUnits': 5
-                            }
-                        },
-                        {
-                            'IndexName': 'type-date-index',
-                            'KeySchema': [
-                                {
-                                    'AttributeName': 'type',
-                                    'KeyType': 'HASH'
-                                },
-                                {
-                                    'AttributeName': 'date',
-                                    'KeyType': 'RANGE'
-                                }
-                            ],
-                            'Projection': {
-                                'ProjectionType': 'ALL'
-                            },
-                            'ProvisionedThroughput': {
-                                'ReadCapacityUnits': 5,
-                                'WriteCapacityUnits': 5
-                            }
-                        }
-                    ],
-                    ProvisionedThroughput={
-                        'ReadCapacityUnits': 5,
-                        'WriteCapacityUnits': 5
+        else:
+            logger.debug("Create the DynamoDB table.")
+            self.table = self.dynamodb.create_table(
+                TableName=table_name,
+                KeySchema=[
+                    {
+                        'AttributeName': 'ticker',
+                        'KeyType': 'HASH'
+                    },
+                    {
+                        'AttributeName': 'option',
+                        'KeyType': 'RANGE'
                     }
-                )
-
-                logger.info("Wait until the table exists.")
-                self.table.wait_until_exists()
-            else:
-                logger.warning(
-                    "Couldn't check for existence of %s. Here's why: %s: %s",
-                    table_name,
-                    err.response['Error']['Code'], err.response['Error']['Message'])
-                raise err
+                ],
+                AttributeDefinitions=[
+                    {
+                        'AttributeName': 'ticker',
+                        'AttributeType': 'S'
+                    },
+                    {
+                        'AttributeName': 'option',
+                        'AttributeType': 'S'
+                    },
+                    {
+                        'AttributeName': 'guid',
+                        'AttributeType': 'S'
+                    },
+                    {
+                        'AttributeName': 'type',
+                        'AttributeType': 'S'
+                    },
+                    {
+                        'AttributeName': 'date',
+                        'AttributeType': 'S'
+                    }
+                ],
+                GlobalSecondaryIndexes=[
+                    {
+                        'IndexName': 'guid-index',
+                        'KeySchema': [
+                            {
+                                'AttributeName': 'guid',
+                                'KeyType': 'HASH'
+                            }
+                        ],
+                        'Projection': {
+                            'ProjectionType': 'ALL'
+                        },
+                        'ProvisionedThroughput': {
+                            'ReadCapacityUnits': 5,
+                            'WriteCapacityUnits': 5
+                        }
+                    },
+                    {
+                        'IndexName': 'type-date-index',
+                        'KeySchema': [
+                            {
+                                'AttributeName': 'type',
+                                'KeyType': 'HASH'
+                            },
+                            {
+                                'AttributeName': 'date',
+                                'KeyType': 'RANGE'
+                            }
+                        ],
+                        'Projection': {
+                            'ProjectionType': 'ALL'
+                        },
+                        'ProvisionedThroughput': {
+                            'ReadCapacityUnits': 5,
+                            'WriteCapacityUnits': 5
+                        }
+                    }
+                ],
+                ProvisionedThroughput={
+                    'ReadCapacityUnits': 5,
+                    'WriteCapacityUnits': 5
+                }
+            )
+            logger.info("Waiting for table creation...")
+            waiter = self.client.get_waiter('table_exists')
+            waiter.wait(TableName=table_name)
+            logger.info("Table created successfully")
 
     def get_item(self, key) -> Optional[Dict[str, Any]]:
         try:

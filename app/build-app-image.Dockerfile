@@ -86,4 +86,4 @@ COPY ./agents agents
 ENV PATH="/app/venv/bin:$PATH"
 
 # Run the script immediately and then start cron
-CMD python /app/run.py && cron && tail -f /var/log/cron.log
+CMD cron && tail -f /var/log/cron.log

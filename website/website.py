@@ -7,7 +7,7 @@ import logging
 from engine.data_model import SpreadDataModel
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 # Check for required environment variables
 required_env_vars = ['DYNAMODB_ENDPOINT_URL', 'MOUSOUTRADE_STAGE', 'WEBSITE_PORT']
