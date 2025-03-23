@@ -107,7 +107,7 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
     if not stock.ticker:
         raise KeyError('Ticker')
 
-    today = datetime.today().date()
+    today = datetime.today()  # Use datetime instead of date for agent
     
     logger.info(f"Querying existing spreads for {stock.ticker} expiring on {target_expiration_date}")
     existing_spreads = dynamodb.query_spreads(
@@ -173,7 +173,7 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
 
     # Process all spreads at once through trading agent
     if spreads:
-        modified_spreads = agent.run(spreads)
+        modified_spreads = agent.run(spreads, current_date=today)  # Pass current date to agent
         # Only update spreads that were modified by the agent
         for spread in modified_spreads:
             dynamodb.set_spreads(spread=spread)
@@ -226,12 +226,12 @@ def main():
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 
         # Set target date once
-        target_expiration_date = date(2025, 4, 11)
+        target_expiration_date = Options.get_following_third_friday()
         logger.info(f"Target expiration date set to {target_expiration_date}")
 
         logger.info("Initializing trading agent and DynamoDB")
-        # Initialize trading agent without DynamoDB dependency
-        agent = TradingAgent()
+        # Initialize trading agent with current date
+        agent = TradingAgent(current_date=datetime.today())  # Set initial current_date
         
         # Initialize counters
         generated_spreads = 0
