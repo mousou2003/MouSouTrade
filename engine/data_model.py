@@ -376,6 +376,9 @@ class SpreadDataModel(DataModelBase):
     score_risk_raw: Optional[Decimal] = None
     score_liquidity_volume: Optional[Decimal] = None
     score_liquidity_oi: Optional[Decimal] = None
+    score_confidence_raw: Optional[Decimal] = None
+    score_confidence: Optional[Decimal] = None
+    confidence_level: Optional[Decimal] = Decimal('1.0')
 
     # Agent trading data
     agent_status: Optional[str] = TradeState.NONE
