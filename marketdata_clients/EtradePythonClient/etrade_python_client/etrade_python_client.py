@@ -22,7 +22,6 @@ print(config.get('PROD', 'BASE_URL'))
 
 # logger settings
 logger = logging.getLogger('my_logger')
-logging.basicConfig(level=logging.INFO)
 
 def oauth():
     """Allows user authorization for the sample application with OAuth 1"""

@@ -10,7 +10,6 @@ import polygon.rest
 from marketdata_clients.BaseMarketDataClient import BaseMarketDataClient
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.WARNING)
 
 POLYGON_CLIENT_NAME: str = "polygon"
 
