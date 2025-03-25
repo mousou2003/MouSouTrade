@@ -714,11 +714,13 @@ class VerticalSpreadMatcher:
 
         # Define component weights based on strategy importance
         # POP and R/R get higher weights as they're primary performance indicators
-        WEIGHT_POP = Decimal('0.35')        # Highest weight - primary success predictor
-        WEIGHT_WIDTH = Decimal('0.15')      # Lower weight - auxiliary optimization factor
-        WEIGHT_RR = Decimal('0.20')         # High weight - key profitability metric
-        WEIGHT_RISK = Decimal('0.10')       # Lower weight - risk control factor
-        WEIGHT_LIQUIDITY = Decimal('0.20')  # Medium weight - execution quality factor
+        WEIGHT_CONFIDENCE = Decimal('0.15')  # New weight for confidence level
+        # Adjust other weights to maintain total of 1.0
+        WEIGHT_POP = Decimal('0.30')
+        WEIGHT_WIDTH = Decimal('0.15')
+        WEIGHT_RR = Decimal('0.15')
+        WEIGHT_RISK = Decimal('0.10')
+        WEIGHT_LIQUIDITY = Decimal('0.15')
 
         # POP thresholds optimized for each strategy type
         # Credit spreads need higher POP due to limited upside
@@ -845,6 +847,30 @@ class VerticalSpreadMatcher:
         # Average the liquidity scores of both legs
         liquidity_score /= Decimal('2')
 
+        # Calculate confidence level score with None handling
+        spread.confidence_level = Decimal('1.0')
+        # Multiply confidence from contracts
+        for contract in [spread.first_leg_contract, spread.second_leg_contract]:
+            if hasattr(contract, 'confidence_level') and contract.confidence_level is not None:
+                try:
+                    spread.confidence_level *= Decimal(str(contract.confidence_level))
+                except (TypeError, ValueError):
+                    logger.warning(f"Invalid confidence_level in contract: {contract.confidence_level}")
+                    spread.confidence_level *= Decimal('0.5')  # Default penalty for invalid confidence
+
+        # Multiply confidence from snapshots
+        for snapshot in [spread.first_leg_snapshot, spread.second_leg_snapshot]:
+            if hasattr(snapshot, 'confidence_level') and snapshot.confidence_level is not None:
+                try:
+                    spread.confidence_level *= Decimal(str(snapshot.confidence_level))
+                except (TypeError, ValueError):
+                    logger.warning(f"Invalid confidence_level in snapshot: {snapshot.confidence_level}")
+                    spread.confidence_level *= Decimal('0.5')  # Default penalty for invalid confidence
+
+        # Ensure confidence is within valid range
+        spread.confidence_level = max(Decimal('0.1'), min(Decimal('1.0'), spread.confidence_level))
+        confidence_score = spread.confidence_level * MAX_SCORE
+
         # Store raw and calculated POP scores
         spread.score_pop_raw = pop if pop else Decimal('0')
         spread.score_pop = pop_score
@@ -865,14 +891,19 @@ class VerticalSpreadMatcher:
         spread.score_liquidity = liquidity_score
         spread.score_liquidity_volume = volume_score  # From last leg iteration
         spread.score_liquidity_oi = oi_score  # From last leg iteration
-        
+
+        # Store confidence metrics
+        spread.score_confidence_raw = spread.confidence_level
+        spread.score_confidence = confidence_score
+
         # Compute final weighted score
         spread.adjusted_score = (
             (pop_score * WEIGHT_POP) +
             (width_score * WEIGHT_WIDTH) +
             (rr_score * WEIGHT_RR) +
             (risk_score * WEIGHT_RISK) +
-            (liquidity_score * WEIGHT_LIQUIDITY)
+            (liquidity_score * WEIGHT_LIQUIDITY) +
+            (confidence_score * WEIGHT_CONFIDENCE)
         )
 
         # Log detailed scoring breakdown for analysis
@@ -880,7 +911,8 @@ class VerticalSpreadMatcher:
                    f"Width={width_score:.2f}({width_score*WEIGHT_WIDTH:.2f}), " +
                    f"R/R={rr_score:.2f}({rr_score*WEIGHT_RR:.2f}), " +
                    f"Risk={risk_score:.2f}({risk_score*WEIGHT_RISK:.2f}), " +
-                   f"Liquidity={liquidity_score:.2f}({liquidity_score*WEIGHT_LIQUIDITY:.2f})")
+                   f"Liquidity={liquidity_score:.2f}({liquidity_score*WEIGHT_LIQUIDITY:.2f}), " +
+                   f"Confidence={confidence_score:.2f}({confidence_score*WEIGHT_CONFIDENCE:.2f})")
         logger.debug(f"Final adjusted score: {spread.adjusted_score:.2f}")
 
     @staticmethod

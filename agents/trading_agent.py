@@ -63,8 +63,7 @@ class TradingAgent(BaseModel):
                     self._update_agent_metrics(spread)
                 
             except Exception as e:
-                logger.error(f"Error processing spread {spread.spread_guid}: {e}")
-                continue
+                raise
         
         return modified_spreads
 
@@ -105,7 +104,7 @@ class TradingAgent(BaseModel):
                 return
 
         except Exception as e:
-            logger.error(f"Error processing trade: {e}")
+            raise
 
     def _get_current_prices(self, spread: VerticalSpread) -> List[Decimal]:
         """Get list of current valid prices"""
@@ -125,26 +124,25 @@ class TradingAgent(BaseModel):
         return bool(valid_prices)
 
     def _should_exit_trade(self, spread: VerticalSpread) -> bool:
-        """Check if trade should be exited based on price targets, or exit date"""
-        # Calculate current P&L
-        spread.realized_pnl = VerticalSpread.get_current_profit(spread)
+        """Determine if a trade should be exited based on time and price conditions."""
+        logger.debug(f"Checking exit conditions for {spread.spread_guid}")
         
-        # Check if P&L targets hit
-        pnl_exit = (spread.realized_pnl >= spread.target_reward or 
-                   spread.realized_pnl <= -spread.target_stop)
+        # Check exit by date
+        date_exit = (self.current_date >= spread.expiration_date if isinstance(self.current_date, datetime) 
+                    else self.current_date >= spread.expiration_date)
+
+        # Check profit target and stop loss
+        current_profit = VerticalSpread.get_current_profit(spread)
         
-        # Check price targets
-        if spread.direction == DirectionType.BULLISH:
-            price_exit = (spread.stock.close >= spread.target_price or 
-                         spread.stock.close <= spread.stop_price)
-        else:  # BEARISH
-            price_exit = (spread.stock.close <= spread.target_price or 
-                         spread.stock.close >= spread.stop_price)
-
-        # Check if exit date reached using agent's current_date
-        date_exit = self.current_date.date() >= spread.expiration_date
-
-        return pnl_exit or price_exit or date_exit
+        target_exit = current_profit >= spread.target_reward if spread.target_reward else False
+        stop_exit = current_profit <= -spread.target_stop if spread.target_stop else False
+        
+        should_exit = date_exit or target_exit or stop_exit
+        
+        if should_exit:
+            logger.debug(f"Exit conditions met: date_exit={date_exit}, target_exit={target_exit}, stop_exit={stop_exit}")
+        
+        return should_exit
 
     def _handle_entry(self, spread: VerticalSpread, valid_prices: List[Decimal]) -> None:
         """Handle trade entry setup"""
