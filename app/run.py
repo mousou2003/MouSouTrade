@@ -226,7 +226,7 @@ def main():
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 
         # Set target date once
-        target_expiration_date = Options.get_next_friday(datetime.today().date())
+        target_expiration_date = Options.get_following_third_friday()
         logger.info(f"Target expiration date set to {target_expiration_date}")
         logger.info("Initializing trading agent and DynamoDB")
         # Initialize trading agent with current date
