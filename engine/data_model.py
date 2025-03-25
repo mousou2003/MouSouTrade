@@ -33,9 +33,9 @@ from typing import Optional, Dict, Any, List, Union, ClassVar, Literal
 from datetime import date, datetime
 logger = logging.getLogger(__name__)
 
-OrderType = Literal['asc', 'desc']
-ASC: OrderType = 'asc'
-DESC: OrderType = 'desc'
+class OrderType(Enum):
+    ASC = 'asc'
+    DESC = 'desc'
 
 class DirectionType(Enum):
     BEARISH = 'bearish'

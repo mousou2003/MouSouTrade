@@ -54,6 +54,10 @@ class TradeStrategy(Enum):
 class ContractType(Enum):
     CALL = 'call'
     PUT = 'put'
+
+class OrderType(Enum):
+    ASC = 'asc'
+    DESC = 'desc'
     
 class Options:
     """Helper class for calculating option expiration dates and fetching option contracts."""
@@ -395,8 +399,8 @@ class Options:
     @staticmethod
     def get_order(strategy: StrategyType, direction: DirectionType) -> OrderType:
         """Returns the order (ASC/DESC) based on strategy and direction."""
-        return {StrategyType.CREDIT: {DirectionType.BULLISH: DESC, DirectionType.BEARISH: ASC}, 
-                StrategyType.DEBIT: {DirectionType.BULLISH: ASC, DirectionType.BEARISH: DESC}}[strategy][direction]
+        return {StrategyType.CREDIT: {DirectionType.BULLISH: OrderType.DESC, DirectionType.BEARISH: OrderType.ASC}, 
+                StrategyType.DEBIT: {DirectionType.BULLISH: OrderType.ASC, DirectionType.BEARISH: OrderType.DESC}}[strategy][direction]
 
     @staticmethod
     def get_search_op(strategy, direction):

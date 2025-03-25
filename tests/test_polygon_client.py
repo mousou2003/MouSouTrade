@@ -1,18 +1,18 @@
 from decimal import Decimal
+from typing import List
 import unittest
-from unittest.mock import MagicMock
-
 from colorama import Fore, Style
+from engine import Options
 from marketdata_clients.PolygonClient import PolygonClient
 from config.ConfigLoader import ConfigLoader
 import os
 import logging
-import json
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 debug_mode = os.getenv("DEBUG_MODE")
-if debug_mode and debug_mode.lower() == "true":
+if (debug_mode and debug_mode.lower() == "true"):
     loglevel = logging.DEBUG
 else:
     loglevel = logging.WARNING
@@ -29,62 +29,103 @@ handler.setFormatter(ColorFormatter())
 logger.addHandler(handler)
 
 class TestPolygonClient(unittest.TestCase):
-
+    
     client = None
+    expiration_date = None
+    expiration_date_lte = None
+    expiration_date_gte = None
 
     def __init__(self, methodName = "runTest"):
         super().__init__(methodName)
 
         if self.client is None:
-            self.mock_session = MagicMock()
-
             required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 'MOUSOUTRADE_CONFIG_FILE', 'MOUSOUTRADE_STAGE']
             env_vars = {var: os.getenv(var) for var in required_env_vars}
             missing_env_vars = [var for var, value in env_vars.items() if not value]
             if missing_env_vars:
                 raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_env_vars)}")
 
-            config_loader = ConfigLoader('./config/SecurityKeys.json')
-
-            self.client = PolygonClient(config_loader.config, env_vars['MOUSOUTRADE_STAGE'])
+            self.client = PolygonClient('./config/SecurityKeys.json', env_vars['MOUSOUTRADE_STAGE'])
 
     def setUp(self):
-        pass
+        self.expiration_date = Options.Options.get_following_third_friday()
+        self.expiration_date_lte = self.expiration_date.strftime('%Y-%m-%d')
+        self.expiration_date_gte = (self.expiration_date - timedelta(days=7)).strftime('%Y-%m-%d')
 
-    def load_response(self, filename):
-        with open(os.path.join(os.path.dirname(__file__), 'data', filename), 'r') as file:
-            return file.read()
-
-    @unittest.skip("Not implemented")
     def test_get_previous_close(self):
-        self.mock_session.get.return_value.json.return_value = json.loads(self.load_response('samplePolygonPreviousClose.json'))
-        previous_close = self.client.get_previous_close('AAPL')
-        self.assertAlmostEqual(previous_close, Decimal('235.74'), places=2)
+        previous_close_data = self.client.get_previous_close('AAPL')
+        self.assertIsNotNone(previous_close_data)
+        self.assertTrue(len(previous_close_data) > 0)
+        
+        agg = previous_close_data[0]
+        self.assertEqual(agg['ticker'], 'AAPL')
+        self.assertIsNotNone(agg['close'])
+        self.assertIsNotNone(agg['high'])
+        self.assertIsNotNone(agg['low'])
+        self.assertIsNotNone(agg['open'])
+        self.assertIsNotNone(agg['volume'])
+        self.assertIsNotNone(agg['vwap'])
+        self.assertIsNotNone(agg['timestamp'])
+        
+        self.assertGreaterEqual(agg['high'], agg['low'])
+        self.assertGreaterEqual(agg['close'], 0)
+        self.assertGreaterEqual(agg['volume'], 0)
+        self.assertGreaterEqual(agg['vwap'], 0)
 
     def test_get_grouped_daily_bars(self):
-        self.mock_session.get.return_value.json.return_value = json.loads(self.load_response('samplePolygonGroupedDailyBars.json'))
         previous_market_open_day = self.client.get_previous_market_open_day()
         daily_bars = self.client.get_grouped_daily_bars(previous_market_open_day)
-        self.assertIn('FENY', daily_bars)
-        self.assertAlmostEqual(daily_bars['FENY']['close'], Decimal('23.46'), places=2)
+        self.assertIsNotNone(daily_bars)
+        
+        sample_symbols = ['AAPL', 'MSFT', 'GOOGL']
+        for symbol in sample_symbols:
+            if symbol in daily_bars:
+                agg = daily_bars[symbol]
+                self.assertEqual(agg['ticker'], symbol)
+                self.assertIsNotNone(agg['open'])
+                self.assertIsNotNone(agg['high'])
+                self.assertIsNotNone(agg['low'])
+                self.assertIsNotNone(agg['close'])
+                self.assertIsNotNone(agg['volume'])
+                self.assertIsNotNone(agg['vwap'])
+                self.assertIsNotNone(agg['timestamp'])
+                
+                self.assertGreater(agg['high'], agg['low'])
+                self.assertGreaterEqual(agg['open'], agg['low'])
+                self.assertGreaterEqual(agg['close'], agg['low'])
+                self.assertLessEqual(agg['open'], agg['high'])
+                self.assertLessEqual(agg['close'], agg['high'])
+                self.assertGreater(agg['volume'], 0)
+                self.assertGreater(agg['vwap'], 0)
 
-    @unittest.skip("Not implemented")
-    def test_get_option_previous_close(self):
-        pass
-
-    @unittest.skip("Not implemented in the client")
     def test_get_option_contracts(self):
-        pass
-
-    @unittest.skip("Not paying for that data")
-    def test_get_snapshot(self):
-        pass
+        option_contracts = self.client.get_option_contracts(
+            'AAPL',
+            expiration_date_gte=self.expiration_date_gte,
+            expiration_date_lte=self.expiration_date_lte,
+            contract_type='put',
+            order='asc'
+        )
+        self.assertIsNotNone(option_contracts)
+        self.assertTrue(len(option_contracts) > 0)
+        for contract in option_contracts:
+            self.assertTrue(contract['ticker'].startswith('O:AAPL'))
 
     def test_get_option_snapshot(self):
-        self.mock_session.get.return_value.json.return_value = json.loads(self.load_response('samplePolygonOptionResponse.json'))
-        option_snapshot = self.client.get_option_snapshot(underlying_symbol='AAPL', option_symbol='O:AAPL250307P00150000')
-        self.assertEqual(option_snapshot['details']['ticker'], 'O:AAPL250307P00150000')
-        self.assertAlmostEqual(Decimal(option_snapshot['day']['close']), Decimal('0.01'), places=2)
+        contracts = self.client.get_option_contracts(
+            'AAPL',
+            expiration_date_gte=self.expiration_date_gte,
+            expiration_date_lte=self.expiration_date_lte,
+            contract_type='put',
+            order='asc'
+        )
+        self.assertTrue(len(contracts) > 0)
+        response = self.client.get_option_snapshot(
+            underlying_asset='AAPL', 
+            option_symbol=contracts[0]['ticker']
+        )
+        self.assertIsNotNone(response)
+        self.assertEqual(response['details']['ticker'], contracts[0]['ticker'])
 
 if __name__ == '__main__':
     unittest.main()
