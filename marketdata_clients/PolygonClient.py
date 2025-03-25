@@ -89,6 +89,18 @@ class PolygonClient(BaseMarketDataClient):
             option_contract=option_symbol
         )
         result = self._convert_to_dict(response)
+        
+        # Validate and provide fallbacks for missing data
+        result['day']['last_trade'] = result['day'].get('close')
+        
+        result['day']['bid'] = result['day'].get('close')
+
+        result['day']['ask'] = result['day'].get('close')
+            
+        if not result['day'].get('timestamp'):
+            logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
+            result['day']['timestamp'] = int(datetime.now().timestamp() * 1000)
+
         result['day']['open_interest'] = response.open_interest
         return result
         

@@ -137,11 +137,6 @@ class ContractSelector:
                 snapshot.confidence_level = 0
                 continue
 
-            # if not snapshot.day.average_volume:
-            #     logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
-            #     snapshot.confidence_level = 0
-            #     continue
-
             if not snapshot.day.open_interest:
                 logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
                 snapshot.confidence_level = 0
@@ -152,26 +147,6 @@ class ContractSelector:
                 snapshot.confidence_level = 0
                 continue
 
-            # Check for trade data individually and provide fallbacks
-            if not snapshot.day.last_trade:
-                logger.debug(f"Missing last_trade data for {contract.ticker}. Using close price.")
-                snapshot.day.last_trade = snapshot.day.close
-                snapshot.confidence_level *= Decimal(0.95)
-                
-            if not snapshot.day.bid:
-                logger.debug(f"Missing bid data for {contract.ticker}. Using close price.")
-                snapshot.day.bid = snapshot.day.close
-                snapshot.confidence_level *= Decimal(0.95)
-                
-            if not snapshot.day.ask:
-                logger.debug(f"Missing ask data for {contract.ticker}. Using close price.")
-                snapshot.day.ask = snapshot.day.close
-                snapshot.confidence_level *= Decimal(0.95)
-                
-            if not snapshot.day.timestamp:
-                logger.debug("Snapshot is not up-to-date. Option may not be traded yet.")
-                snapshot.day.timestamp = datetime.now().timestamp()
-                snapshot.confidence_level *= Decimal(0.95)
 
             contract.strike_price_type = self._get_price_status(
                 strike=contract.strike_price,
