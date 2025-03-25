@@ -28,7 +28,8 @@
             "console": "integratedTerminal",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}",
-                "MOUSOUTRADE_STAGE": "Alpha",
+                "DYNAMODB_ENDPOINT_URL":"http://localhost:8000",
+                "MOUSOUTRADE_STAGE":"Alpha",
                 "DEBUG_MODE":"True",
                 "MOUSOUTRADE_CLIENTS":  "etrade;polygon"
             },

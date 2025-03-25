@@ -73,7 +73,7 @@ class MarketDataClient(BaseMarketDataClient):
         try:
             client = self.client
             if client is None:
-                client = self.polygon_client  
+                client = self.polygon_client.options_client  
             contracts = self._exponential_backoff(client.get_option_contracts,
                 underlying_ticker=underlying_ticker,
                 expiration_date_gte=expiration_date_gte,
@@ -90,16 +90,12 @@ class MarketDataClient(BaseMarketDataClient):
             client = self.client
             if client is None:
                 client = self.etrade_client  
-            snapshot_data_etrade = self._exponential_backoff(client.get_option_snapshot,
-                underlying_symbol=underlying_ticker,
+
+            snapshot= self._exponential_backoff(client.get_option_snapshot,
+                underlying_ticker=underlying_ticker,
                 option_symbol=option_symbol
             )
-            snapshot_data_polygon = self._exponential_backoff(self.polygon_client.get_option_snapshot,
-                underlying_symbol=underlying_ticker,
-                option_symbol=option_symbol
-            )
-            snapshot_data_polygon['day'] = {**snapshot_data_etrade, **snapshot_data_polygon['day']}
-            return Snapshot.from_dict(snapshot_data_polygon)
+            return Snapshot.from_dict(snapshot)
         except Exception as err:
             raise MarketDataException(f"Failed to get option snapshot for {underlying_ticker}", err)
 

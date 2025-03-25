@@ -9,6 +9,7 @@ from requests import ReadTimeout
 from colorama import Fore, Style
 from decimal import Decimal
 from datetime import date, datetime, timedelta
+from botocore.exceptions import EndpointConnectionError
 
 from marketdata_clients.BaseMarketDataClient import MarketDataException, MarketDataStrikeNotFoundException
 from marketdata_clients.PolygonClient import POLYGON_CLIENT_NAME
@@ -92,7 +93,7 @@ def build_options_snapshots(market_data_client: IMarketDataClient, contracts: li
             options_snapshots[contract.ticker] = options_snapshot
         except (MarketDataException, KeyError, TypeError) as e:
             logger.warning(f"{type(e).__name__} - {e}\n {e.inner_exception}")
-            continue
+            raise
     return options_snapshots
 
 def process_stock(market_data_client: IMarketDataClient, stock: Stock,
@@ -107,7 +108,7 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
     if not stock.ticker:
         raise KeyError('Ticker')
 
-    today = datetime.today()  # Use datetime instead of date for agent
+    today = datetime.today().date()
     
     logger.info(f"Querying existing spreads for {stock.ticker} expiring on {target_expiration_date}")
     existing_spreads = dynamodb.query_spreads(
@@ -117,18 +118,22 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
 
     logger.info(f"Fetching option snapshots for {stock.ticker}")
     all_snapshots = {}
+    contracts = [Contract]
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
             contracts = market_data_client.get_option_contracts(
-                underlying_ticker=stock.ticker,
-                expiration_date_gte=target_expiration_date,
-                expiration_date_lte=target_expiration_date,
-                contract_type=Options.get_contract_type(strategy, direction),
-                order=Options.get_order(strategy=strategy, direction=direction)
+                underlying_ticker=str(stock.ticker),
+                expiration_date_gte=(target_expiration_date - timedelta(days=6)).strftime('%Y-%m-%d'),
+                expiration_date_lte=target_expiration_date.strftime('%Y-%m-%d'),
+                contract_type=Options.get_contract_type(strategy, direction).value,
+                order=Options.get_order(strategy=strategy, direction=direction).value
             )
-            snapshots = build_options_snapshots(market_data_client, contracts, stock.ticker)
+            snapshots= build_options_snapshots(contracts=contracts, market_data_client=market_data_client,
+                underlying_ticker=stock.ticker)
             all_snapshots.update(snapshots)
-
+    if len(contracts) == 0:
+        logger.info(f"No contracts found for {stock.ticker} expiring on {target_expiration_date}")
+        return [], 0, 0
     if not existing_spreads:
         logger.info(f"No existing spreads found for {stock.ticker}, generating new ones")
         # Generate new spreads for this stock
@@ -136,21 +141,13 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
             for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
                 logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {stock.ticker} for target date {target_expiration_date}")
 
-                contracts = market_data_client.get_option_contracts(
-                    underlying_ticker=stock.ticker,
-                    expiration_date_gte=target_expiration_date,
-                    expiration_date_lte=target_expiration_date,
-                    contract_type=Options.get_contract_type(strategy, direction),
-                    order=Options.get_order(strategy=strategy, direction=direction)
-                )
-
                 spread_result = VerticalSpreadMatcher.match_option(
                     options_snapshots=all_snapshots, 
                     underlying_ticker=stock.ticker, 
                     direction=direction, 
                     strategy=strategy, 
                     previous_close=stock.close,
-                    date=target_expiration_date,
+                    date = contracts[0].expiration_date,
                     contracts=contracts
                 )
                 
@@ -226,9 +223,8 @@ def main():
         marketdata_stocks = Stocks(market_data_client=market_data_client)
 
         # Set target date once
-        target_expiration_date = Options.get_following_third_friday()
+        target_expiration_date = Options.get_next_friday(datetime.today().date())
         logger.info(f"Target expiration date set to {target_expiration_date}")
-
         logger.info("Initializing trading agent and DynamoDB")
         # Initialize trading agent with current date
         agent = TradingAgent(current_date=datetime.today())  # Set initial current_date
@@ -269,7 +265,7 @@ def main():
                             total_updated += updated
                 except Exception as e:
                     logger.error(f"Error processing {ticker}: {e}")
-                    logger.debug(f"Stack trace for {ticker}:", exc_info=True)
+                    logger.error(f"Stack trace for {ticker}:", exc_info=True)
 
         final_count = dynamodb.count_items()
         logger.info(f"Database items change: {final_count - initial_count} new items")
@@ -298,6 +294,9 @@ def main():
         return 1
     except ConnectionRefusedError as e:
         logger.error(f"Connection refused: {e.with_traceback(None)}")
+        return 1
+    except EndpointConnectionError as e:
+        logger.error(f"Failed to connect to AWS endpoint: {e}")
         return 1
     except MissingEnvironmentVariableException as e:
         logger.error(e)

@@ -121,11 +121,50 @@ class TestPolygonClient(unittest.TestCase):
         )
         self.assertTrue(len(contracts) > 0)
         response = self.client.get_option_snapshot(
-            underlying_asset='AAPL', 
+            underlying_ticker='AAPL', 
             option_symbol=contracts[0]['ticker']
         )
         self.assertIsNotNone(response)
-        self.assertEqual(response['details']['ticker'], contracts[0]['ticker'])
+
+        # Verify day section
+        self.assertIn('day', response)
+        day = response['day']
+        day_fields = ['change', 'change_percent', 'close', 'high', 'last_updated',
+                     'low', 'open', 'previous_close', 'volume', 'vwap']
+        for field in day_fields:
+            self.assertIn(field, day)
+            self.assertIsNotNone(day[field])
+
+        # Verify details section
+        self.assertIn('details', response)
+        details = response['details']
+        detail_fields = ['contract_type', 'exercise_style', 'expiration_date',
+                        'shares_per_contract', 'strike_price', 'ticker']
+        for field in detail_fields:
+            self.assertIn(field, details)
+            self.assertIsNotNone(details[field])
+        self.assertEqual(details['ticker'], contracts[0]['ticker'])
+
+        # Verify greeks section
+        self.assertIn('greeks', response)
+        greeks = response['greeks']
+        greek_fields = ['delta', 'gamma', 'theta', 'vega']
+        for field in greek_fields:
+            self.assertIn(field, greeks)
+            self.assertIsNotNone(greeks[field])
+
+        # Verify implied volatility
+        self.assertIn('implied_volatility', response)
+        self.assertIsNotNone(response['implied_volatility'])
+
+        # Verify open interest
+        self.assertIn('open_interest', response)
+        self.assertIsNotNone(response['open_interest'])
+
+        # Verify underlying asset
+        self.assertIn('underlying_asset', response)
+        self.assertIn('ticker', response['underlying_asset'])
+        self.assertEqual(response['underlying_asset']['ticker'], 'AAPL')
 
 if __name__ == '__main__':
     unittest.main()
