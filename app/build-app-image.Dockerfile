@@ -64,8 +64,5 @@ COPY ./marketdata_clients marketdata_clients
 COPY ./database database 
 COPY ./agents agents
 
-# Set PATH to include venv
-ENV PATH="/app/venv/bin:$PATH"
-
 # Run cron in foreground
 CMD cron && tail -f /var/log/cron.log
