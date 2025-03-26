@@ -192,7 +192,7 @@ class DynamoDB:
 
     def query_spreads(self, ticker, expiration_date=None, 
                      direction: DirectionType = None, strategy: StrategyType = None,
-                     guid: str = None) -> List[SpreadDataModel]:
+                     guid: str = None, processed: bool =False) -> List[SpreadDataModel]:
         """Query spread opportunities with optional filters"""
         try:
             if guid:
@@ -242,6 +242,8 @@ class DynamoDB:
             for item in all_items:
                 try:
                     spread = SpreadDataModel.from_dict(item)
+                    if spread.is_processed and processed is False:
+                        continue
                     spread.spread_guid = item.get('guid')  # Set the guid from the database item
                     spreads.append(spread)
                 except Exception as e:
