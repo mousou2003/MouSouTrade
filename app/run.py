@@ -164,7 +164,7 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
         # Use existing spreads but update their snapshots
         for spread in existing_spreads:
             if spread.is_processed:
-                logger.info(f"Spread {spread.spread_guid} is already processed, skipping")
+                logger.warning(f"Spread {spread.spread_guid} is already processed, skipping")
                 continue
             spread.stock = stock
             VerticalSpread.update_snapshots(spread,all_snapshots)
