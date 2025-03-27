@@ -422,8 +422,7 @@ class VerticalSpread(SpreadDataModel):
 
         # Verify it's a standard width
         if not Options.is_standard_width(self.distance_between_strikes):
-            logger.warning(f"Non-standard spread width: {self.distance_between_strikes}")
-            return False
+            logger.debug(f"Non-standard spread width: {self.distance_between_strikes}")
 
         logger.debug("Spread parameters validated successfully")
         return True
