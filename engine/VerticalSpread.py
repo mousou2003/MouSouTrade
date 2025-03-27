@@ -213,18 +213,15 @@ class VerticalSpread(SpreadDataModel):
     # Remove WIDTH_CONFIG as we'll use Options.py methods instead
 
     @staticmethod
-    def get_width_config(strategy: StrategyType, direction: DirectionType) -> dict:
+    def get_width_config(stock_price: Decimal,strategy: StrategyType, direction: DirectionType) -> dict:
         """Get width configuration based on strategy and direction."""
         min_width, max_width, optimal_width = Options.get_width_config(
-            current_price=self.previous_close,
+            current_price=stock_price,
             strategy=strategy,
             direction=direction
         )
-        return {
-            'min_width_pct': min_width / self.previous_close,
-            'max_width_pct': max_width / self.previous_close,
-            'optimal_width_pct': optimal_width / self.previous_close
-        }
+        return min_width , max_width , optimal_width
+    
 
     @staticmethod
     def get_minimum_spread_width(stock_price: Decimal, strategy: StrategyType, direction: DirectionType) -> Decimal:
@@ -243,48 +240,34 @@ class VerticalSpread(SpreadDataModel):
         """Calculate optimal spread width based on strategy, direction and stock price."""
         return Options.calculate_optimal_spread_width(stock_price, strategy, direction)
 
-    def get_net_premium():
-        pass
-
-    def calculate_net_premium(self) -> Decimal:
-        """Calculate net premium based on actual prices or snapshot values."""
-        logger.debug("Calculating net premium")
-        
-        if (self.short_contract and self.short_contract.actual_entry_price and 
-            self.long_contract and self.long_contract.actual_entry_price):
-            # Use actual entry prices if available
-            short_price = self.short_contract.actual_entry_price
-            long_price = self.long_contract.actual_entry_price
-            logger.debug("Using actual contract prices")
-        elif (self.first_leg_snapshot and self.first_leg_snapshot.day and 
-              self.second_leg_snapshot and self.second_leg_snapshot.day):
-            # Use snapshot values
-            if self.strategy == StrategyType.CREDIT:
-                short_price = self.first_leg_snapshot.day.bid
-                long_price = self.second_leg_snapshot.day.ask
-            else:  # DEBIT
-                short_price = self.second_leg_snapshot.day.bid
-                long_price = self.first_leg_snapshot.day.ask
-            logger.debug("Using snapshot prices")
-        else:
-            logger.warning("No valid prices available for net premium calculation")
-            return Decimal('0')
-            
-        net = short_price - long_price
-        logger.debug(f"Calculated net premium: {net}")
-        return net
-        
     def validate_net_premium(self) -> bool:
-        """Base method for calculating net premium - to be implemented by subclasses"""
+        """Calculate and validate net premium is appropriate for the strategy type."""
+        logger.debug("Calculating and validating net premium")
+
+        if self.net_premium is not None:
+            logger.debug("Net premium already calculated")
+            return True 
         
-        # Validate we have both snapshots with day data
-        if not (self.first_leg_snapshot and self.second_leg_snapshot and 
-                self.first_leg_snapshot.day and self.second_leg_snapshot.day):
-            logger.warning("Missing snapshot data")
+        if not (self.short_premium and self.long_premium):
+            logger.warning("Missing premium values")
+            self.net_premium = Decimal('0')
             return False
             
+        # Calculate based on strategy type
+        if self.strategy == StrategyType.CREDIT:
+            self.net_premium = self.short_premium - self.long_premium  # Should be positive
+            if self.net_premium <= 0:
+                logger.warning(f"Invalid credit spread premium: {self.net_premium}")
+                return False
+        else:  # DEBIT
+            self.net_premium = -(self.long_premium - self.short_premium)  # Should be negative
+            if self.net_premium >= 0:
+                logger.warning(f"Invalid debit spread premium: {self.net_premium}")
+                return False
+            
+        logger.debug(f"Calculated net premium: {self.net_premium}")
         return True
-    
+
     def get_expiration_date(self):
         logger.debug("Entering get_expiration_date")
         result = self.expiration_date
@@ -393,16 +376,10 @@ class VerticalSpread(SpreadDataModel):
             logger.error("Missing premium values")
             return False
 
-        # Premium relationship validation
-        if self.strategy == StrategyType.CREDIT:
-            if self.short_premium <= self.long_premium:
-                logger.error(f"Invalid credit spread premium: short ({self.short_premium}) <= long ({self.long_premium})")
-                return False
-        else:  # DEBIT
-            if self.long_premium <= self.short_premium:
-                logger.error(f"Invalid debit spread premium: long ({self.long_premium}) <= short ({self.short_premium})")
-                return False
-
+        if  not self.validate_net_premium():
+            logger.error("Net premium validation failed")
+            return False
+        
         # Width validation
         if self.distance_between_strikes <= 0:
             logger.error("Invalid spread width")
@@ -453,9 +430,17 @@ class VerticalSpread(SpreadDataModel):
         logger.debug(f"Normalized premium ratio: {normalized_premium_to_distance_between_strikes}")
         logger.debug(f"Minimum required delta: {min_delta}")
         
-        if normalized_premium_to_distance_between_strikes < min_delta:
-            logger.debug(f"Premium ratio {normalized_premium_to_distance_between_strikes} below minimum {min_delta}")
-            return False
+        # Different validation for credit vs debit spreads
+        if self.strategy == StrategyType.CREDIT:
+            # For credit spreads, we want to collect more premium relative to width
+            if normalized_premium_to_distance_between_strikes < min_delta:
+                logger.debug(f"Credit spread premium ratio {normalized_premium_to_distance_between_strikes} below minimum {min_delta}")
+                return False
+        else:  # DEBIT
+            # For debit spreads, we want to pay less premium relative to width
+            if normalized_premium_to_distance_between_strikes > (Decimal('1.0') - min_delta):
+                logger.debug(f"Debit spread premium ratio {normalized_premium_to_distance_between_strikes} above maximum {1.0 - min_delta}")
+                return False
             
         # Calculate all other metrics - these handle negative net premium correctly already
         self.max_reward = self.get_max_reward()
@@ -510,74 +495,34 @@ class CreditSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
     def get_max_reward(self):
-        return self.get_net_premium()*100
+        return self.net_premium * 100
 
     def get_max_risk(self):
-        return Decimal((abs(self.distance_between_strikes) - self.get_net_premium())*Decimal(100))
+        return Decimal((abs(self.distance_between_strikes) - self.net_premium)*Decimal(100))
 
     def get_breakeven_price(self):
-        net_premium = self.get_net_premium()
+        net_premium = self.net_premium
         return Decimal(self.short_contract.strike_price) + (-net_premium if self.direction == DirectionType.BULLISH else net_premium)
 
     def get_target_price(self):
-        self.target_reward = (self.get_net_premium() * Decimal(0.8))
+        self.target_reward = (self.net_premium * Decimal(0.8))
         return self.previous_close + (self.target_reward if self.direction == DirectionType.BULLISH else -self.target_reward)
 
     def get_stop_price(self):
-        self.target_stop = (self.get_net_premium() / Decimal(2))
+        self.target_stop = (self.net_premium / Decimal(2))
         return self.previous_close - (self.target_stop if self.direction == DirectionType.BULLISH else -self.target_stop)
-
-    def get_net_premium(self) -> Decimal:
-
-        if self.net_premium is not None:
-            logger.debug(f"Using cached net premium: {self.net_premium}")
-            return self.net_premium
-        
-        # Use parent class validation - if returns 0, data is invalid
-        if not self.validate_net_premium():
-            logger.debug("Parent validation failed")
-            return Decimal('0')
-
-        logger.debug("Calculating credit spread net premium")
-        # Set contract type based on first leg
-        self.contract_type = self.first_leg_contract.contract_type
-
-        logger.debug(f"Processing call spread - comparing strikes firt {self.first_leg_contract.strike_price} and second {self.second_leg_contract.strike_price}")
-        
-        if self.first_leg_contract.strike_price < self.second_leg_contract.strike_price:
-            # Bear Call: Short lower strike call, Long higher strike call
-            # First leg is short (lower strike), second leg is long (higher strike)
-            short_snapshot = self.first_leg_snapshot
-            long_snapshot = self.second_leg_snapshot
-            logger.debug("Bear Call. Using first leg as short (lower strike)")
-        else:
-            # Bull Put: Short higher strike put, Long lower strike put
-            # Second leg is short (lower strike), first leg is long (higher strike)
-            short_snapshot = self.second_leg_snapshot
-            long_snapshot = self.first_leg_snapshot
-            logger.debug("Bull Put. Using second leg as short (lower strike)")
-            
-        # Calculate credit spread premium
-        self.net_premium = short_snapshot.day.bid - long_snapshot.day.ask
-        logger.debug(f"Net premium = {short_snapshot.day.bid} - {long_snapshot.day.ask} = {self.net_premium}")
-        
-        if self.net_premium <= 0:
-            logger.warning(f"Invalid credit spread - net debit of {self.net_premium}")
-            return Decimal('0')
-            
-        return self.net_premium  # Already positive for credit
 
 class DebitSpread(VerticalSpread):
     ideal_expiration: ClassVar[int] = 45
 
     def get_max_reward(self):
-        return (abs(self.distance_between_strikes) - abs(self.get_net_premium()))*100
+        return (abs(self.distance_between_strikes) - abs(self.net_premium))*100
 
     def get_max_risk(self):
-        return abs(self.get_net_premium()*100)
+        return abs(self.net_premium*100)
 
     def get_breakeven_price(self):
-        net_premium = abs(self.get_net_premium())
+        net_premium = abs(self.net_premium)
         if self.direction == DirectionType.BULLISH:
             return Decimal(self.long_contract.strike_price) + net_premium
         else:
@@ -590,48 +535,6 @@ class DebitSpread(VerticalSpread):
     def get_stop_price(self):
         self.target_stop = (self.distance_between_strikes / Decimal(2))
         return self.previous_close - (self.target_stop if self.direction == DirectionType.BULLISH else -self.target_stop)
-
-    def get_net_premium(self) -> Decimal:
-        """Calculate net premium for debit spreads:
-        Net Debit = Long ask price - Short bid price"""
-        logger.debug("Calculating debit spread net premium")
-        
-        if self.net_premium is not None:
-            logger.debug(f"Using cached net premium: {self.net_premium}")
-            return self.net_premium
-        
-        # Use parent class validation - if returns False, data is invalid
-        if not self.validate_net_premium():
-            logger.debug("Parent validation failed")
-            return Decimal('0')
-
-        # Set contract type based on first leg
-        self.contract_type = self.first_leg_contract.contract_type
-
-        logger.debug(f"Processing call spread - comparing strikes first {self.first_leg_contract.strike_price} and second {self.second_leg_contract.strike_price}")
-        
-        if self.first_leg_contract.strike_price < self.second_leg_contract.strike_price:
-            # Bull Call: Long lower strike call, Short higher strike call
-            # First leg is long (lower strike), second leg is short (higher strike)
-            long_snapshot = self.first_leg_snapshot
-            short_snapshot = self.second_leg_snapshot
-            logger.debug("Using first leg as long (lower strike)")
-        else:
-            # Bear Put: Long higher strike put, Short lower strike put
-            # First leg is long (higher strike), second leg is short (lower strike)
-            long_snapshot = self.second_leg_snapshot
-            short_snapshot = self.first_leg_snapshot
-            logger.debug("Using second leg as long (higher strike)")
-            
-        # Calculate debit spread premium
-        self.net_premium = long_snapshot.day.ask - short_snapshot.day.bid
-        logger.debug(f"Net premium = {long_snapshot.day.ask} - {short_snapshot.day.bid} = {self.net_premium}")
-        
-        if self.net_premium >= 0:
-            logger.warning(f"Invalid debit spread - net credit of {self.net_premium}")
-            return Decimal('0')
-            
-        return self.net_premium  # Should be negatif for debit
 
 class VerticalSpreadMatcher:
     """Handles the matching and selection of vertical spread contracts."""
@@ -769,6 +672,7 @@ class VerticalSpreadMatcher:
         best_spread_non_standard: Optional[VerticalSpread] = None 
         found_valid_spread: bool = False
         final_spread:VerticalSpread = spread
+        
 
         if not first_leg_candidates or not second_leg_candidates:
             logger.debug("No valid first or second leg candidates found")
@@ -783,27 +687,28 @@ class VerticalSpreadMatcher:
                     if not contract.matched:
                         continue
 
-                    logger.debug("-------- Processing spread candidate --------")   
-                    VerticalSpreadMatcher._set_spread_legs(spread, first_leg, second_leg)
+                    logger.debug("-------- Processing spread candidate --------")
+                    tentative_spread:VerticalSpread = spread.copy()
+                    VerticalSpreadMatcher._set_spread_legs(tentative_spread, first_leg, second_leg)
                     
                     # Changed: Call instance method instead of static
-                    if not spread._validate_spread_parameters():
+                    if not tentative_spread._validate_spread_parameters():
                         logger.debug("Skipping candidate due to failed spread parameter validation.")
                         continue
                         
-                    if not spread._calculate_spread_metrics(days_to_expiration):
+                    if not tentative_spread._calculate_spread_metrics(days_to_expiration):
                         logger.debug("Skipping candidate due to failed spread metrics calculation.")
                         continue
                         
-                    VerticalSpreadMatcher._calculate_adjusted_score(spread)
+                    VerticalSpreadMatcher._calculate_adjusted_score(tentative_spread)
 
                     found_valid_spread = True                
                     # Update best spreads with deep copies
                     best_spread, best_spread_width, best_spread_non_standard = VerticalSpreadMatcher._update_best_spreads(
-                        spread, best_spread, best_spread_width, best_spread_non_standard)
+                        tentative_spread, best_spread, best_spread_width, best_spread_non_standard)
                         
         if found_valid_spread:
-            final_spread = VerticalSpreadMatcher._determine_final_spread(spread, best_spread_width, best_spread_non_standard)
+            final_spread = VerticalSpreadMatcher._determine_final_spread(best_spread, best_spread_width, best_spread_non_standard)
             final_spread.matched = True
             if final_spread:  # Add null check
                 final_spread.description = VerticalSpreadMatcher._generate_description(final_spread)
@@ -832,8 +737,7 @@ class VerticalSpreadMatcher:
         spread.distance_between_strikes = abs(spread.first_leg_contract.strike_price - spread.second_leg_contract.strike_price)
         
         # Calculate width boundaries based on stock price
-        min_width = VerticalSpread.get_minimum_spread_width(spread.previous_close, spread.strategy, spread.direction)
-        max_width = VerticalSpread.get_maximum_spread_width(spread.previous_close, spread.strategy, spread.direction)
+        min_width, max_width, spread.optimal_spread_width = VerticalSpread.get_width_config(spread.previous_close, spread.strategy, spread.direction)
         
         # Log width analysis
         logger.debug(f"First leg strike: {spread.first_leg_contract.strike_price}")
@@ -889,8 +793,6 @@ class VerticalSpreadMatcher:
             else:  # DEBIT
                 spread.long_contract, spread.long_premium = spread.second_leg_contract, spread.second_leg_snapshot.day.ask
                 spread.short_contract, spread.short_premium = spread.first_leg_contract, spread.first_leg_snapshot.day.bid
-
-        spread.net_premium = spread.get_net_premium()
 
         logger.debug(f"{spread.strategy.value} {spread.direction.value} data:")
         logger.debug(f"Short strike {spread.short_contract.strike_price}, bid: {spread.short_premium}")
