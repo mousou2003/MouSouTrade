@@ -322,63 +322,46 @@ class Options:
 
     @staticmethod
     def calculate_optimal_spread_width(current_price: Decimal, strategy: StrategyType, direction: DirectionType) -> Decimal:
-        """
-        Calculate the optimal spread width based on the underlying price and strategy type.
-        Based on industry standard practices for vertical spreads.
+        """Calculate optimal spread width based on price and strategy."""
         
-        Parameters:
-        current_price : Decimal : The current price of the underlying asset
-        strategy : StrategyType : Strategy type (CREDIT or DEBIT) to optimize width for
+        # Base width is 5% of current price
+        base_width = current_price * Decimal('0.05')
         
-        Returns:
-        Decimal : The recommended spread width
-        """
-        # First calculate the base width based on stock price
-        if current_price < Decimal('50'):
-            # Very low-priced stocks: 1-2 point spreads (2-4% of price)
-            base_width = Decimal('1')
-        elif current_price < Decimal('100'):
-            # Low-priced stocks: 2-5 point spreads (2-5% of price)
-            base_width = Decimal('2.5')
-        elif current_price < Decimal('300'):
-            # Mid-priced stocks: 5-10 point spreads (2-5% of price)
-            base_width = Decimal('5')
-        elif current_price < Decimal('1000'):
-            # High-priced stocks: 10-20 point spreads (1-3% of price)
-            base_width = Decimal('10')
-        else:
-            # Very high-priced stocks or indices: 25+ point spreads (≤1% of price)
-            base_width = Decimal('25')
-        
-        # Apply strategy-specific adjustments:
-        # - Credit spreads: Often narrower to maximize probability of profit
-        # - Debit spreads: Often wider to increase potential return
-
-        if strategy:
-            if strategy == StrategyType.CREDIT:
-                width_multiplier = Decimal('0.8')
-            elif strategy == StrategyType.DEBIT:
-                width_multiplier = Decimal('1.2')
-
-        # Adjust for directional bias
-        if direction:
+        # Adjust width based on strategy
+        if strategy == StrategyType.CREDIT:
             if direction == DirectionType.BULLISH:
-                width_multiplier *= Decimal('1.5')  # Wider spread for bullish expectation
-            elif direction == DirectionType.BEARISH:
-                width_multiplier *= Decimal('1.5')  # Wider spread for bearish expectation
-            
-        # Apply the multiplier
-        adjusted_width = base_width * width_multiplier
+                # Bull put - wider spreads
+                width = base_width * Decimal('1.2') 
+            else:
+                # Bear call - narrower spreads
+                width = base_width * Decimal('0.8')
+        else:  # DEBIT
+            if direction == DirectionType.BULLISH:
+                # Bull call - wider spreads
+                width = base_width * Decimal('1.2')
+            else:
+                # Bear put - narrower spreads
+                width = base_width * Decimal('0.8')
         
-        # Ensure we still return a standard width
-        standard_widths = [Decimal('1'), Decimal('2.5'), Decimal('5'), 
-                            Decimal('10'), Decimal('25'), Decimal('50')]
+        # Round to standard width
+        return Options.round_to_standard_width(width)
+
+    @staticmethod 
+    def get_width_config(current_price: Decimal, strategy: StrategyType, direction: DirectionType) -> Tuple[Decimal, Decimal, Decimal]:
+        """Get min, max and optimal width configuration."""
         
-        # Find the closest standard width
-        closest_width = min(standard_widths, key=lambda x: abs(x - adjusted_width))
+        # Calculate min/max as percentages of price
+        min_width = current_price * Decimal('0.025')  # 2.5%
+        max_width = current_price * Decimal('0.15')   # 15%
         
-        return closest_width
+        # Get optimal width without recursion
+        optimal_width = Options.calculate_optimal_spread_width(current_price, strategy, direction)
         
+        # Round all widths to standard increments
+        min_width = Options.round_to_standard_width(min_width)
+        max_width = Options.round_to_standard_width(max_width)
+        
+        return min_width, max_width, optimal_width
 
     @staticmethod
     def is_standard_width(width: Decimal) -> bool:
@@ -426,3 +409,30 @@ class Options:
             return ContractType.PUT if direction == DirectionType.BEARISH else ContractType.CALL
         else:
             raise ValueError("Invalid strategy or direction.")
+
+    @staticmethod
+    def round_to_standard_width(width: Decimal) -> Decimal:
+        """
+        Round a spread width to the nearest standard width.
+        
+        Standard widths are increments commonly used in options markets:
+        - 1.0 point: For stocks under $25
+        - 2.5 points: For stocks $25-$75
+        - 5.0 points: For stocks $75-$150
+        - 10.0 points: For stocks $150-$500
+        - 25.0 points: For stocks $500+ or index options
+        
+        Parameters:
+        width : Decimal : The spread width to round
+        
+        Returns:
+        Decimal : The nearest standard width
+        """
+        standard_widths = [Decimal('1'), Decimal('2.5'), Decimal('5'), 
+                          Decimal('10'), Decimal('25'), Decimal('50')]
+        
+        if width <= 0:
+            return Decimal('1')  # Minimum standard width
+            
+        # Find closest standard width
+        return min(standard_widths, key=lambda x: abs(x - width))

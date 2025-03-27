@@ -18,7 +18,7 @@ to be used without changing the core vertical spread implementation logic.
 
 from datetime import datetime
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, ClassVar
 from decimal import Decimal
 from abc import ABC, abstractmethod
 
@@ -30,6 +30,27 @@ from engine.Options import Options, TradeStrategy
 logger = logging.getLogger(__name__)
 
 class ContractSelector:
+    # Add these class constants for the static method
+    STANDARD_WIDTHS: ClassVar[Dict[str, List[Decimal]]] = {
+        'low_price': [Decimal('1.0'), Decimal('2.5')],          # For stocks under $50
+        'mid_price': [Decimal('2.5'), Decimal('5.0')],          # For stocks $50-$100
+        'high_price': [Decimal('5.0'), Decimal('10.0')]         # For stocks over $100
+    }
+    
+    PRICE_TIERS: ClassVar[Dict[str, Decimal]] = {
+        'low_price': Decimal('50.0'),
+        'mid_price': Decimal('100.0')
+    }
+
+    @staticmethod
+    def get_standard_widths(stock_price: Decimal) -> List[Decimal]:
+        """Get appropriate standard widths based on stock price."""
+        if stock_price < ContractSelector.PRICE_TIERS['low_price']:
+            return ContractSelector.STANDARD_WIDTHS['low_price']
+        elif stock_price < ContractSelector.PRICE_TIERS['mid_price']:
+            return ContractSelector.STANDARD_WIDTHS['mid_price']
+        else:
+            return ContractSelector.STANDARD_WIDTHS['high_price']
 
     def _get_price_status(self, strike: Decimal, current_price: Decimal, 
                          option_type: ContractType, contract: Contract, 
@@ -40,11 +61,8 @@ class ContractSelector:
         if abs(strike - current_price) > (current_price * Decimal('0.10')):
             return StrikePriceType.EXCLUDED
             
-        # ATM range calculation
-        if current_price < Decimal('100'):
-            atm_range = Decimal('2.5')
-        else:
-            atm_range = current_price * Decimal('0.025')
+        # Get standard widths and use first one for ATM range
+        atm_range = self.get_standard_widths(current_price)[0]
 
         if abs(strike - current_price) <= atm_range:
             return StrikePriceType.ATM
