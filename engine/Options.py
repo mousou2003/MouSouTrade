@@ -69,6 +69,13 @@ class Options:
     DEEP_ITM_DELTA = Decimal('0.90')  # Deltas above this are too deep ITM
     DEEP_OTM_DELTA = Decimal('0.10')  # Deltas below this are too deep OTM
 
+    # Width calculation constants
+    BASE_WIDTH_FACTOR = Decimal('0.05')      # 5% of current price
+    MIN_WIDTH_FACTOR = Decimal('0.025')      # 2.5% of current price
+    MAX_WIDTH_FACTOR = Decimal('0.15')       # 15% of current price
+    BULLISH_MULTIPLIER = Decimal('1.2')      # 20% wider for bullish
+    BEARISH_MULTIPLIER = Decimal('0.8')      # 20% narrower for bearish
+
     @staticmethod
     def get_third_friday_of_month(year, month):
         """Calculates the date of the third Friday of a given month and year."""
@@ -275,28 +282,26 @@ class Options:
     @staticmethod
     def calculate_optimal_spread_width(current_price: Decimal, strategy: StrategyType, direction: DirectionType) -> Decimal:
         """Calculate optimal spread width based on price and strategy."""
-        
-        base_width = current_price * Decimal('0.05')
+        base_width = current_price * Options.BASE_WIDTH_FACTOR
         
         if strategy == StrategyType.CREDIT:
             if direction == DirectionType.BULLISH:
-                width = base_width * Decimal('1.2') 
+                width = base_width * Options.BULLISH_MULTIPLIER
             else:
-                width = base_width * Decimal('0.8')
+                width = base_width * Options.BEARISH_MULTIPLIER
         else:  # DEBIT
             if direction == DirectionType.BULLISH:
-                width = base_width * Decimal('1.2')
+                width = base_width * Options.BULLISH_MULTIPLIER
             else:
-                width = base_width * Decimal('0.8')
+                width = base_width * Options.BEARISH_MULTIPLIER
         
         return Options.round_to_standard_width(width)
 
     @staticmethod 
     def get_width_config(current_price: Decimal, strategy: StrategyType, direction: DirectionType) -> Tuple[Decimal, Decimal, Decimal]:
         """Get min, max and optimal width configuration."""
-        
-        min_width = current_price * Decimal('0.025')  # 2.5%
-        max_width = current_price * Decimal('0.15')   # 15%
+        min_width = current_price * Options.MIN_WIDTH_FACTOR
+        max_width = current_price * Options.MAX_WIDTH_FACTOR
         
         optimal_width = Options.calculate_optimal_spread_width(current_price, strategy, direction)
         

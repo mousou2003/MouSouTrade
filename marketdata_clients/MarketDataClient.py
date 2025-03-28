@@ -69,7 +69,9 @@ class MarketDataClient(BaseMarketDataClient):
         except Exception as err:
             raise MarketDataException(f"Failed to get option previous close for {ticker}", err)
 
-    def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
+    def get_option_contracts(self,  underlying_ticker, expiration_date_gte=None, expiration_date_lte=None, 
+                             contract_type=None, order=None,strike_price_gte=None,
+                             strike_price_lte=None):
         try:
             client = self.client
             if client is None:
@@ -79,7 +81,9 @@ class MarketDataClient(BaseMarketDataClient):
                 expiration_date_gte=expiration_date_gte,
                 expiration_date_lte=expiration_date_lte,
                 contract_type=contract_type,
-                order=order
+                order=order,
+                strike_price_gte=strike_price_gte,
+                strike_price_lte=strike_price_lte
             )
             return [Contract.from_dict(contract) for contract in contracts]
         except Exception as err:

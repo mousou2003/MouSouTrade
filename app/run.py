@@ -45,10 +45,10 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-# logging.getLogger('engine.ContractSelector').setLevel(logging.DEBUG)
-# logging.getLogger('engine.ContractSelector').addHandler(handler)
+logging.getLogger('engine.ContractSelector').setLevel(logging.DEBUG)
+logging.getLogger('engine.ContractSelector').addHandler(handler)
 #logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
-# logging.getLogger('engine.VerticalSpread').addHandler(handler)
+#logging.getLogger('engine.VerticalSpread').addHandler(handler)
 # # logging.getLogger('engine.Options').setLevel(logging.DEBUG)
 # logging.getLogger('engine.Options').addHandler(handler)
 # logging.getLogger('engine.Stocks').setLevel(logging.INFO)
@@ -111,70 +111,102 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
     today = datetime.today().date()
     
     logger.info(f"Querying existing spreads for {stock.ticker} expiring on {target_expiration_date}")
-    existing_spreads = dynamodb.query_spreads(
-        ticker=stock.ticker
-    )
+    existing_spreads = dynamodb.query_spreads(ticker=stock.ticker)
     logger.info(f"Found {len(existing_spreads) if existing_spreads else 0} existing spreads")
 
-    logger.info(f"Fetching option snapshots for {stock.ticker}")
+    # Track which combinations need processing
+    processed_combinations = {
+        (s.direction, s.strategy) for s in (existing_spreads or []) 
+        if s.is_processed or s.matched
+    }
+
+    # Fetch all option data once
     all_snapshots = {}
-    contracts = [Contract]
+    all_contracts = []
+    
+    # Only fetch contracts if we need to generate new spreads
+    need_new_spreads = False
     for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
-            contracts = market_data_client.get_option_contracts(
-                underlying_ticker=str(stock.ticker),
-                expiration_date_gte=(target_expiration_date - timedelta(days=6)).strftime('%Y-%m-%d'),
-                expiration_date_lte=target_expiration_date.strftime('%Y-%m-%d'),
-                contract_type=Options.get_contract_type(strategy, direction).value,
-                order=Options.get_order(strategy=strategy, direction=direction).value
-            )
-            snapshots= build_options_snapshots(contracts=contracts, market_data_client=market_data_client,
-                underlying_ticker=stock.ticker)
-            all_snapshots.update(snapshots)
-    if len(contracts) == 0:
-        logger.info(f"No contracts found for {stock.ticker} expiring on {target_expiration_date}")
-        return [], 0, 0
-    if not existing_spreads:
-        logger.info(f"No existing spreads found for {stock.ticker}, generating new ones")
-        # Generate new spreads for this stock
+            if (direction, strategy) not in processed_combinations:
+                need_new_spreads = True
+                _, max_width, _ = Options.get_width_config(current_price=stock.close ,strategy=strategy, direction=direction)
+                contracts = market_data_client.get_option_contracts(
+                    underlying_ticker=str(stock.ticker),
+                    expiration_date_gte=(target_expiration_date - timedelta(days=6)).strftime('%Y-%m-%d'),
+                    expiration_date_lte=target_expiration_date.strftime('%Y-%m-%d'),
+                    contract_type=Options.get_contract_type(strategy, direction).value,
+                    order=Options.get_order(strategy=strategy, direction=direction).value,
+                    strike_price_gte=stock.close - max_width,
+                    strike_price_lte=stock.close + max_width
+                )
+                all_contracts.extend(contracts)
+    
+    # Get snapshots if we have contracts
+    if all_contracts:
+        new_snapshots = build_options_snapshots(
+            contracts=all_contracts,
+            market_data_client=market_data_client,
+            underlying_ticker=stock.ticker
+        )
+        all_snapshots.update(new_snapshots)
+
+    # First process existing spreads - just update their snapshots
+    if existing_spreads:
+        for spread in existing_spreads:
+            if spread.is_processed:
+                logger.info(f"Skipping processed spread {spread.spread_guid}")
+                continue
+            spread.stock = stock
+            
+            # Get snapshots specifically for this spread's contracts if not already fetched
+            for contract in [spread.long_contract, spread.short_contract]:
+                if contract.ticker not in all_snapshots:
+                    try:
+                        snapshot = market_data_client.get_option_snapshot(
+                            underlying_ticker=stock.ticker,
+                            option_symbol=contract.ticker
+                        )
+                        all_snapshots[contract.ticker] = snapshot
+                    except Exception as e:
+                        logger.warning(f"Failed to get snapshot for {contract.ticker}: {e}")
+                        continue
+            
+            VerticalSpread.update_snapshots(spread, all_snapshots)
+            spreads.append(spread)
+            updated_count += 1
+
+    # Then generate new spreads only if needed
+    if need_new_spreads and all_contracts:
         for direction in [DirectionType.BULLISH, DirectionType.BEARISH]:
             for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
-                logger.info(f"Processing stock {stock_number}/{number_of_stocks} {strategy.value} {direction.value} spread for {stock.ticker} for target date {target_expiration_date}")
+                if (direction, strategy) in processed_combinations:
+                    logger.info(f"Skipping {strategy.value} {direction.value} spread - already processed")
+                    continue
 
+                logger.info(f"Processing {strategy.value} {direction.value} spread for {stock.ticker}")
                 spread_result = VerticalSpreadMatcher.match_option(
-                    options_snapshots=all_snapshots, 
-                    underlying_ticker=stock.ticker, 
-                    direction=direction, 
-                    strategy=strategy, 
+                    options_snapshots=all_snapshots,
+                    underlying_ticker=stock.ticker,
+                    direction=direction,
+                    strategy=strategy,
                     previous_close=stock.close,
-                    date = contracts[0].expiration_date,
-                    contracts=contracts
+                    date=all_contracts[0].expiration_date,
+                    contracts=all_contracts
                 )
                 
                 if spread_result and spread_result.matched:
-                    spread_result.stock = stock  # Set stock data after creation
+                    spread_result.stock = stock
                     logger.info(f"Found matching {strategy.value} {direction.value} spread for {stock.ticker}")
                     success, guid = dynamodb.set_spreads(spread=spread_result)
                     if success:
                         logger.info(f"Successfully saved spread {guid} to database")
                         spreads.append(spread_result)
                         generated_count += 1
-    else:
-        logger.info(f"Updating {len(existing_spreads)} existing spreads for {stock.ticker}")
-        # Use existing spreads but update their snapshots
-        for spread in existing_spreads:
-            if spread.is_processed:
-                logger.warning(f"Spread {spread.spread_guid} is already processed, skipping")
-                continue
-            spread.stock = stock
-            VerticalSpread.update_snapshots(spread,all_snapshots)
-            spreads.append(spread)
-        updated_count = len(existing_spreads)
 
-    # Process all spreads at once through trading agent
-    if spreads:
-        modified_spreads = agent.run(spreads, current_date=today)  # Pass current date to agent
-        # Only update spreads that were modified by the agent
+    # Process through trading agent
+    if existing_spreads:
+        modified_spreads = agent.run(existing_spreads, current_date=today)
         for spread in modified_spreads:
             dynamodb.set_spreads(spread=spread)
             logger.debug(f"Updated spread {spread.spread_guid} status: {spread.agent_status}")

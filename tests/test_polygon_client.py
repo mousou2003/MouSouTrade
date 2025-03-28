@@ -111,6 +111,19 @@ class TestPolygonClient(unittest.TestCase):
         for contract in option_contracts:
             self.assertTrue(contract['ticker'].startswith('O:AAPL'))
 
+    def test_get_option_contracts_call(self):
+        option_contracts = self.client.get_option_contracts(
+            'AAPL',
+            expiration_date_gte=self.expiration_date_gte,
+            expiration_date_lte=self.expiration_date_lte,
+            contract_type='call',
+            order='asc'
+        )
+        self.assertIsNotNone(option_contracts)
+        self.assertTrue(len(option_contracts) > 0)
+        for contract in option_contracts:
+            self.assertTrue(contract['ticker'].startswith('O:AAPL'))
+
     def test_get_option_snapshot(self):
         contracts = self.client.get_option_contracts(
             'AAPL',

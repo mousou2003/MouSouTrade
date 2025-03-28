@@ -31,7 +31,8 @@ class IMarketDataClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
+    def get_option_contracts(self, underlying_ticker, expiration_date_gte=None, expiration_date_lte=None, contract_type=None, order=None,strike_price_gte=None,
+                             strike_price_lte=None):
         raise NotImplementedError
 
     @abstractmethod

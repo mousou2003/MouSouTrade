@@ -54,7 +54,9 @@ class PolygonClient(BaseMarketDataClient):
         logger.debug(f"get_option_previous_close response: {response}")
         return [self._convert_to_dict(agg) for agg in response]
 
-    def get_option_contracts(self, underlying_ticker, expiration_date_gte=None, expiration_date_lte=None, contract_type=None, order=None):
+    def get_option_contracts(self, underlying_ticker, expiration_date_gte=None, expiration_date_lte=None, 
+                             contract_type=None, order=None, strike_price_gte=None,
+                             strike_price_lte=None):
         self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
         response: Iterator[polygon.reference.OptionsContract] = self.options_client.list_options_contracts(
                 underlying_ticker=underlying_ticker,
@@ -62,7 +64,9 @@ class PolygonClient(BaseMarketDataClient):
                 expiration_date_lte=expiration_date_lte,
                 contract_type=contract_type,
                 order=order,
-                sort="expiration_date"
+                strike_price_gte=strike_price_gte,
+                strike_price_lte=strike_price_lte,
+                sort="strike_price"
             )
         contracts = [self._convert_to_dict(contract) for contract in response]
         logger.debug(f"get_option_contracts response: {contracts}")

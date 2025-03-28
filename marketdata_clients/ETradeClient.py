@@ -94,7 +94,8 @@ class ETradeClient(BaseMarketDataClient):
             raise ValueError("Empty or invalid XML response")
         return self._parse_snapshot(root.find('.//QuoteData'))
 
-    def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order):
+    def get_option_contracts(self, underlying_ticker, expiration_date_gte, expiration_date_lte, contract_type, order,strike_price_gte=None,
+                             strike_price_lte=None):
         self._wait_for_no_throttle(self.OPTION_THROTTLE_LIMIT)
         return None
 
