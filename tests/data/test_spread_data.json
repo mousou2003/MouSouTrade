@@ -444,6 +444,10 @@
         "expiration_date": "2024-12-20",
         "test_contracts": {
             "calls": [
+                {"ticker": "SPY240419C380", "strike": 380.00, "contract_type": "call", "expiration": "2024-12-20",
+                    "snapshot": {"bid": 52.45, "ask": 52.55, "volume": 50, "open_interest": 100, "implied_volatility": 0.35, "delta": 0.99, "close": 52.50, "last_trade": 52.50}},
+                {"ticker": "SPY240419C400", "strike": 400.00, "contract_type": "call", "expiration": "2024-12-20",
+                    "snapshot": {"bid": 32.45, "ask": 32.55, "volume": 100, "open_interest": 200, "implied_volatility": 0.33, "delta": 0.95, "close": 32.50, "last_trade": 32.50}},
                 {"ticker": "SPY240419C420", "strike": 420.00, "contract_type": "call", "expiration": "2024-12-20",
                     "snapshot": {"bid": 12.45, "ask": 12.55, "volume": 500, "open_interest": 1000, "implied_volatility": 0.30, "delta": 0.85, "close": 12.50, "last_trade": 12.50}},
                 {"ticker": "SPY240419C425", "strike": 425.00, "contract_type": "call", "expiration": "2024-12-20",
@@ -457,9 +461,17 @@
                 {"ticker": "SPY240419C445", "strike": 445.00, "contract_type": "call", "expiration": "2024-12-20",
                     "snapshot": {"bid": 2.95, "ask": 3.05, "volume": 500, "open_interest": 1000, "implied_volatility": 0.30, "delta": 0.25, "close": 3.00, "last_trade": 3.00}},
                 {"ticker": "SPY240419C450", "strike": 450.00, "contract_type": "call", "expiration": "2024-12-20",
-                    "snapshot": {"bid": 1.95, "ask": 2.05, "volume": 500, "open_interest": 1000, "implied_volatility": 0.30, "delta": 0.15, "close": 2.00, "last_trade": 2.00}}
+                    "snapshot": {"bid": 1.95, "ask": 2.05, "volume": 500, "open_interest": 1000, "implied_volatility": 0.30, "delta": 0.15, "close": 2.00, "last_trade": 2.00}},
+                {"ticker": "SPY240419C470", "strike": 470.00, "contract_type": "call", "expiration": "2024-12-20",
+                    "snapshot": {"bid": 0.45, "ask": 0.55, "volume": 100, "open_interest": 200, "implied_volatility": 0.33, "delta": 0.05, "close": 0.50, "last_trade": 0.50}},
+                {"ticker": "SPY240419C490", "strike": 490.00, "contract_type": "call", "expiration": "2024-12-20",
+                    "snapshot": {"bid": 0.05, "ask": 0.15, "volume": 50, "open_interest": 100, "implied_volatility": 0.35, "delta": 0.01, "close": 0.10, "last_trade": 0.10}}
             ],
             "puts": [
+                {"ticker": "SPY240419P380", "strike": 380.00, "contract_type": "put", "expiration": "2024-12-20",
+                    "snapshot": {"bid": 0.05, "ask": 0.15, "volume": 50, "open_interest": 100, "implied_volatility": 0.35, "delta": -0.01, "close": 0.10, "last_trade": 0.10}},
+                {"ticker": "SPY240419P400", "strike": 400.00, "contract_type": "put", "expiration": "2024-12-20",
+                    "snapshot": {"bid": 0.45, "ask": 0.55, "volume": 100, "open_interest": 200, "implied_volatility": 0.33, "delta": -0.05, "close": 0.50, "last_trade": 0.50}},
                 {"ticker": "SPY240419P420", "strike": 420.00, "contract_type": "put", "expiration": "2024-12-20",
                     "snapshot": {"bid": 2.85, "ask": 2.95, "volume": 500, "open_interest": 1000, "implied_volatility": 0.30, "delta": -0.15, "close": 3.00, "last_trade": 3.00}},
                 {"ticker": "SPY240419P425", "strike": 425.00, "contract_type": "put", "expiration": "2024-12-20",
@@ -473,7 +485,11 @@
                 {"ticker": "SPY240419P445", "strike": 445.00, "contract_type": "put", "expiration": "2024-12-20",
                     "snapshot": {"bid": 10.45, "ask": 10.55, "volume": 500, "open_interest": 1000, "implied_volatility": 0.30, "delta": -0.75, "close": 10.50, "last_trade": 10.50}},
                 {"ticker": "SPY240419P450", "strike": 450.00, "contract_type": "put", "expiration": "2024-12-20",
-                    "snapshot": {"bid": 12.95, "ask": 13.05, "volume": 500, "open_interest": 1000, "implied_volatility": 0.30, "delta": -0.85, "close": 13.00, "last_trade": 13.00}}
+                    "snapshot": {"bid": 12.95, "ask": 13.05, "volume": 500, "open_interest": 1000, "implied_volatility": 0.30, "delta": -0.85, "close": 13.00, "last_trade": 13.00}},
+                {"ticker": "SPY240419P470", "strike": 470.00, "contract_type": "put", "expiration": "2024-12-20",
+                    "snapshot": {"bid": 32.45, "ask": 32.55, "volume": 100, "open_interest": 200, "implied_volatility": 0.33, "delta": -0.95, "close": 32.50, "last_trade": 32.50}},
+                {"ticker": "SPY240419P490", "strike": 490.00, "contract_type": "put", "expiration": "2024-12-20",
+                    "snapshot": {"bid": 52.45, "ask": 52.55, "volume": 50, "open_interest": 100, "implied_volatility": 0.35, "delta": -0.99, "close": 52.50, "last_trade": 52.50}}
             ]
         }
     }

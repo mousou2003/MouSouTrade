@@ -481,6 +481,77 @@ class TestVerticalSpreadStrikeSelection(unittest.TestCase):
             self.assertLess(result.net_premium, 0,
                 "Net premium should be negative for debit spreads")
             logger.debug("✅ Successfully completed spread premium calculation test")
+
+    def test_no_deep_itm_otm_selection(self):
+        """Test that deep ITM and OTM options are not selected for spreads"""
+        self._setup_test_data('strike_selection_test')
+        logger.debug("Starting test_no_deep_itm_otm_selection")
+
+        # Test all strategy/direction combinations
+        test_cases = [
+            (DirectionType.BULLISH, StrategyType.DEBIT, self.call_contracts),
+            (DirectionType.BEARISH, StrategyType.DEBIT, self.put_contracts),
+            (DirectionType.BULLISH, StrategyType.CREDIT, self.put_contracts),
+            (DirectionType.BEARISH, StrategyType.CREDIT, self.call_contracts)
+        ]
+
+        for direction, strategy, contracts in test_cases:
+            logger.debug(f"Testing {direction.value} {strategy.value}")
+            
+            result = VerticalSpreadMatcher.match_option(
+                self.options_snapshots,
+                self.underlying_ticker,
+                direction,
+                strategy,
+                self.previous_close,
+                self.expiration_date,
+                contracts
+            )
+            
+            # Set test selector before evaluating
+            result.contract_selector = self.test_selector
+            
+            self.assertTrue(result.matched, f"{direction.value} {strategy.value} spread should find valid options")
+            
+            # Check that neither contract is deep ITM or OTM
+            for contract in [result.long_contract, result.short_contract]:
+                snapshot = self.options_snapshots[contract.ticker]
+                delta = abs(snapshot.greeks.delta)
+                
+                # Deep ITM options have delta > 0.90
+                self.assertLess(delta, Decimal('0.90'),
+                    f"{contract.ticker} has delta {delta}, which is too deep ITM")
+                
+                # Deep OTM options have delta < 0.10
+                self.assertGreater(delta, Decimal('0.10'),
+                    f"{contract.ticker} has delta {delta}, which is too deep OTM")
+        
+        logger.debug("✅ Successfully completed deep ITM/OTM exclusion test")
+
+    def test_deep_itm_otm_volume_validation(self):
+        """Test that deep ITM and OTM options with low volume are properly filtered"""
+        self._setup_test_data('strike_selection_test')
+        logger.debug("Starting test_deep_itm_otm_volume_validation")
+
+        # Get lists of deep ITM/OTM contracts
+        deep_itm_calls = [c for c in self.call_contracts if self.options_snapshots[c.ticker].greeks.delta > Decimal('0.90')]
+        deep_otm_calls = [c for c in self.call_contracts if self.options_snapshots[c.ticker].greeks.delta < Decimal('0.10')]
+        deep_itm_puts = [c for c in self.put_contracts if abs(self.options_snapshots[c.ticker].greeks.delta) > Decimal('0.90')]
+        deep_otm_puts = [c for c in self.put_contracts if abs(self.options_snapshots[c.ticker].greeks.delta) < Decimal('0.10')]
+
+        # Verify we found some deep ITM/OTM contracts
+        self.assertGreater(len(deep_itm_calls + deep_otm_calls + deep_itm_puts + deep_otm_puts), 0,
+                          "Test data should include deep ITM/OTM contracts")
+
+        # Verify all deep ITM/OTM contracts have lower volume
+        for contract in (deep_itm_calls + deep_otm_calls + deep_itm_puts + deep_otm_puts):
+            snapshot = self.options_snapshots[contract.ticker]
+            self.assertLessEqual(snapshot.day.volume, 100,
+                f"Deep ITM/OTM contract {contract.ticker} should have low volume (<=100)")
+            self.assertLessEqual(snapshot.day.open_interest, 200,
+                f"Deep ITM/OTM contract {contract.ticker} should have low open interest (<=200)")
+
+        logger.debug("✅ Successfully completed deep ITM/OTM volume validation test")
     
                     
 if __name__ == '__main__':

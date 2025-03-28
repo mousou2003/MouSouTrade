@@ -65,6 +65,10 @@ class Options:
         self.r = r  # Risk-free interest rate (5%)
         self.sigma = sigma  # Implied volatility (20%)
 
+    # Add deep ITM/OTM bounds as class constants
+    DEEP_ITM_DELTA = Decimal('0.90')  # Deltas above this are too deep ITM
+    DEEP_OTM_DELTA = Decimal('0.10')  # Deltas below this are too deep OTM
+
     @staticmethod
     def get_third_friday_of_month(year, month):
         """Calculates the date of the third Friday of a given month and year."""
@@ -136,119 +140,76 @@ class Options:
 
     @staticmethod
     def calculate_probability_of_profit(current_price: Decimal, breakeven_price: Decimal, 
-                                        days_to_expiration: int, implied_volatility: Decimal) -> Decimal:
-        """
-        Calculate probability of profit based on price, implied volatility, and time to expiration.
-        
-        Args:
-            current_price: Current price of the underlying
-            breakeven_price: Breakeven price for the trade
-            days_to_expiration: Days until option expiration
-            implied_volatility: IV as a decimal (e.g., 0.30 for 30%)
-            
-        Returns:
-            Probability of profit as a percentage (0-100)
-        """
+                                      days_to_expiration: int, implied_volatility: Decimal,
+                                      is_debit_spread: bool = False) -> Decimal:
+        """Calculate probability of profit based on price, implied volatility, and time to expiration."""
         try:
             # Ensure inputs are valid
             if days_to_expiration <= 0:
                 logger.warning(f"Invalid days_to_expiration: {days_to_expiration}. Using default of 30.")
                 days_to_expiration = 30
                 
-            # Sanity checks for implied_volatility - keep the check for zero/negative
             if implied_volatility <= Decimal('0'):
                 logger.warning(f"Invalid implied_volatility: {implied_volatility}. Using default of 0.3.")
                 implied_volatility = Decimal('0.3')
             
-            # For debit spreads, we need to factor in the fact that price needs to move favorably
-            # For credit spreads, we benefit from time decay and need price to stay within a range
-            
-            # Calculate distance to breakeven as a percentage of current price
             price_diff_pct = abs((breakeven_price - current_price) / current_price) * Decimal('100')
             
-            # Calculate standard deviation move based on IV and time
+            # Calculate std_deviations same for both types
             time_factor = Decimal(days_to_expiration) / Decimal('365')
-            annual_stddev_pct = implied_volatility * Decimal('100')  # Convert to percentage
+            annual_stddev_pct = implied_volatility * Decimal('100')
             period_stddev_pct = annual_stddev_pct * time_factor.sqrt()
             
-            # Calculate number of standard deviations to breakeven
-            if period_stddev_pct == Decimal('0'):
-                # Fallback if stddev calculation fails
-                std_deviations = Decimal('0.5')  # Default value
-                logger.warning(f"Standard deviation calculation resulted in zero. Using default of {std_deviations} std deviations.")
-            else:
-                std_deviations = price_diff_pct / period_stddev_pct
+            std_deviations = price_diff_pct / period_stddev_pct if period_stddev_pct != Decimal('0') else Decimal('0.5')
             
-            logger.debug(f"Price diff: {price_diff_pct:.2f}%, Period StdDev: {period_stddev_pct:.2f}%, "
-                       f"Std deviations to breakeven: {std_deviations:.2f}")
-            
-            # Apply a more relaxed model for the probability calculation without capping
-            # NOTE: This can result in very high probability values for deep OTM options
-            
-            # The closer the breakeven is (fewer std deviations away), the lower the probability of profit
+            # Use same base probability calculation for both types
             if std_deviations <= Decimal('0.25'):
-                # Very close to breakeven (high risk)
-                base_probability = Decimal('50') + (std_deviations * Decimal('40'))  # 50-60% range
+                base_probability = Decimal('40') + (std_deviations * Decimal('40'))  # 40-50% range
             elif std_deviations <= Decimal('0.75'):
-                # Moderately close to breakeven
-                base_probability = Decimal('60') + ((std_deviations - Decimal('0.25')) * Decimal('20'))  # 60-70% range
+                base_probability = Decimal('50') + ((std_deviations - Decimal('0.25')) * Decimal('20'))  # 50-60% range
             elif std_deviations <= Decimal('1.5'):
-                # Reasonable distance from breakeven
-                base_probability = Decimal('70') + ((std_deviations - Decimal('0.75')) * Decimal('15'))  # 70-81.25% range
+                base_probability = Decimal('60') + ((std_deviations - Decimal('0.75')) * Decimal('15'))  # 60-71.25% range
             elif std_deviations <= Decimal('2.5'):
-                # Far from breakeven
-                base_probability = Decimal('81.25') + ((std_deviations - Decimal('1.5')) * Decimal('7.5'))  # 81.25-88.75% range
+                base_probability = Decimal('71.25') + ((std_deviations - Decimal('1.5')) * Decimal('7.5'))  # 71.25-78.75% range
             else:
-                # Very far from breakeven (low risk)
-                # Continue the progression without capping
-                base_probability = Decimal('88.75') + ((std_deviations - Decimal('2.5')) * Decimal('4.5'))
-            
-            # Apply additional factors based on days to expiration
+                base_probability = Decimal('78.75') + ((std_deviations - Decimal('2.5')) * Decimal('4.5'))
+
+            # Apply smaller time adjustments
             time_factor_adjustment = Decimal('0')
-            
-            if days_to_expiration < 14:  # Very short-dated
-                time_factor_adjustment = Decimal('5')  # +5% for short duration
-            elif days_to_expiration > 60:  # Longer-dated
-                time_factor_adjustment = Decimal('-5')  # -5% for long duration
-            
-            # Final probability calculation
+            if days_to_expiration < 14:
+                time_factor_adjustment = Decimal('3')  # +3% for short duration
+            elif days_to_expiration > 60:
+                time_factor_adjustment = Decimal('-3')  # -3% for long duration
+
             result = base_probability + time_factor_adjustment
-            
-            # Log the calculation details
-            logger.debug(f"POP calculation: Base={base_probability}, Time adjustment={time_factor_adjustment}, Final={result}")
-            
-            # Log unusually high or low values but don't cap them
-            if result < Decimal('30'):
-                logger.warning(f"Unusually low probability calculated: {result}%")
-            elif result > Decimal('95'):
-                logger.warning(f"Unusually high probability calculated: {result}%")
-            
+
+            # Cap probabilities based on strategy
+            if is_debit_spread:
+                result = min(result, Decimal('65'))  # Allow slightly higher for debit spreads
+            else:
+                result = min(result, Decimal('85'))  # Cap credit spreads higher
+
             return result
                 
         except Exception as e:
             logger.error(f"Error calculating probability of profit: {str(e)}")
-            # Return a reasonable default based on typical option strategies
-            return Decimal('60')
+            return Decimal('50')  # Return middle probability as default
 
     @staticmethod
-    def get_delta_range(trade_strategy: TradeStrategy):
-        """
-        Provides typical delta ranges for vertical spreads based on the trading strategy.
+    def get_delta_range(strategy: TradeStrategy) -> Tuple[Decimal, Decimal]:
+        """Get appropriate delta range based on trade strategy.
         
-        Parameters:
-        trade_strategy : TradeStrategy : The trading strategy (TradeStrategy.HIGH_PROBABILITY, TradeStrategy.BALANCED, TradeStrategy.DIRECTIONAL)
+        Delta ranges:
+        - DIRECTIONAL: Higher delta for ATM/ITM options (0.40-0.70)
+        - HIGH_PROBABILITY: Lower delta for OTM options (0.20-0.35)
         
         Returns:
-        tuple : A tuple containing the lower and upper bounds of the delta range
+            Tuple[Decimal, Decimal]: (lower_bound, upper_bound) for delta values
         """
-        if trade_strategy == TradeStrategy.HIGH_PROBABILITY:
-            return (Decimal('0.10'), Decimal('0.30'))
-        elif trade_strategy == TradeStrategy.BALANCED:
-            return (Decimal('0.30'), Decimal('0.50'))
-        elif trade_strategy == TradeStrategy.DIRECTIONAL:
-            return (Decimal('0.50'), Decimal('0.70'))
-        else:
-            raise ValueError("Invalid trade strategy. Choose from TradeStrategy.HIGH_PROBABILITY, TradeStrategy.BALANCED, or TradeStrategy.DIRECTIONAL.")
+        if strategy == TradeStrategy.DIRECTIONAL:
+            return (Decimal('0.40'), Decimal('0.70'))
+        else:  # HIGH_PROBABILITY
+            return (Decimal('0.20'), Decimal('0.35'))
 
     @staticmethod
     def calculate_standard_deviation(current_price: Decimal, iv: Decimal, days_to_expiration: Decimal) -> Decimal:
@@ -263,34 +224,29 @@ class Options:
         Returns:
         Decimal : Standard deviation of the underlying asset
         """
-        # Make sure to convert the result of np.sqrt to Decimal
         sqrt_result = Decimal(str(np.sqrt(float(days_to_expiration/Decimal('365')))))
         return current_price * iv * sqrt_result
 
     @staticmethod
     def identify_strike_price_type_by_delta(delta: Decimal, trade_strategy: TradeStrategy) -> StrikePriceType:
-        """
-        Identifies if the contract is ITM, ATM, or OTM based on the delta value and trade strategy.
+        """Identify strike price type based on delta value and trade strategy."""
+        abs_delta = abs(delta)
+        if abs_delta >= Options.DEEP_ITM_DELTA:
+            return StrikePriceType.EXCLUDED  # Too deep ITM
+        if abs_delta <= Options.DEEP_OTM_DELTA:
+            return StrikePriceType.EXCLUDED  # Too deep OTM
 
-        Parameters:
-        delta : Decimal : The delta value of the option (-1 to 1)
-        trade_strategy : TradeStrategy : The trading strategy
-
-        Returns:
-        StrikePriceType : The type of the contract (ITM, ATM, or OTM)
-        """
         lower_bound, upper_bound = Options.get_delta_range(trade_strategy)
-        abs_delta = abs(delta)  # Convert delta to absolute value for comparison
         
-        # Use absolute delta values for comparison:
-        # Call deltas: 0 to 1 (OTM to ITM)
-        # Put deltas: -1 to 0 (ITM to OTM)
-        if abs_delta >= upper_bound:
-            return StrikePriceType.ITM
-        elif abs_delta <= lower_bound:  
-            return StrikePriceType.OTM
-        else:
-            return StrikePriceType.ATM
+        if lower_bound <= abs_delta <= upper_bound:
+            if abs_delta >= Decimal('0.45'):
+                return StrikePriceType.ATM
+            else:
+                return StrikePriceType.OTM
+        elif abs_delta > upper_bound:
+            return StrikePriceType.ITM  # Higher delta than upper bound = ITM
+        
+        return StrikePriceType.EXCLUDED
 
     @staticmethod
     def identify_strike_price_by_current_price(strike_price: Decimal, current_price: Decimal, contract_type: ContractType, threshold: Decimal = Decimal('0.02')) -> StrikePriceType:
@@ -306,58 +262,44 @@ class Options:
         Returns:
         StrikePriceType : The type of the strike price (ITM, ATM, or OTM)
         """
-        # Calculate percentage difference from current price
         percent_diff = abs(strike_price - current_price) / current_price
         
-        # If within threshold, consider it ATM
         if percent_diff <= threshold:
             return StrikePriceType.ATM
         
         if contract_type.value == ContractType.CALL.value:
-            # For calls: strike < current = ITM, strike > current = OTM
             return StrikePriceType.ITM if strike_price < current_price else StrikePriceType.OTM
         else:  # PUT
-            # For puts: strike > current = ITM, strike < current = OTM
             return StrikePriceType.ITM if strike_price > current_price else StrikePriceType.OTM
 
     @staticmethod
     def calculate_optimal_spread_width(current_price: Decimal, strategy: StrategyType, direction: DirectionType) -> Decimal:
         """Calculate optimal spread width based on price and strategy."""
         
-        # Base width is 5% of current price
         base_width = current_price * Decimal('0.05')
         
-        # Adjust width based on strategy
         if strategy == StrategyType.CREDIT:
             if direction == DirectionType.BULLISH:
-                # Bull put - wider spreads
                 width = base_width * Decimal('1.2') 
             else:
-                # Bear call - narrower spreads
                 width = base_width * Decimal('0.8')
         else:  # DEBIT
             if direction == DirectionType.BULLISH:
-                # Bull call - wider spreads
                 width = base_width * Decimal('1.2')
             else:
-                # Bear put - narrower spreads
                 width = base_width * Decimal('0.8')
         
-        # Round to standard width
         return Options.round_to_standard_width(width)
 
     @staticmethod 
     def get_width_config(current_price: Decimal, strategy: StrategyType, direction: DirectionType) -> Tuple[Decimal, Decimal, Decimal]:
         """Get min, max and optimal width configuration."""
         
-        # Calculate min/max as percentages of price
         min_width = current_price * Decimal('0.025')  # 2.5%
         max_width = current_price * Decimal('0.15')   # 15%
         
-        # Get optimal width without recursion
         optimal_width = Options.calculate_optimal_spread_width(current_price, strategy, direction)
         
-        # Round all widths to standard increments
         min_width = Options.round_to_standard_width(min_width)
         max_width = Options.round_to_standard_width(max_width)
         
@@ -434,5 +376,4 @@ class Options:
         if width <= 0:
             return Decimal('1')  # Minimum standard width
             
-        # Find closest standard width
         return min(standard_widths, key=lambda x: abs(x - width))

@@ -482,13 +482,17 @@ class VerticalSpread(SpreadDataModel):
         return True
 
     @staticmethod
-    def _calculate_probability_of_profit(spread: 'VerticalSpread', days_to_expiration: int) -> Optional[Decimal]:
-        """Calculate probability of profit using implied volatility and time to expiration."""
-        logger.debug("Entering _calculate_probability_of_profit")
+    def _calculate_probability_of_profit(spread, days_to_expiration: int) -> Decimal:
+        """Calculate probability of profit for a spread."""
         implied_volatility = spread.first_leg_snapshot.implied_volatility * spread.second_leg_snapshot.implied_volatility
-        result = Options.calculate_probability_of_profit(spread.previous_close, spread.breakeven, days_to_expiration, implied_volatility)
-        logger.debug("Exiting _calculate_probability_of_profit")
-        return result
+        breakeven_price = spread.breakeven
+        return Options.calculate_probability_of_profit(
+            current_price=spread.previous_close,
+            breakeven_price=breakeven_price,
+            days_to_expiration=days_to_expiration,
+            implied_volatility=implied_volatility,
+            is_debit_spread=(spread.strategy == StrategyType.DEBIT)  # Add spread type flag
+        )
 
 class CreditSpread(VerticalSpread):
 

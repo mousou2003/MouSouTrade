@@ -56,22 +56,43 @@ class ContractSelector:
                          option_type: ContractType, contract: Contract, 
                          snapshot: Snapshot, trade_strategy: TradeStrategy) -> StrikePriceType:
         """Determine if an option is ITM, ATM, or OTM based on multiple criteria."""
-        
-        # Check if strike is too far (>10%) from current price
-        if abs(strike - current_price) > (current_price * Decimal('0.10')):
+        if not snapshot:
+            return StrikePriceType.EXCLUDED
+        if not snapshot.day.close:
+            logger.debug(f"Missing close price for {contract.ticker}. Skipping.")
+            snapshot.confidence_level = 0
             return StrikePriceType.EXCLUDED
             
-        # Get standard widths and use first one for ATM range
-        atm_range = self.get_standard_widths(current_price)[0]
-
-        if abs(strike - current_price) <= atm_range:
-            return StrikePriceType.ATM
+        if not snapshot.implied_volatility:
+            logger.debug(f"Missing implied volatility for {contract.ticker}. Skipping.")
+            snapshot.confidence_level = 0
+            return StrikePriceType.EXCLUDED
             
-        if option_type == ContractType.CALL:
-            return StrikePriceType.ITM if strike < current_price else StrikePriceType.OTM
-        else:  # PUT
-            return StrikePriceType.ITM if strike > current_price else StrikePriceType.OTM
+        if not snapshot.greeks.delta:
+            logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
+            snapshot.confidence_level = 0
+            return StrikePriceType.EXCLUDED
+        
+        # If no delta data or no strike price type, fall back to just contract type matching
+        if not snapshot.day.open_interest:
+            logger.debug(f"Missing open interest for {contract.ticker}. Skipping.")
+            snapshot.confidence_level = 0
+            return StrikePriceType.EXCLUDED
 
+        if not snapshot.day.volume:
+            logger.debug(f"Missing volume for {contract.ticker}. Skipping.")
+            snapshot.confidence_level = 0
+            return StrikePriceType.EXCLUDED    
+
+        # Check if strike is too far (>10%) from current price if provided
+        if strike is not None and current_price is not None:
+            if abs(strike - current_price) > (current_price * Decimal('0.10')):
+                return StrikePriceType.EXCLUDED    
+
+        return Options.identify_strike_price_type_by_delta(
+            delta=snapshot.greeks.delta,
+            trade_strategy=trade_strategy
+        )
 
     def _determine_trade_strategy(self, strategy: StrategyType, direction: DirectionType, is_first_leg: bool) -> TradeStrategy:
         """Determine appropriate trade strategy based on spread type and leg position.
@@ -108,16 +129,6 @@ class ContractSelector:
             else:  # Bearish
                 contract_type_match = contract.contract_type == ContractType.CALL
 
-        # Then check delta-based criteria
-        # if snapshot and snapshot.greeks and snapshot.greeks.delta and contract.strike_price_type:
-        #     check_by_delta = Options.identify_strike_price_type_by_delta(
-        #         delta=snapshot.greeks.delta,
-        #         trade_strategy=trade_strategy
-        #     )
-        #     # Contract must match both type and delta criteria
-        #     return contract_type_match and check_by_delta.name == contract.strike_price_type.name
-        
-        # If no delta data or no strike price type, fall back to just contract type matching
         return contract_type_match
 
     def select_contracts(
@@ -138,34 +149,7 @@ class ContractSelector:
         
         for contract in contracts:
             snapshot:Snapshot = options_snapshots.get(contract.ticker)
-            if not snapshot:
-                continue
-            if not snapshot.day.close:
-                logger.debug(f"Missing close price for {contract.ticker}. Skipping.")
-                snapshot.confidence_level = 0
-                continue
-                
-            if not snapshot.implied_volatility:
-                logger.debug(f"Missing implied volatility for {contract.ticker}. Skipping.")
-                snapshot.confidence_level = 0
-                continue
-                
-            if not snapshot.greeks.delta:
-                logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
-                snapshot.confidence_level = 0
-                continue
-
-            if not snapshot.day.open_interest:
-                logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
-                snapshot.confidence_level = 0
-                continue
-
-            if not snapshot.day.volume:
-                logger.debug(f"Missing delta for {contract.ticker}. Skipping.")
-                snapshot.confidence_level = 0
-                continue
-
-
+            
             contract.strike_price_type = self._get_price_status(
                 strike=contract.strike_price,
                 current_price=current_price,
