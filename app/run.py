@@ -47,8 +47,8 @@ logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
 logging.getLogger('engine.ContractSelector').setLevel(logging.DEBUG)
 logging.getLogger('engine.ContractSelector').addHandler(handler)
-#logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
-#logging.getLogger('engine.VerticalSpread').addHandler(handler)
+logging.getLogger('engine.VerticalSpread').setLevel(logging.DEBUG)
+logging.getLogger('engine.VerticalSpread').addHandler(handler)
 # # logging.getLogger('engine.Options').setLevel(logging.DEBUG)
 # logging.getLogger('engine.Options').addHandler(handler)
 # logging.getLogger('engine.Stocks').setLevel(logging.INFO)
@@ -66,6 +66,8 @@ class MissingEnvironmentVariableException(Exception):
 
 class ConfigurationFileException(Exception):
     pass
+
+MINIMUM_SPREAD_SCORE = 60
 
 def check_environment_variables(required_env_vars):
     env_vars = {var: os.getenv(var) for var in required_env_vars}
@@ -95,6 +97,45 @@ def build_options_snapshots(market_data_client: IMarketDataClient, contracts: li
             logger.warning(f"{type(e).__name__} - {e}\n {e.inner_exception}")
             raise
     return options_snapshots
+
+def query_option_contracts(market_data_client: IMarketDataClient, stock :Stock, 
+                           target_expiration_date: date, strategy: StrategyType,
+                           direction: DirectionType):
+    min_width, max_width, _ = Options.get_width_config(current_price=stock.close ,strategy=strategy, direction=direction)
+    order = Options.get_order(strategy=strategy, direction=direction)
+
+    # For Bullish Credit Put Spread (Bull Put)
+    if strategy == StrategyType.CREDIT and direction == DirectionType.BULLISH:
+        strike_price_lte = stock.close + min_width  # Sell put below current price
+        strike_price_gte = stock.close - max_width  # Buy put further below current price
+
+    # For Bullish Debit Call Spread (Bull Call)
+    elif strategy == StrategyType.DEBIT and direction == DirectionType.BULLISH:
+        strike_price_lte = stock.close + max_width  # Sell call above current price
+        strike_price_gte = stock.close - min_width  # Buy call near current price
+
+    # For Bearish Credit Call Spread (Bear Call)
+    elif strategy == StrategyType.CREDIT and direction == DirectionType.BEARISH:
+        strike_price_lte = stock.close + max_width  # Buy call further above current price
+        strike_price_gte = stock.close - min_width  # Sell call above current price
+
+    # For Bearish Debit Put Spread (Bear Put)
+    else:  # StrategyType.DEBIT and DirectionType.BEARISH
+        strike_price_lte = stock.close + min_width  # Sell put below current price
+        strike_price_gte = stock.close - max_width  # Buy put further below current price
+
+    contracts = market_data_client.get_option_contracts(
+        underlying_ticker=str(stock.ticker),
+        expiration_date_gte=(target_expiration_date - timedelta(days=6)).strftime('%Y-%m-%d'),
+        expiration_date_lte=target_expiration_date.strftime('%Y-%m-%d'),
+        contract_type=Options.get_contract_type(strategy, direction).value,
+        order=order.value,
+        strike_price_lte=strike_price_lte,
+        strike_price_gte=strike_price_gte,
+    )
+
+    return contracts
+
 
 def process_stock(market_data_client: IMarketDataClient, stock: Stock,
                  stock_number: int, number_of_stocks: int,
@@ -130,16 +171,8 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
         for strategy in [StrategyType.CREDIT, StrategyType.DEBIT]:
             if (direction, strategy) not in processed_combinations:
                 need_new_spreads = True
-                _, max_width, _ = Options.get_width_config(current_price=stock.close ,strategy=strategy, direction=direction)
-                contracts = market_data_client.get_option_contracts(
-                    underlying_ticker=str(stock.ticker),
-                    expiration_date_gte=(target_expiration_date - timedelta(days=6)).strftime('%Y-%m-%d'),
-                    expiration_date_lte=target_expiration_date.strftime('%Y-%m-%d'),
-                    contract_type=Options.get_contract_type(strategy, direction).value,
-                    order=Options.get_order(strategy=strategy, direction=direction).value,
-                    strike_price_gte=stock.close - max_width,
-                    strike_price_lte=stock.close + max_width
-                )
+                contracts = query_option_contracts(market_data_client=market_data_client, stock=stock,
+                    target_expiration_date=target_expiration_date, strategy=strategy, direction=direction)
                 all_contracts.extend(contracts)
     
     # Get snapshots if we have contracts
@@ -195,18 +228,25 @@ def process_stock(market_data_client: IMarketDataClient, stock: Stock,
                     contracts=all_contracts
                 )
                 
+                # Add score check before processing spread
                 if spread_result and spread_result.matched:
-                    spread_result.stock = stock
-                    logger.info(f"Found matching {strategy.value} {direction.value} spread for {stock.ticker}")
-                    success, guid = dynamodb.set_spreads(spread=spread_result)
-                    if success:
-                        logger.info(f"Successfully saved spread {guid} to database")
-                        spreads.append(spread_result)
-                        generated_count += 1
-
-    # Process through trading agent
+                    
+                        spread_result.stock = stock
+                        logger.info(f"Found matching {strategy.value} {direction.value} spread for {stock.ticker} with score {spread_result.adjusted_score}")
+                        success, guid = dynamodb.set_spreads(spread=spread_result)
+                        if success:
+                            logger.info(f"Successfully saved spread {guid} to database")
+                            spreads.append(spread_result)
+                            generated_count += 1
+                    
+    logger.info("Processing spreads through trading agent")
     if existing_spreads:
-        modified_spreads = agent.run(existing_spreads, current_date=today)
+        for spread in existing_spreads:
+            if spread.adjusted_score >= MINIMUM_SPREAD_SCORE:
+                modified_spreads = agent.run([spread], current_date=today)
+            else:
+                logger.info(f"Skipping spread with score {spread.adjusted_score} (minimum required: {MINIMUM_SPREAD_SCORE})")
+
         for spread in modified_spreads:
             dynamodb.set_spreads(spread=spread)
             logger.debug(f"Updated spread {spread.spread_guid} status: {spread.agent_status}")
