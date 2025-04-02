@@ -11,6 +11,7 @@ COPY ./.aws /root/.aws/
 COPY ./config config 
 
 # Define build arguments
+ARG APP_CODE_PATHS="engine marketdata_clients database agents"
 ARG AWS_PROFILE
 ARG AWS_ACCESS_KEY_ID
 ARG AWS_SECRET_ACCESS_KEY
@@ -19,12 +20,27 @@ ARG DYNAMODB_ENDPOINT_URL
 ARG MOUSOUTRADE_CONFIG_FILE
 ARG MOUSOUTRADE_STAGE
 ARG MOUSOUTRADE_VERSION
-ENV PYTHONPATH=/app:/app/engine:/app/marketdata_clients:/app/database:/app/agents
 ARG WEBSITE_PORT
 ARG DYNAMODB_PORT
 ARG PROJECT_NAME
 ARG MOUSOUTRADE_CLIENTS
 ENV TZ="America/Los_Angeles"
+
+# Set environment variables
+ENV AWS_PROFILE=$AWS_PROFILE
+ENV APP_CODE_PATHS=$APP_CODE_PATHS
+ENV AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+ENV AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+ENV AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION
+ENV DYNAMODB_ENDPOINT_URL=$DYNAMODB_ENDPOINT_URL
+ENV MOUSOUTRADE_CONFIG_FILE=$MOUSOUTRADE_CONFIG_FILE
+ENV MOUSOUTRADE_STAGE=$MOUSOUTRADE_STAGE
+ENV MOUSOUTRADE_VERSION=$MOUSOUTRADE_VERSION
+ENV WEBSITE_PORT=$WEBSITE_PORT
+ENV DYNAMODB_PORT=$DYNAMODB_PORT
+ENV PROJECT_NAME=$PROJECT_NAME
+ENV TZ="America/Los_Angeles"
+ENV MOUSOUTRADE_CLIENTS=$MOUSOUTRADE_CLIENTS
 
 # System setup
 RUN apt-get update && \
@@ -42,32 +58,35 @@ RUN apt-get update && \
     echo $TZ > /etc/timezone
 
 # Application setup with pip
-COPY ./app/setup_venv_env.sh /app/
-RUN chmod +x /app/setup_venv_env.sh && \
-    mkdir -p /app/venv && \
-    chmod 755 /app/venv && \
-    python -m venv /app/venv && \
-    chmod -R 755 /app/venv && \
-    . /app/venv/bin/activate && \
-    pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements-run-app.txt && \
-    /app/setup_venv_env.sh
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-run-app.txt
+COPY ./app .
 
-# Copy startup script
+# Copy and setup scripts
+COPY ./app/setup_env.sh /app/
 COPY ./app/startup.sh /app/
-RUN chmod +x /app/startup.sh
+RUN chmod +x /app/setup_env.sh && \
+    chmod +x /app/startup.sh
 
 # Cron setup
 RUN chmod 0644 /etc/cron.d/app-cron && \
     crontab /etc/cron.d/app-cron && \
     touch /var/log/cron.log
 
-# Frequently changed application code
-COPY ./app . 
-COPY ./engine engine 
-COPY ./marketdata_clients marketdata_clients 
-COPY ./database database 
-COPY ./agents agents
+# Copy code from staging
+COPY ./build/staging/. /app/
+
+
+# Verify directories
+RUN echo "Verifying code directories:" && \
+    for path in ${APP_CODE_PATHS}; do \
+        if [ ! -d "/app/$path" ]; then \
+            echo "ERROR: Directory /app/$path not found" && exit 1; \
+        else \
+            echo "Found directory /app/$path:" && \
+            ls -la "/app/$path"; \
+        fi \
+    done
 
 # Run cron and startup script
-CMD /app/startup.sh & cron && tail -f /var/log/cron.log
+CMD ["/bin/bash", "-c", "cron && /app/startup.sh"]
