@@ -60,7 +60,6 @@ RUN apt-get update && \
 # Application setup with pip
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements-run-app.txt
-COPY ./app .
 
 # Copy and setup scripts
 COPY ./app/setup_env.sh /app/

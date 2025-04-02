@@ -14,13 +14,6 @@ REM Set IMAGE_PUSH_ARG variables
 set WEBSITE_IMAGE_PUSH_ARG=%DOCKERHUB_USERNAME%/%WEBSITE_IMAGE_NAME%
 set APP_IMAGE_PUSH_ARG=%DOCKERHUB_USERNAME%/%APP_IMAGE_NAME%
 
-echo Building images...
-docker compose --env-file .env -f .\tools\docker-compose-build.yml --project-directory . build
-if %ERRORLEVEL% NEQ 0 (
-    echo Failed to build images.
-    exit /b %ERRORLEVEL%
-)
-
 echo Check if website image exists
 docker image inspect "%WEBSITE_IMAGE_PUSH_ARG%:latest" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (

@@ -36,8 +36,17 @@ for /f "tokens=1*" %%a in ("%dirs%") do (
     )
     set "dirs=%%b"
 )
+if exist ".\app" (
+    echo Copying .\app to staging...
+    xcopy ".\app" "%STAGING_DIR%" /E /I /Y
+) else (
+    echo Error: Directory .\app not found
+    exit /b 1
+)
+
 if defined dirs goto :process_dirs
-pause
+echo All directories copied to staging.
+
 echo Building images...
 set DOCKER_BUILDKIT=1
 docker compose --env-file .env -f .\tools\docker-compose-build.yml --project-directory . build
