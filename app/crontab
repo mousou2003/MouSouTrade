@@ -1,9 +1,3 @@
-CRON_TZ=America/Los_Angeles
-TZ=America/Los_Angeles
-
+# All times are in America/Los_Angeles timezone (PST/PDT)
 # Run the script at 2 AM PST/PDT on business days (Monday-Friday)
-# Redirect both stdout (1) and stderr (2) to the log file
 0 2 * * 1-5 /bin/bash -c 'source /app/venv/bin/activate && python /app/run.py 1>> /var/log/cron.log 2>> /var/log/cron.error.log'
-
-# Run once 30 seconds after container starts
-@reboot sleep 30 && /bin/bash -c 'source /app/venv/bin/activate && python /app/run.py 1>> /var/log/cron.log 2>> /var/log/cron.error.log'

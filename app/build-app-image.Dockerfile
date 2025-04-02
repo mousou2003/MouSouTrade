@@ -53,6 +53,10 @@ RUN chmod +x /app/setup_venv_env.sh && \
     pip install --no-cache-dir -r requirements-run-app.txt && \
     /app/setup_venv_env.sh
 
+# Copy startup script
+COPY ./app/startup.sh /app/
+RUN chmod +x /app/startup.sh
+
 # Cron setup
 RUN chmod 0644 /etc/cron.d/app-cron && \
     crontab /etc/cron.d/app-cron && \
@@ -65,5 +69,5 @@ COPY ./marketdata_clients marketdata_clients
 COPY ./database database 
 COPY ./agents agents
 
-# Run cron in foreground
-CMD cron && tail -f /var/log/cron.log
+# Run cron and startup script
+CMD /app/startup.sh & cron && tail -f /var/log/cron.log
