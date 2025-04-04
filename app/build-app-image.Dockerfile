@@ -88,4 +88,4 @@ RUN echo "Verifying code directories:" && \
     done
 
 # Run cron and startup script
-CMD ["/bin/bash", "-c", "cron && /app/startup.sh"]
+CMD ["/bin/bash", "-c", "/app/startup.sh & cron -f"]
