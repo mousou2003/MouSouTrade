@@ -68,6 +68,7 @@ RUN chmod +x /app/setup_env.sh && \
     chmod +x /app/startup.sh
 
 # Cron setup
+COPY ./app/crontab /etc/cron.d/app-cron
 RUN chmod 0644 /etc/cron.d/app-cron && \
     crontab /etc/cron.d/app-cron && \
     touch /var/log/cron.log
@@ -87,5 +88,5 @@ RUN echo "Verifying code directories:" && \
         fi \
     done
 
-# Run cron and startup script
-CMD ["/bin/bash", "-c", "/app/startup.sh & cron -f"]
+# Run cron in the foreground
+CMD ["cron", "-f"]
