@@ -1,43 +1,28 @@
 #!/bin/bash
 
-MAX_RETRIES=3
-RETRY_DELAY=5
-
 log_date() {
-    echo "[$(date)] Starting application..." >> /var/log/cron.log
+    echo "[$(date)] Starting application..." | tee -a /var/log/cron.log
 }
 
 run_app() {
     log_date
-    echo "Starting application setup..."
+    echo "Starting application setup..." | tee -a /var/log/cron.log
     if source /app/setup_env.sh; then
-        echo "Running application..."
+        echo "Running application..." | tee -a /var/log/cron.log
         python /app/run.py 2>&1 | tee -a /var/log/cron.log
         return $?
     else
-        echo "ERROR: Failed to source environment setup script."
+        echo "ERROR: Failed to source environment setup script." | tee -a /var/log/cron.log
         return 1
     fi
 }
 
 if [ "$1" = "cron" ]; then
-    echo "Running as a cron job..."
+    echo "Running as a cron job..." | tee -a /var/log/cron.log
 else
-    echo "Running initial startup..."
-    for i in $(seq 1 $MAX_RETRIES); do
-        echo "Attempt $i of $MAX_RETRIES to start application"
-        if run_app; then
-            echo "Application started successfully."
-            tail -f /var/log/cron.log
-            exit 0
-        else
-            echo "Setup failed, retrying in $RETRY_DELAY seconds..."
-            sleep $RETRY_DELAY
-        fi
-    done
-    echo "ERROR: Failed to start application after $MAX_RETRIES attempts."
-    exit 1
+    echo "Running initial startup..." | tee -a /var/log/cron.log
 fi
 
-# For cron jobs, run the application once
+# Run the application
 run_app
+exit $?
