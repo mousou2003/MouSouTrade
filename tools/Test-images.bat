@@ -31,9 +31,9 @@ echo Waiting for services to start...
 timeout /t 10 /nobreak
 
 echo Testing website accessibility...
-curl -f http://%WEBSITE_CONTAINER_NAME%:%WEBSITE_PORT% >nul 2>&1
+curl -f http://localhost:%WEBSITE_PORT% >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo Website is not accessible at http://%WEBSITE_CONTAINER_NAME%:%WEBSITE_PORT%
+    echo Website is not accessible at http://localhost:%WEBSITE_PORT%
     docker compose --env-file .env -f .\tools\docker-compose-deploy.yml logs
     exit /b 1
 )

@@ -8,6 +8,7 @@ services:
   website:
     image: ${DOCKERHUB_USERNAME}/${WEBSITE_IMAGE_NAME}:${MOUSOUTRADE_VERSION}
     container_name: ${WEBSITE_CONTAINER_NAME}
+    hostname: website
     ports:
       - '${WEBSITE_PORT}:${WEBSITE_PORT}'
     depends_on:
@@ -19,6 +20,7 @@ services:
   app:
     image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:${MOUSOUTRADE_VERSION}
     container_name: ${APP_CONTAINER_NAME}
+    hostname: app
     depends_on:
       - dynamodb-local
     networks:
@@ -27,6 +29,7 @@ services:
   dynamodb-local:
     image: amazon/dynamodb-local:latest
     container_name: ${DYNAMODB_CONTAINER_NAME}
+    hostname: dynamodb-local
     ports:
       - '${DYNAMODB_PORT}:${DYNAMODB_PORT}'
     volumes:

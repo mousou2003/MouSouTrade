@@ -14,24 +14,25 @@ REM Set IMAGE_PUSH_ARG variables
 set WEBSITE_IMAGE_PUSH_ARG=%DOCKERHUB_USERNAME%/%WEBSITE_IMAGE_NAME%
 set APP_IMAGE_PUSH_ARG=%DOCKERHUB_USERNAME%/%APP_IMAGE_NAME%
 
-echo Check if website image exists
-docker image inspect "%WEBSITE_IMAGE_PUSH_ARG%:latest" >nul 2>&1
+REM Tag images with MOUSOUTRADE_VERSION
+echo Tagging images with version %MOUSOUTRADE_VERSION%...
+docker tag "%WEBSITE_IMAGE_PUSH_ARG%:latest" "%WEBSITE_IMAGE_PUSH_ARG%:%MOUSOUTRADE_VERSION%"
 if %ERRORLEVEL% NEQ 0 (
-    echo Image %WEBSITE_IMAGE_NAME%:latest not found.
+    echo Failed to tag website image.
     exit /b %ERRORLEVEL%
 )
 
+docker tag "%APP_IMAGE_PUSH_ARG%:latest" "%APP_IMAGE_PUSH_ARG%:%MOUSOUTRADE_VERSION%"
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to tag app image.
+    exit /b %ERRORLEVEL%
+)
+
+REM Push images
 echo Pushing website image...
 docker push "%WEBSITE_IMAGE_PUSH_ARG%:latest"
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to push website image.
-    exit /b %ERRORLEVEL%
-)
-
-echo Tagging %WEBSITE_IMAGE_NAME
-docker tag "%WEBSITE_IMAGE_PUSH_ARG%:latest" "%WEBSITE_IMAGE_PUSH_ARG%:%MOUSOUTRADE_VERSION%"
-if %ERRORLEVEL% NEQ 0 (
-    echo Failed to tag website image.
     exit /b %ERRORLEVEL%
 )
 
@@ -42,24 +43,10 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-echo Check if app image exists
-docker image inspect "%APP_IMAGE_PUSH_ARG%:latest" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo Image %APP_IMAGE_NAME%:latest not found.
-    exit /b %ERRORLEVEL%
-)
-
 echo Pushing app image...
 docker push "%APP_IMAGE_PUSH_ARG%:latest"
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to push app image.
-    exit /b %ERRORLEVEL%
-)
-
-echo Tagging %APP_IMAGE_NAME
-docker tag "%APP_IMAGE_PUSH_ARG%:latest" "%APP_IMAGE_PUSH_ARG%:%MOUSOUTRADE_VERSION%"
-if %ERRORLEVEL% NEQ 0 (
-    echo Failed to tag app image.
     exit /b %ERRORLEVEL%
 )
 
