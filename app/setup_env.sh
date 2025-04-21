@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Redirect all output to /var/log/cron.log
+exec >> /var/log/cron.log 2>&1
+
 # Required environment variables
 REQUIRED_VARS=(
     "AWS_PROFILE"
