@@ -1,3 +1,3 @@
 # All times are in America/Los_Angeles timezone (PST/PDT)
 # Run the script at 3:06 AM PST/PDT on business days (Monday-Friday)
-15 3 * * 1-5 root /bin/bash /app/startup.sh cron
+45 3 * * 1-5 /app/startup.sh cron
