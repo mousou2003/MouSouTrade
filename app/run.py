@@ -5,9 +5,7 @@ import logging
 import os
 import time
 import socket
-from requests import ReadTimeout
 from colorama import Fore, Style
-from decimal import Decimal
 from datetime import date, datetime, timedelta
 from botocore.exceptions import EndpointConnectionError
 
