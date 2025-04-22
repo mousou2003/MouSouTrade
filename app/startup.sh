@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Redirect all output to /var/log/cron.log
-exec >> /var/log/cron.log 2>&1
-
 log_date() {
     echo "[$(date)] Starting application..."
 }
@@ -22,6 +19,8 @@ run_app() {
 
 if [ "$1" = "cron" ]; then
     echo "Running as a cron job..."
+    # Redirect all output to /var/log/cron.log
+    exec >> /var/log/cron.log 2>&1
 else
     echo "Running initial startup..."
 fi

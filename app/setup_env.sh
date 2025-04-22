@@ -1,34 +1,27 @@
 #!/bin/bash
 
-# Redirect all output to /var/log/cron.log
-exec >> /var/log/cron.log 2>&1
+# Load environment variables from .env file
+if [ -f /app/.env ]; then
+    export $(grep -v '^#' /app/.env | xargs)
+else
+    echo "ERROR: .env file not found at /app/.env"
+    exit 1
+fi
 
-# Required environment variables
-REQUIRED_VARS=(
-    "AWS_PROFILE"
-    "AWS_ACCESS_KEY_ID"
-    "AWS_SECRET_ACCESS_KEY"
-    "AWS_DEFAULT_REGION"
-    "MOUSOUTRADE_CONFIG_FILE"
-    "MOUSOUTRADE_STAGE"
-    "APP_CODE_PATHS"
-)
-
-# Check required variables
-for var in "${REQUIRED_VARS[@]}"; do
-    if [ -z "${!var}" ]; then
-        echo "ERROR: Required environment variable $var is not set"
-        exit 1
-    fi
-done
+# Debug: Print APP_CODE_PATHS
+echo "APP_CODE_PATHS=${APP_CODE_PATHS}"
 
 # Build PYTHONPATH with APP_CODE_PATHS
 PYTHONPATH="$PYTHONPATH:/app"
-for path in ${APP_CODE_PATHS}; do
+IFS=',' read -r -a paths <<< "$APP_CODE_PATHS"
+for path in "${paths[@]}"; do
+    # echo "Processing directory: /app/$path"  # Debug: Print each directory
     if [ ! -d "/app/$path" ]; then
         echo "WARNING: Directory /app/$path does not exist"
+    else
+        PYTHONPATH="$PYTHONPATH:/app/$path"
+        # echo "Updated PYTHONPATH=${PYTHONPATH}"  # Debug: Print updated PYTHONPATH
     fi
-    PYTHONPATH="$PYTHONPATH:/app/$path"
 done
 
 # Export and verify paths
@@ -37,6 +30,6 @@ export PATH=/app:$PATH
 
 # Debug output
 echo "Environment Setup Complete:"
-echo "PYTHONPATH=$PYTHONPATH"
-echo "PATH=$PATH"
+echo "PYTHONPATH=${PYTHONPATH}"
+echo "PATH=${PATH}"
 env | grep -E '^(AWS_|MOUSOUTRADE_|WEBSITE_PORT|DYNAMODB|PROJECT_NAME)' || echo "No matching environment variables found"

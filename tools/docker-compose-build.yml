@@ -5,20 +5,6 @@ services:
     build:
       context: .
       dockerfile: ./app/build-app-image.Dockerfile
-      args:
-        - AWS_PROFILE
-        - AWS_ACCESS_KEY_ID
-        - AWS_SECRET_ACCESS_KEY
-        - AWS_DEFAULT_REGION
-        - DYNAMODB_ENDPOINT_URL
-        - MOUSOUTRADE_CONFIG_FILE
-        - MOUSOUTRADE_STAGE
-        - MOUSOUTRADE_VERSION
-        - PYTHONPATH
-        - WEBSITE_PORT
-        - DYNAMODB_PORT
-        - PROJECT_NAME
-        - MOUSOUTRADE_CLIENTS
     image: ${DOCKERHUB_USERNAME}/${APP_IMAGE_NAME}:latest
 
   website:

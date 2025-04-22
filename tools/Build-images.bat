@@ -1,78 +1,18 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-REM Check if .env file exists
-if not exist .env (
-    echo .env file not found.
+REM Check if Python is installed
+python --version >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo Python is not installed or not added to PATH.
     exit /b 1
 )
 
-REM Load environment variables from .env file
-for /f "tokens=1,* delims==" %%i in ('type .env') do (
-    if "%%i"=="APP_CODE_PATHS" (
-        set APP_CODE_PATHS=%%j
-    ) else (
-        set %%i=%%j
-    )
-)
-
-REM Create staging directory
-echo APP_CODE_PATHS=%APP_CODE_PATHS%
-echo Creating staging directory...
-set STAGING_DIR=.\build\staging
-if exist %STAGING_DIR% rmdir /s /q %STAGING_DIR%
-mkdir %STAGING_DIR%
-
-REM Copy each directory separately
-set "dirs=%APP_CODE_PATHS%"
-:process_dirs
-for /f "tokens=1*" %%a in ("%dirs%") do (
-    if exist ".\%%a" (
-        echo Copying .\%%a to staging...
-        xcopy ".\%%a" "%STAGING_DIR%\%%a\" /E /I /Y
-    ) else (
-        echo Error: Directory .\%%a not found
-        exit /b 1
-    )
-    set "dirs=%%b"
-)
-if exist ".\app" (
-    echo Copying .\app to staging...
-    xcopy ".\app" "%STAGING_DIR%" /E /I /Y
-) else (
-    echo Error: Directory .\app not found
-    exit /b 1
-)
-
-if defined dirs goto :process_dirs
-echo All directories copied to staging.
-
-echo Building images...
-set DOCKER_BUILDKIT=1
-docker compose --env-file .env -f .\tools\docker-compose-build.yml --project-directory . build
+REM Call the Python script
+python .\tools\Build-images.py
 if %ERRORLEVEL% NEQ 0 (
-    echo Failed to build images.
+    echo Python script execution failed.
     exit /b %ERRORLEVEL%
 )
 
-REM Clean up staging directory
-rmdir /s /q %STAGING_DIR%
-
-echo Images built successfully.
-
-REM Verify images were created
-echo Verifying images...
-docker image inspect "%DOCKERHUB_USERNAME%/%WEBSITE_IMAGE_NAME%:latest" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo Website image build failed.
-    exit /b %ERRORLEVEL%
-)
-
-docker image inspect "%DOCKERHUB_USERNAME%/%APP_IMAGE_NAME%:latest" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo App image build failed.
-    exit /b %ERRORLEVEL%
-)
-
-echo All images built and verified successfully.
 endlocal
