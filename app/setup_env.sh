@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Set working directory
+cd /app
+
 # Load environment variables from .env file
 if [ -f /app/.env ]; then
     export $(grep -v '^#' /app/.env | xargs)
@@ -9,7 +12,7 @@ else
 fi
 
 # Debug: Print APP_CODE_PATHS
-echo "APP_CODE_PATHS=${APP_CODE_PATHS}"
+# echo "APP_CODE_PATHS=${APP_CODE_PATHS}"
 
 # Build PYTHONPATH with APP_CODE_PATHS
 PYTHONPATH="$PYTHONPATH:/app"

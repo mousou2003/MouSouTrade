@@ -43,12 +43,12 @@ COPY ./app/crontab /etc/cron.d/app-cron
 RUN chmod 0644 /etc/cron.d/app-cron && \
     crontab /etc/cron.d/app-cron && \
     touch /var/log/cron.log
+    
+# Set environment variables
+RUN /bin/bash -c "source /app/setup_env.sh && printenv > /etc/environment"
 
 # Copy code from staging
 COPY ./build/staging/. /app/
-
-# Validate environment and directories
-RUN /app/setup_env.sh
 
 # Run cron in the foreground
 CMD ["cron", "-f"]
